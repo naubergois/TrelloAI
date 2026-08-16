@@ -3,14 +3,20 @@
 import { useEffect, useState } from "react";
 import { useBoardStore } from "@/lib/store";
 import { BoardShell } from "@/components/BoardShell";
+import { AuthUserSync } from "@/components/AuthUserSync";
 
-export function AppProviders({ children }: { children?: React.ReactNode }) {
+export function AppProviders({
+  children,
+  googleConfigured = false,
+}: {
+  children?: React.ReactNode;
+  googleConfigured?: boolean;
+}) {
   const hydrated = useBoardStore((s) => s.hydrated);
   const setHydrated = useBoardStore((s) => s.setHydrated);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    // persist may already have rehydrated before mount
     if (useBoardStore.persist.hasHydrated()) {
       setHydrated(true);
       setReady(true);
@@ -31,5 +37,10 @@ export function AppProviders({ children }: { children?: React.ReactNode }) {
     );
   }
 
-  return children ?? <BoardShell />;
+  return (
+    <>
+      <AuthUserSync />
+      {children ?? <BoardShell googleConfigured={googleConfigured} />}
+    </>
+  );
 }

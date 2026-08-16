@@ -162,11 +162,21 @@ export function MeetingsPanel({
                 key={member.id}
                 className="flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--ink)]/50 px-2.5 py-2"
               >
-                <span
-                  className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${labelStyles[member.color]}`}
-                >
-                  {member.name.slice(0, 1).toUpperCase()}
-                </span>
+                {member.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={member.image}
+                    alt=""
+                    className="h-8 w-8 rounded-full object-cover ring-1 ring-[var(--line)]"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <span
+                    className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${labelStyles[member.color]}`}
+                  >
+                    {member.name.slice(0, 1).toUpperCase()}
+                  </span>
+                )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-white">
                     {member.name}

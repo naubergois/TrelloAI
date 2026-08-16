@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { DM_Sans, Sora } from "next/font/google";
+import { AuthSessionProvider } from "@/components/AuthSessionProvider";
 import "./globals.css";
 
 const display = Sora({
@@ -17,13 +18,15 @@ const body = DM_Sans({
 export const metadata: Metadata = {
   title: "TrelloAI — Kanban com inteligência artificial",
   description:
-    "Cópia moderna do Trello com boards, listas, cards, drag-and-drop e assistente de IA.",
+    "Cópia moderna do Trello com boards, listas, cards, drag-and-drop, IA e reuniões.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="pt-BR" className={`${display.variable} ${body.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+      <body className="min-h-full flex flex-col font-sans">
+        <AuthSessionProvider>{children}</AuthSessionProvider>
+      </body>
     </html>
   );
 }

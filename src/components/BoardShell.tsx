@@ -7,8 +7,9 @@ import { BoardCanvas } from "@/components/BoardCanvas";
 import { AiPanel } from "@/components/AiPanel";
 import { MeetingsPanel } from "@/components/MeetingsPanel";
 import { MeetingRoom } from "@/components/MeetingRoom";
+import { AuthButton } from "@/components/AuthButton";
 
-export function BoardShell() {
+export function BoardShell({ googleConfigured = false }: { googleConfigured?: boolean }) {
   const boards = useBoardStore((s) => s.boards);
   const activeBoardId = useBoardStore((s) => s.activeBoardId);
   const setActiveBoard = useBoardStore((s) => s.setActiveBoard);
@@ -87,6 +88,8 @@ export function BoardShell() {
               </button>
             </form>
           </div>
+
+          <AuthButton googleConfigured={googleConfigured} />
 
           {board ? (
             <button

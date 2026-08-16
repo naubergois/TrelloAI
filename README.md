@@ -17,6 +17,7 @@ Kanban com assistente de IA — primeira versão (MVP).
   - agendar reuniões
   - copiar link da sala
   - entrar em tela cheia com câmera/microfone
+- Login de usuários com Google (Auth.js) — ver [docs/GOOGLE_AUTH.md](docs/GOOGLE_AUTH.md)
 
 ## Stack
 
@@ -25,12 +26,14 @@ Kanban com assistente de IA — primeira versão (MVP).
 - `@dnd-kit` (drag-and-drop)
 - API route `/api/ai`
 - Jitsi Meet (salas virtuais via iframe)
+- Auth.js (`next-auth`) + Google OAuth
 
 ## Como rodar
 
 ```bash
 npm install
-cp .env.example .env.local   # opcional: adicione OPENAI_API_KEY
+cp .env.example .env.local
+# preencha AUTH_SECRET, AUTH_GOOGLE_ID e AUTH_GOOGLE_SECRET (ver docs/GOOGLE_AUTH.md)
 npm run dev
 ```
 

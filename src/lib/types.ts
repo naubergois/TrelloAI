@@ -49,6 +49,8 @@ export interface TeamMember {
   email: string;
   role: TeamRole;
   color: LabelColor;
+  image?: string | null;
+  googleId?: string | null;
   createdAt: string;
 }
 

@@ -39,6 +39,11 @@ interface BoardState {
     updates: { cardId: string; priority: NonNullable<Card["priority"]> }[],
   ) => void;
   setCurrentUserName: (name: string) => void;
+  syncGoogleUser: (profile: {
+    name: string;
+    email: string;
+    image?: string | null;
+  }) => void;
   addTeamMember: (
     boardId: string,
     data: { name: string; email: string; role?: TeamRole; color?: LabelColor },
@@ -315,6 +320,87 @@ export const useBoardStore = create<BoardState>()(
               ...state.members,
               [id]: { ...state.members[id], name: name.trim() || state.members[id].name },
             },
+          };
+        }),
+
+      syncGoogleUser: (profile) =>
+        set((state) => {
+          const email = profile.email.trim().toLowerCase();
+          const name = profile.name.trim() || "Usuário Google";
+          const image = profile.image ?? null;
+          const now = new Date().toISOString();
+
+          // Prefer matching by email across members
+          const existing =
+            Object.values(state.members).find(
+              (m) => m.email.trim().toLowerCase() === email && email.length > 0,
+            ) ?? (state.currentUserId ? state.members[state.currentUserId] : null);
+
+          if (existing) {
+            const memberId = existing.id;
+            const boards = { ...state.boards };
+            for (const [boardId, board] of Object.entries(boards)) {
+              const memberIds = board.memberIds ?? [];
+              if (!memberIds.includes(memberId)) {
+                boards[boardId] = {
+                  ...board,
+                  memberIds: [...memberIds, memberId],
+                  updatedAt: now,
+                };
+              }
+            }
+            return {
+              currentUserId: memberId,
+              members: {
+                ...state.members,
+                [memberId]: {
+                  ...existing,
+                  name,
+                  email: email || existing.email,
+                  image,
+                  role: existing.role === "owner" ? "owner" : existing.role,
+                },
+              },
+              boards,
+            };
+          }
+
+          const memberId = nanoid();
+          const member: TeamMember = {
+            id: memberId,
+            name,
+            email: email || `${memberId}@gmail.local`,
+            role: "owner",
+            color: "teal",
+            image,
+            createdAt: now,
+          };
+
+          const boards = { ...state.boards };
+          for (const [boardId, board] of Object.entries(boards)) {
+            const memberIds = (board.memberIds ?? []).filter(
+              (id) => id !== state.currentUserId,
+            );
+            boards[boardId] = {
+              ...board,
+              memberIds: [memberId, ...memberIds],
+              updatedAt: now,
+            };
+          }
+
+          const nextMembers = { ...state.members, [memberId]: member };
+          if (state.currentUserId && state.currentUserId !== memberId) {
+            // demote previous local "Você" placeholder if unused
+            const prev = nextMembers[state.currentUserId];
+            if (prev && prev.email.endsWith("@trelloai.local")) {
+              delete nextMembers[state.currentUserId];
+            }
+          }
+
+          return {
+            currentUserId: memberId,
+            members: nextMembers,
+            boards,
           };
         }),
 
