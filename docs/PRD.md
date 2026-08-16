@@ -40,6 +40,9 @@ Pequenos times e freelancers que já usam kanban e querem IA no fluxo.
 | RF-05 | Assistente gera cards a partir de texto | Must |
 | RF-06 | Assistente sugere prioridades | Should |
 | RF-07 | Persistência entre reloads | Must |
+| RF-08 | Gerenciar equipe do board | Must |
+| RF-09 | Iniciar / agendar reunião virtual | Must |
+| RF-10 | Entrar na sala com áudio/vídeo (Jitsi) | Must |
 
 ## Critérios de sucesso
 

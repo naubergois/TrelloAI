@@ -11,6 +11,12 @@ Kanban com assistente de IA — primeira versão (MVP).
   - gerar cards a partir de um briefing
   - sugerir prioridades
 - Motor local sem chave; OpenAI se `OPENAI_API_KEY` estiver definida
+- Reuniões virtuais com a equipe (Jitsi Meet embutido):
+  - gerenciar membros do board
+  - iniciar reunião ao vivo
+  - agendar reuniões
+  - copiar link da sala
+  - entrar em tela cheia com câmera/microfone
 
 ## Stack
 
@@ -18,6 +24,7 @@ Kanban com assistente de IA — primeira versão (MVP).
 - Zustand (estado + persistência)
 - `@dnd-kit` (drag-and-drop)
 - API route `/api/ai`
+- Jitsi Meet (salas virtuais via iframe)
 
 ## Como rodar
 
@@ -40,9 +47,9 @@ Abra [http://localhost:3000](http://localhost:3000).
 
 ## Roadmap curto
 
-1. Auth e multi-usuário (convites / papéis)
-2. Backend com Postgres em vez de só `localStorage`
-3. Tempo real (WebSockets)
+1. Auth e sync multi-dispositivo (Postgres)
+2. Convites por email para reuniões
+3. Tempo real no board (WebSockets)
 4. Automações tipo Butler
 5. Importação de boards Trello
 

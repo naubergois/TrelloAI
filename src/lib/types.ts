@@ -36,6 +36,33 @@ export interface Board {
   title: string;
   description: string;
   listIds: string[];
+  memberIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type TeamRole = "owner" | "member";
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+  role: TeamRole;
+  color: LabelColor;
+  createdAt: string;
+}
+
+export type MeetingStatus = "scheduled" | "live" | "ended";
+
+export interface Meeting {
+  id: string;
+  boardId: string;
+  title: string;
+  roomSlug: string;
+  status: MeetingStatus;
+  scheduledAt: string | null;
+  participantIds: string[];
+  createdById: string;
   createdAt: string;
   updatedAt: string;
 }
