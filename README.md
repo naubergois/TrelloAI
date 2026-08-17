@@ -11,12 +11,8 @@ Kanban com assistente de IA — primeira versão (MVP).
   - gerar cards a partir de um briefing
   - sugerir prioridades
 - Motor local sem chave; OpenAI se `OPENAI_API_KEY` estiver definida
-- Reuniões virtuais com a equipe (Jitsi Meet embutido):
-  - gerenciar membros do board
-  - iniciar reunião ao vivo
-  - agendar reuniões
-  - copiar link da sala
-  - entrar em tela cheia com câmera/microfone
+- Reuniões virtuais com a equipe (Jitsi Meet embutido)
+- **Gestor virtual por board**: daily automática, pergunta status ao time e cria/atualiza cards
 - Login de usuários com Google (Auth.js) — ver [docs/GOOGLE_AUTH.md](docs/GOOGLE_AUTH.md)
 
 ## Stack

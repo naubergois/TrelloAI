@@ -41,6 +41,23 @@ export default async function LoginPage({
           </p>
         ) : null}
 
+        {googleConfigured ? (
+          <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-100">
+            <p className="font-semibold">Se o Google mostrar “404. That’s an error”</p>
+            <p className="mt-1 text-[var(--muted)]">
+              No Cloud Console, no OAuth Client tipo <strong>Web application</strong>, adicione
+              exatamente esta Authorized redirect URI:
+            </p>
+            <code className="mt-2 block break-all rounded-lg bg-black/30 px-2 py-1.5 text-[11px] text-[var(--accent)]">
+              http://localhost:3000/api/auth/callback/google
+            </code>
+            <p className="mt-2 text-[var(--muted)]">
+              Origem JS autorizada:{" "}
+              <code className="text-amber-100">http://localhost:3000</code>
+            </p>
+          </div>
+        ) : null}
+
         <div className="mt-6 space-y-3">
           {googleConfigured ? (
             <form

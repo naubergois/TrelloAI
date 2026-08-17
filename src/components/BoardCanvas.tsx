@@ -88,56 +88,58 @@ export function BoardCanvas({ boardId }: { boardId: string }) {
   if (!board) return null;
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCorners}
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDragEnd={onDragEnd}
-    >
-      <div className="board-scroll flex gap-4 overflow-x-auto pb-4">
-        {orderedLists.map((list, index) => (
-          <div
-            key={list.id}
-            className="anim-rise"
-            style={{ animationDelay: `${index * 60}ms` }}
-          >
-            <ListColumn listId={list.id} />
-          </div>
-        ))}
+    <div className="h-full min-h-0">
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragEnd={onDragEnd}
+      >
+        <div className="board-scroll flex h-full gap-3 overflow-x-auto overflow-y-hidden pb-1 pr-1">
+          {orderedLists.map((list, index) => (
+            <div
+              key={list.id}
+              className="anim-rise flex h-full shrink-0"
+              style={{ animationDelay: `${index * 60}ms` }}
+            >
+              <ListColumn listId={list.id} />
+            </div>
+          ))}
 
-        <form
-          className="w-72 shrink-0 rounded-2xl border border-dashed border-[var(--line)] bg-[var(--panel)] p-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!listTitle.trim()) return;
-            addList(boardId, listTitle.trim());
-            setListTitle("");
-          }}
-        >
-          <input
-            value={listTitle}
-            onChange={(e) => setListTitle(e.target.value)}
-            placeholder="Nova lista"
-            className="mb-2 w-full rounded-lg border border-[var(--line)] bg-[var(--ink-2)] px-3 py-2 text-sm outline-none placeholder:text-[var(--muted)] focus:border-[var(--accent)]"
-          />
-          <button
-            type="submit"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--line)] px-3 py-2 text-sm text-[var(--muted)] transition hover:border-[var(--accent)] hover:text-white"
+          <form
+            className="h-fit w-[min(18rem,78vw)] shrink-0 rounded-2xl border border-dashed border-[var(--line)] bg-[var(--panel)] p-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!listTitle.trim()) return;
+              addList(boardId, listTitle.trim());
+              setListTitle("");
+            }}
           >
-            <Plus className="h-4 w-4" />
-            Adicionar lista
-          </button>
-        </form>
-      </div>
+            <input
+              value={listTitle}
+              onChange={(e) => setListTitle(e.target.value)}
+              placeholder="Nova lista"
+              className="mb-2 w-full rounded-lg border border-[var(--line)] bg-[var(--ink-2)] px-3 py-2 text-sm outline-none placeholder:text-[var(--muted)] focus:border-[var(--accent)]"
+            />
+            <button
+              type="submit"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--line)] px-3 py-2 text-sm text-[var(--muted)] transition hover:border-[var(--accent)] hover:text-white"
+            >
+              <Plus className="h-4 w-4" />
+              Adicionar lista
+            </button>
+          </form>
+        </div>
 
-      <DragOverlay>
-        {activeCard ? (
-          <div className="w-72 rotate-2 opacity-95">
-            <CardItem card={activeCard} overlay />
-          </div>
-        ) : null}
-      </DragOverlay>
-    </DndContext>
+        <DragOverlay>
+          {activeCard ? (
+            <div className="w-72 rotate-2 opacity-95">
+              <CardItem card={activeCard} overlay />
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+    </div>
   );
 }

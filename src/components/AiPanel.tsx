@@ -126,8 +126,8 @@ export function AiPanel({
   if (!board) return null;
 
   return (
-    <aside className="anim-rise flex w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--panel-strong)] lg:w-[360px]">
-      <header className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
+    <aside className="anim-rise flex h-full min-h-0 w-full flex-col overflow-hidden rounded-t-3xl border border-[var(--line)] bg-[var(--panel-strong)] sm:rounded-2xl">
+      <header className="flex shrink-0 items-center justify-between border-b border-[var(--line)] px-4 py-3">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-[var(--accent)]" />
           <div>
@@ -145,7 +145,7 @@ export function AiPanel({
         </button>
       </header>
 
-      <div className="board-scroll flex-1 space-y-3 overflow-y-auto p-4">
+      <div className="board-scroll min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
         {messages.map((msg) => (
           <div
             key={msg.id}

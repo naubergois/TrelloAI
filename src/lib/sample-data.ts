@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
-import type { Board, Card, List, Meeting, TeamMember } from "./types";
+import type { Board, Card, List, Meeting, StandupSession, TeamMember, VirtualManager } from "./types";
+import { defaultManagerQuestions } from "./manager";
 
 function slugify(input: string) {
   return input
@@ -126,7 +127,7 @@ export function createSampleWorkspace() {
   const board: Board = {
     id: boardId,
     title: "TrelloAI — MVP",
-    description: "Primeiro board com kanban, IA e reuniões virtuais da equipe.",
+    description: "Kanban com gestor virtual diário, IA e reuniões da equipe.",
     listIds: [todoId, doingId, doneId],
     memberIds: [youId, anaId, leoId],
     createdAt: now,
@@ -149,14 +150,36 @@ export function createSampleWorkspace() {
     },
   };
 
+  const managers: Record<string, VirtualManager> = {
+    [boardId]: {
+      boardId,
+      name: "Maya",
+      persona:
+        "Gestor(a) virtual pragmático(a): pergunta o status de cada projeto, remove bloqueios e mantém o board atualizado.",
+      enabled: true,
+      dailyTime: "09:30",
+      lastStandupDate: null,
+      createdAt: now,
+      updatedAt: now,
+    },
+  };
+
+  const standups: Record<string, StandupSession> = {};
+
   return {
     boards: { [boardId]: board } as Record<string, Board>,
     lists,
     cards,
     members,
     meetings,
+    managers,
+    standups,
+    activities: {},
     currentUserId: youId,
     activeBoardId: boardId,
     activeMeetingId: null as string | null,
+    activeStandupId: null as string | null,
   };
 }
+
+export { defaultManagerQuestions };
