@@ -96,7 +96,10 @@ export function BoardCanvas({ boardId }: { boardId: string }) {
         onDragOver={onDragOver}
         onDragEnd={onDragEnd}
       >
-        <div className="board-scroll flex h-full gap-3 overflow-x-auto overflow-y-hidden pb-1 pr-1">
+        <div
+          className="board-scroll flex h-full overflow-x-auto overflow-y-hidden pb-1 pr-1"
+          style={{ gap: "var(--board-gap, 0.75rem)" }}
+        >
           {orderedLists.map((list, index) => (
             <div
               key={list.id}
@@ -108,7 +111,11 @@ export function BoardCanvas({ boardId }: { boardId: string }) {
           ))}
 
           <form
-            className="h-fit w-[min(18rem,78vw)] shrink-0 rounded-2xl border border-dashed border-[var(--line)] bg-[var(--panel)] p-3"
+            className="h-fit shrink-0 border border-dashed border-[var(--line)] bg-[var(--panel)] p-3"
+            style={{
+              borderRadius: "var(--board-list-radius, 1rem)",
+              width: "min(var(--board-list-width, 18rem), 78vw)",
+            }}
             onSubmit={(e) => {
               e.preventDefault();
               if (!listTitle.trim()) return;

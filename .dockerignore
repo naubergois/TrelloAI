@@ -1,0 +1,13 @@
+node_modules
+.npm-cache
+.next
+.git
+.gitignore
+*.md
+.env*
+!.env.example
+.DS_Store
+.cursor
+agent-transcripts
+coverage
+.vscode

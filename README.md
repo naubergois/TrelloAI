@@ -5,6 +5,8 @@ Kanban com assistente de IA — primeira versão (MVP).
 ## O que já funciona
 
 - Boards, listas e cards persistidos no `localStorage`
+- **Tela inicial** com galeria de boards; fundo e design personalizáveis por board
+- **Equipes** reutilizáveis atribuíveis a cada kanban
 - Drag-and-drop entre listas (`@dnd-kit`)
 - Labels, prioridade e edição de card (duplo clique)
 - Painel de IA para:

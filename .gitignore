@@ -36,6 +36,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# local credential users store
+/data/
+
 # vercel
 .vercel
 

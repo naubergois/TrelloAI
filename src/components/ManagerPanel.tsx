@@ -82,6 +82,8 @@ export function ManagerPanel({
   const ensureManager = useBoardStore((s) => s.ensureManager);
   const updateManager = useBoardStore((s) => s.updateManager);
   const startDailyStandup = useBoardStore((s) => s.startDailyStandup);
+  const applyStandupAiTurn = useBoardStore((s) => s.applyStandupAiTurn);
+  const appendManagerChat = useBoardStore((s) => s.appendManagerChat);
   const replyToStandupChat = useBoardStore((s) => s.replyToStandupChat);
   const setActiveStandup = useBoardStore((s) => s.setActiveStandup);
   const closeStandup = useBoardStore((s) => s.closeStandup);
@@ -171,14 +173,163 @@ export function ManagerPanel({
   const qTotal = standup?.questions?.length || 3;
 
   const send = (text: string) => {
-    if (!standup || !text.trim() || !awaitingId) return;
-    replyToStandupChat(standup.id, text, awaitingId);
-    setDraft("");
+    void sendStandupWithAi(text);
   };
+
+  const sendStandupWithAi = async (text: string) => {
+    const prompt = text.trim();
+    if (!standup || !prompt || !awaitingId || processing) return;
+    setDraft("");
+    setProcessing(true);
+    setResultMsg("");
+
+    const member = members[awaitingId];
+    const questions =
+      standup.questions?.length > 0
+        ? standup.questions
+        : ["O que você fez desde a última daily?", "No que vai trabalhar hoje?", "Há algum bloqueio?"];
+    const checkIn = standup.checkIns.find((c) => c.memberId === awaitingId) || {
+      memberId: awaitingId,
+      yesterday: "",
+      today: "",
+      blockers: "",
+      submittedAt: null,
+    };
+
+    try {
+      const res = await fetch("/api/manager", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "standup",
+          standup: {
+            managerName: manager.name,
+            memberName: member?.name || "membro",
+            memberId: awaitingId,
+            questionIndex: standup.currentQuestionIndex ?? 0,
+            questions,
+            userReply: prompt,
+            checkIn,
+            recentChat: (standup.chat ?? []).slice(-10).map((m) => ({
+              role: m.role,
+              content: m.content,
+            })),
+            boardTitle: board.title,
+          },
+        }),
+      });
+      const data = (await res.json()) as {
+        message?: string;
+        extract?: { yesterday?: string; today?: string; blockers?: string };
+        advanceQuestion?: boolean;
+        completeMember?: boolean;
+        provider?: string;
+        error?: string;
+      };
+
+      if (!res.ok) {
+        // fallback estático se a API falhar por completo
+        replyToStandupChat(standup.id, prompt, awaitingId);
+        setResultMsg(data.error || "Falha na Maya — usei o fluxo local.");
+        return;
+      }
+
+      applyStandupAiTurn(standup.id, {
+        memberId: awaitingId,
+        userText: prompt,
+        managerMessage: data.message || "Certo, continue.",
+        extract: data.extract || {},
+        advanceQuestion: Boolean(data.advanceQuestion),
+        completeMember: Boolean(data.completeMember),
+      });
+
+      if (data.provider === "deepseek") {
+        setResultMsg("");
+      } else if (data.message?.includes("DeepSeek falhou")) {
+        setResultMsg("Maya respondeu em modo local (DeepSeek indisponível).");
+      }
+    } catch {
+      replyToStandupChat(standup.id, prompt, awaitingId);
+      setResultMsg("Erro de rede — usei o fluxo local da daily.");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const buildManagerContext = () => ({
+    boardTitle: board.title,
+    managerName: manager.name,
+    members: team.map((m) => ({ id: m.id, name: m.name, email: m.email })),
+    memberNames: Object.fromEntries(team.map((m) => [m.id, m.name])),
+    checkIns: standup?.checkIns ?? [],
+    lists: board.listIds
+      .map((id) => lists[id])
+      .filter(Boolean)
+      .map((list) => ({
+        id: list.id,
+        title: list.title,
+        cards: list.cardIds
+          .map((cid) => cards[cid])
+          .filter(Boolean)
+          .map((c) => ({
+            id: c.id,
+            title: c.title,
+            description: c.description,
+            priority: c.priority,
+            assigneeId: c.assigneeId ?? null,
+            dueDate: c.dueDate,
+          })),
+      })),
+  });
 
   const onSend = (e: FormEvent) => {
     e.preventDefault();
-    send(draft);
+    if (awaitingId) {
+      void sendStandupWithAi(draft);
+      return;
+    }
+    void askManager(draft);
+  };
+
+  const askManager = async (text: string) => {
+    const prompt = text.trim();
+    if (!prompt || processing) return;
+    setProcessing(true);
+    setResultMsg("");
+    setDraft("");
+    try {
+      const res = await fetch("/api/manager", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "chat",
+          message: prompt,
+          context: buildManagerContext(),
+        }),
+      });
+      const data = (await res.json()) as {
+        message?: string;
+        action?: AiAction;
+        extraAction?: AiAction;
+        error?: string;
+        provider?: string;
+      };
+      if (!res.ok) {
+        setResultMsg(data.error || "Falha ao consultar Maya.");
+        return;
+      }
+      const actions = [data.action, data.extraAction].filter(Boolean) as AiAction[];
+      applyManagerActions(actions, boardId);
+      const msg = data.message || "Pronto.";
+      if (standup) {
+        appendManagerChat(standup.id, msg);
+      }
+      setResultMsg(msg);
+    } catch {
+      setResultMsg("Erro de rede ao falar com Maya.");
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const processDaily = async () => {
@@ -186,33 +337,12 @@ export function ManagerPanel({
     setProcessing(true);
     setResultMsg("");
     try {
-      const context = {
-        boardTitle: board.title,
-        managerName: manager.name,
-        members: team.map((m) => ({ id: m.id, name: m.name })),
-        memberNames: Object.fromEntries(team.map((m) => [m.id, m.name])),
-        checkIns: standup.checkIns,
-        lists: board.listIds
-          .map((id) => lists[id])
-          .filter(Boolean)
-          .map((list) => ({
-            id: list.id,
-            title: list.title,
-            cards: list.cardIds
-              .map((cid) => cards[cid])
-              .filter(Boolean)
-              .map((c) => ({
-                id: c.id,
-                title: c.title,
-                priority: c.priority,
-              })),
-          })),
-      };
+      const context = buildManagerContext();
 
       const res = await fetch("/api/manager", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ context }),
+        body: JSON.stringify({ context, mode: "daily" }),
       });
       const data = (await res.json()) as {
         message?: string;
@@ -220,16 +350,16 @@ export function ManagerPanel({
         extraAction?: AiAction;
         error?: string;
       };
-      if (!res.ok) throw new Error(data.error || "Falha no gestor");
-
+      if (!res.ok) {
+        setResultMsg(data.error || "Falha ao processar daily.");
+        return;
+      }
       const actions = [data.action, data.extraAction].filter(Boolean) as AiAction[];
-      applyManagerActions(actions);
-      closeStandup(standup.id, data.message || "Daily encerrada.");
-      setResultMsg(data.message || "Daily processada e board atualizado.");
-    } catch (error) {
-      setResultMsg(
-        error instanceof Error ? error.message : "Não foi possível processar a daily.",
-      );
+      applyManagerActions(actions, boardId);
+      closeStandup(standup.id, data.message || "");
+      setResultMsg(data.message || "Daily processada.");
+    } catch {
+      setResultMsg("Erro de rede ao processar daily.");
     } finally {
       setProcessing(false);
     }
@@ -317,24 +447,53 @@ export function ManagerPanel({
       {tab === "chat" ? (
         <div className="flex min-h-0 flex-1 flex-col">
           {!standup ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
-              <MayaAvatar size="lg" />
-              <div>
-                <p className="font-[family-name:var(--font-display)] text-lg text-white">
-                  Pronto para a daily?
-                </p>
-                <p className="mt-1 text-sm text-[var(--muted)]">
-                  Eu pergunto a cada pessoa no chat e depois atualizo o kanban.
-                </p>
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
+                <MayaAvatar size="lg" />
+                <div>
+                  <p className="font-[family-name:var(--font-display)] text-lg text-white">
+                    Maya gerencia o projeto
+                  </p>
+                  <p className="mt-1 text-sm text-[var(--muted)]">
+                    Peça ações no kanban ou inicie a daily da equipe.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => startDailyStandup(boardId, { withMeeting: true })}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-teal-950 transition hover:brightness-110"
+                >
+                  <Play className="h-4 w-4" />
+                  Começar daily com {manager.name}
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => startDailyStandup(boardId, { withMeeting: true })}
-                className="inline-flex items-center gap-2 rounded-2xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-teal-950 transition hover:brightness-110"
-              >
-                <Play className="h-4 w-4" />
-                Começar daily com {manager.name}
-              </button>
+              <div className="border-t border-[var(--line)] px-3 pb-3 pt-2">
+                {resultMsg ? (
+                  <p className="mb-2 max-h-28 overflow-y-auto rounded-xl border border-[var(--accent)]/20 bg-[var(--accent)]/10 px-3 py-2 text-xs whitespace-pre-wrap text-[var(--accent)]">
+                    {resultMsg}
+                  </p>
+                ) : null}
+                <form onSubmit={onSend} className="flex items-center gap-2">
+                  <input
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    placeholder='Ex.: "Organize o backlog da ASESI"'
+                    disabled={processing}
+                    className="w-full rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2.5 text-sm outline-none placeholder:text-[var(--muted)] focus:border-[var(--accent)] disabled:opacity-50"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!draft.trim() || processing}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-teal-950 disabled:opacity-40"
+                  >
+                    {processing ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
+                  </button>
+                </form>
+              </div>
             </div>
           ) : (
             <>
@@ -390,7 +549,9 @@ export function ManagerPanel({
                   <div className="chat-bubble flex items-center gap-2 pl-1 text-xs text-[var(--muted)]">
                     <MayaAvatar size="sm" />
                     <span className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-white/5 px-2.5 py-1">
-                      Aguardando {awaitingMember.name}
+                      {processing
+                        ? "Maya pensando (DeepSeek)…"
+                        : `Aguardando ${awaitingMember.name}`}
                       <span className="ml-1 inline-flex gap-0.5">
                         <span className="typing-dot h-1 w-1 rounded-full bg-[var(--accent)]" />
                         <span className="typing-dot h-1 w-1 rounded-full bg-[var(--accent)]" />
@@ -493,20 +654,62 @@ export function ManagerPanel({
                       ref={inputRef}
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
-                      placeholder={`Responder como ${awaitingMember.name}…`}
-                      className="w-full rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2.5 text-sm outline-none transition placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 sm:rounded-2xl sm:px-4 sm:py-3"
+                      placeholder={
+                        processing
+                          ? "Maya (DeepSeek) está respondendo…"
+                          : `Responder como ${awaitingMember.name}…`
+                      }
+                      disabled={processing}
+                      className="w-full rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2.5 text-sm outline-none transition placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 disabled:opacity-60 sm:rounded-2xl sm:px-4 sm:py-3"
                     />
                     <button
                       type="submit"
-                      disabled={!draft.trim()}
+                      disabled={!draft.trim() || processing}
                       className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-teal-950 transition hover:brightness-110 disabled:opacity-40 sm:h-11 sm:w-11 sm:rounded-2xl"
                       aria-label="Enviar"
                     >
-                      <Send className="h-4 w-4" />
+                      {processing ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
                     </button>
                   </form>
                 </div>
-              ) : null}
+              ) : (
+                <div className="border-t border-[var(--line)] bg-gradient-to-t from-black/40 to-transparent px-3 pb-3 pt-2">
+                  <p className="mb-2 text-[11px] text-[var(--muted)]">
+                    Peça à Maya para gerir o projeto: criar cards, listas, atribuir e mover.
+                  </p>
+                  {resultMsg ? (
+                    <p className="mb-2 max-h-28 overflow-y-auto rounded-xl border border-[var(--accent)]/20 bg-[var(--accent)]/10 px-3 py-2 text-xs whitespace-pre-wrap text-[var(--accent)]">
+                      {resultMsg}
+                    </p>
+                  ) : null}
+                  <form onSubmit={onSend} className="flex items-center gap-2">
+                    <input
+                      ref={inputRef}
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      placeholder='Ex.: "Crie cards para o plano ASESI"'
+                      disabled={processing}
+                      className="w-full rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2.5 text-sm outline-none transition placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20 disabled:opacity-50 sm:rounded-2xl sm:px-4 sm:py-3"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!draft.trim() || processing}
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-teal-950 transition hover:brightness-110 disabled:opacity-40 sm:h-11 sm:w-11 sm:rounded-2xl"
+                      aria-label="Enviar para Maya"
+                    >
+                      {processing ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                    </button>
+                  </form>
+                </div>
+              )}
 
               {standup.status === "closed" ? (
                 <div className="border-t border-[var(--line)] px-3 py-3">

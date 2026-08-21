@@ -2,13 +2,24 @@ import type { AiAction, Card } from "./types";
 
 export interface AiRequestContext {
   boardTitle: string;
-  lists: { id: string; title: string; cards: { id: string; title: string; priority: Card["priority"] }[] }[];
+  lists: {
+    id: string;
+    title: string;
+    cards: {
+      id: string;
+      title: string;
+      description?: string;
+      priority: Card["priority"];
+      assigneeId?: string | null;
+      dueDate?: string | null;
+    }[];
+  }[];
 }
 
 export interface AiResponse {
   message: string;
   action: AiAction;
-  provider: "openai" | "local";
+  provider: "openai" | "deepseek" | "local";
 }
 
 function firstListId(context: AiRequestContext) {
@@ -94,6 +105,80 @@ export function localAiRespond(prompt: string, context: AiRequestContext): AiRes
       "Posso ajudar a organizar o board. Experimente:\n• \"Gere cards para lançar o MVP\"\n• \"Sugira prioridades nos cards\"\n• Liste tarefas em tópicos e peço para eu criar os cards",
     action: { type: "none" },
     provider: "local",
+  };
+}
+
+export async function deepSeekRespond(
+  prompt: string,
+  context: AiRequestContext,
+  apiKey: string,
+): Promise<AiResponse> {
+  const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+  const baseUrl = (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com").replace(
+    /\/$/,
+    "",
+  );
+
+  const system = `You are TrelloAI, an assistant inside a kanban board named "${context.boardTitle}".
+Reply in Portuguese (Brazil). Be concise.
+You MUST return ONLY valid JSON with this shape:
+{
+  "message": string,
+  "action":
+    | { "type": "none" }
+    | { "type": "create_cards", "listId": string | null, "cards": [{ "title": string, "description"?: string, "priority"?: "low"|"medium"|"high" }] }
+    | { "type": "suggest_priorities", "updates": [{ "cardId": string, "priority": "low"|"medium"|"high" }] }
+}
+Board context:
+${JSON.stringify(context, null, 2)}
+Rules:
+- Prefer create_cards when user asks to break work down or generate tasks.
+- Prefer suggest_priorities when user asks for priorities.
+- Use existing listId from context when creating cards (default first list).
+- Only use cardIds that exist in context for priority updates.
+- Max 8 cards per create_cards.`;
+
+  const res = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0.4,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: prompt },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`DeepSeek error ${res.status}: ${text.slice(0, 200)}`);
+  }
+
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+  };
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error("Empty DeepSeek response");
+
+  const cleaned = content
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "");
+  const parsed = JSON.parse(cleaned) as {
+    message?: string;
+    action?: AiAction;
+  };
+
+  return {
+    message: parsed.message || "Pronto.",
+    action: parsed.action || { type: "none" },
+    provider: "deepseek",
   };
 }
 

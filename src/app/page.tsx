@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth, isGoogleAuthConfigured } from "@/auth";
 import { AppProviders } from "@/components/AppProviders";
+import { BoardsHome } from "@/components/BoardsHome";
 
 export default async function Home({
   searchParams,
@@ -12,9 +13,13 @@ export default async function Home({
   const params = await searchParams;
   const allowLocal = params.local === "1";
 
-  if (googleConfigured && !session?.user && !allowLocal) {
+  if (!session?.user && !allowLocal) {
     redirect("/login");
   }
 
-  return <AppProviders googleConfigured={googleConfigured} />;
+  return (
+    <AppProviders>
+      <BoardsHome googleConfigured={googleConfigured} />
+    </AppProviders>
+  );
 }

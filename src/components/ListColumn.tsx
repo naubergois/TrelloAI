@@ -26,9 +26,13 @@ export function ListColumn({ listId }: { listId: string }) {
   return (
     <section
       ref={setNodeRef}
-      className={`flex h-full w-[min(18rem,78vw)] shrink-0 flex-col rounded-2xl border bg-[var(--panel)] ${
+      className={`flex h-full shrink-0 flex-col border bg-[var(--panel)] ${
         isOver ? "border-[var(--accent)]/60" : "border-[var(--line)]"
       }`}
+      style={{
+        borderRadius: "var(--board-list-radius, 1rem)",
+        width: "min(var(--board-list-width, 18rem), 78vw)",
+      }}
     >
       <header className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] px-3 py-2.5">
         <input
@@ -41,7 +45,10 @@ export function ListColumn({ listId }: { listId: string }) {
         </span>
       </header>
 
-      <div className="board-scroll flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2.5 sm:p-3">
+      <div
+        className="board-scroll flex min-h-0 flex-1 flex-col overflow-y-auto p-2.5 sm:p-3"
+        style={{ gap: "var(--board-gap, 0.75rem)" }}
+      >
         <SortableContext items={list.cardIds} strategy={verticalListSortingStrategy}>
           {cardItems.map((card) => (
             <SortableCard key={card.id} card={card} />

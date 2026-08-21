@@ -15,8 +15,12 @@ export function SortableCard({ card }: { card: Card }) {
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <CardItem card={card} dragging={isDragging} />
+    <div ref={setNodeRef} style={style}>
+      <CardItem
+        card={card}
+        dragging={isDragging}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
     </div>
   );
 }

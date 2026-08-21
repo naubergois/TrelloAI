@@ -20,6 +20,54 @@ export interface Card {
   labels: Label[];
   dueDate: string | null;
   priority: "low" | "medium" | "high" | null;
+  /** Membro responsável (TeamMember.id) */
+  assigneeId: string | null;
+  /** Requisito vinculado (opcional) */
+  requirementId: string | null;
+  /** Critérios de aceite / notas de validação */
+  acceptanceCriteria: string;
+  /** Checklist simples */
+  checklist: ChecklistItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+export type RequirementStatus = "draft" | "approved" | "in_progress" | "done" | "rejected";
+
+export interface Requirement {
+  id: string;
+  boardId: string;
+  code: string;
+  title: string;
+  description: string;
+  status: RequirementStatus;
+  priority: "low" | "medium" | "high";
+  ownerId: string | null;
+  dueDate: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type TeamEventKind = "meeting" | "deadline" | "milestone" | "review" | "other";
+
+export interface TeamCalendarEvent {
+  id: string;
+  boardId: string;
+  teamId: string | null;
+  title: string;
+  description: string;
+  kind: TeamEventKind;
+  /** Dia YYYY-MM-DD */
+  date: string;
+  /** HH:mm opcional */
+  time: string | null;
+  memberIds: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -37,6 +85,12 @@ export interface Board {
   description: string;
   listIds: string[];
   memberIds: string[];
+  /** Equipe atribuída a este kanban (opcional) */
+  teamId: string | null;
+  /** Fundo visual do board */
+  backgroundId: string;
+  /** Estilo de listas/cards */
+  designId: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -52,6 +106,16 @@ export interface TeamMember {
   image?: string | null;
   googleId?: string | null;
   createdAt: string;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  description: string;
+  memberIds: string[];
+  color: LabelColor;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type MeetingStatus = "scheduled" | "live" | "ended";
@@ -77,7 +141,17 @@ export interface AiMessage {
 }
 
 export type AiAction =
-  | { type: "create_cards"; listId?: string; cards: { title: string; description?: string; priority?: Card["priority"] }[] }
+  | {
+      type: "create_cards";
+      listId?: string;
+      cards: {
+        title: string;
+        description?: string;
+        priority?: Card["priority"];
+        assigneeId?: string | null;
+        dueDate?: string | null;
+      }[];
+    }
   | { type: "suggest_priorities"; updates: { cardId: string; priority: NonNullable<Card["priority"]> }[] }
   | {
       type: "update_cards";
@@ -87,7 +161,14 @@ export type AiAction =
         description?: string;
         priority?: Card["priority"];
         moveToListId?: string;
+        assigneeId?: string | null;
+        dueDate?: string | null;
       }[];
+    }
+  | { type: "create_lists"; titles: string[] }
+  | {
+      type: "assign_cards";
+      assignments: { cardId: string; assigneeId: string | null }[];
     }
   | { type: "none" };
 

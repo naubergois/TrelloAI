@@ -10,14 +10,30 @@ import type {
   LabelColor,
   List,
   Meeting,
+  Requirement,
+  RequirementStatus,
   StandupCheckIn,
   StandupChatMessage,
   StandupSession,
+  Team,
+  TeamCalendarEvent,
+  TeamEventKind,
   TeamMember,
   TeamRole,
   VirtualManager,
 } from "./types";
 import { buildMeetingRoomSlug, createSampleWorkspace, defaultManagerQuestions } from "./sample-data";
+import { createAsesiBoardSeed } from "./asesi-seed";
+import { ASESI_BOARD_ID } from "./constants";
+import type { BoardSnapshot } from "./board-snapshot";
+import type { AiAction } from "./types";
+import {
+  DEFAULT_BACKGROUND_ID,
+  DEFAULT_DESIGN_ID,
+  ensureBoardAppearance,
+  type BoardBackgroundId,
+  type BoardDesignId,
+} from "./board-themes";
 import {
   buildDayUpdateReport,
   calendarDayKey,
@@ -26,38 +42,128 @@ import {
   shiftCalendarDay,
 } from "./calendar-report";
 
+function normalizeCard(card: Card): Card {
+  return {
+    ...card,
+    assigneeId: card.assigneeId ?? null,
+    requirementId: card.requirementId ?? null,
+    acceptanceCriteria: card.acceptanceCriteria ?? "",
+    checklist: Array.isArray(card.checklist) ? card.checklist : [],
+    labels: Array.isArray(card.labels) ? card.labels : [],
+    dueDate: card.dueDate ?? null,
+    priority: card.priority ?? null,
+  };
+}
+
 interface BoardState {
   boards: Record<string, Board>;
   lists: Record<string, List>;
   cards: Record<string, Card>;
   members: Record<string, TeamMember>;
+  teams: Record<string, Team>;
   meetings: Record<string, Meeting>;
   managers: Record<string, VirtualManager>;
   standups: Record<string, StandupSession>;
   activities: Record<string, KanbanActivity>;
+  requirements: Record<string, Requirement>;
+  calendarEvents: Record<string, TeamCalendarEvent>;
   currentUserId: string | null;
   activeBoardId: string | null;
   activeMeetingId: string | null;
   activeStandupId: string | null;
   hydrated: boolean;
   setHydrated: (value: boolean) => void;
-  createBoard: (title: string, description?: string) => string;
+  createBoard: (
+    title: string,
+    description?: string,
+    appearance?: {
+      backgroundId?: BoardBackgroundId;
+      designId?: BoardDesignId;
+      teamId?: string | null;
+    },
+  ) => string;
   setActiveBoard: (boardId: string) => void;
   renameBoard: (boardId: string, title: string) => void;
+  updateBoardDescription: (boardId: string, description: string) => void;
+  updateBoardAppearance: (
+    boardId: string,
+    appearance: { backgroundId?: BoardBackgroundId; designId?: BoardDesignId },
+  ) => void;
+  assignTeamToBoard: (boardId: string, teamId: string | null) => void;
+  deleteBoard: (boardId: string) => void;
+  createTeam: (input: {
+    name: string;
+    description?: string;
+    color?: LabelColor;
+    memberIds?: string[];
+  }) => string;
+  updateTeam: (
+    teamId: string,
+    patch: Partial<Pick<Team, "name" | "description" | "color">>,
+  ) => void;
+  deleteTeam: (teamId: string) => void;
+  addMemberToTeam: (
+    teamId: string,
+    data: { name: string; email: string; role?: TeamRole; color?: LabelColor },
+  ) => string;
+  removeMemberFromTeam: (teamId: string, memberId: string) => void;
+  addExistingMemberToTeam: (teamId: string, memberId: string) => void;
   addList: (boardId: string, title: string) => string;
   renameList: (listId: string, title: string) => void;
   addCard: (
     listId: string,
     title: string,
-    extras?: Partial<Pick<Card, "description" | "priority" | "dueDate" | "labels">>,
+    extras?: Partial<
+      Pick<
+        Card,
+        | "description"
+        | "priority"
+        | "dueDate"
+        | "labels"
+        | "assigneeId"
+        | "requirementId"
+        | "acceptanceCriteria"
+        | "checklist"
+      >
+    >,
   ) => string;
   updateCard: (cardId: string, patch: Partial<Card>) => void;
   deleteCard: (cardId: string) => void;
+  createRequirement: (input: {
+    boardId: string;
+    title: string;
+    description?: string;
+    code?: string;
+    status?: RequirementStatus;
+    priority?: Requirement["priority"];
+    ownerId?: string | null;
+    dueDate?: string | null;
+  }) => string;
+  updateRequirement: (requirementId: string, patch: Partial<Requirement>) => void;
+  deleteRequirement: (requirementId: string) => void;
+  createCalendarEvent: (input: {
+    boardId: string;
+    title: string;
+    description?: string;
+    kind?: TeamEventKind;
+    date: string;
+    time?: string | null;
+    teamId?: string | null;
+    memberIds?: string[];
+  }) => string;
+  updateCalendarEvent: (eventId: string, patch: Partial<TeamCalendarEvent>) => void;
+  deleteCalendarEvent: (eventId: string) => void;
   moveCard: (cardId: string, toListId: string, toIndex: number) => void;
   reorderCardInList: (listId: string, activeId: string, overId: string) => void;
   addCardsBulk: (
     listId: string,
-    items: { title: string; description?: string; priority?: Card["priority"] }[],
+    items: {
+      title: string;
+      description?: string;
+      priority?: Card["priority"];
+      assigneeId?: string | null;
+      dueDate?: string | null;
+    }[],
   ) => void;
   applyPriorityUpdates: (
     updates: { cardId: string; priority: NonNullable<Card["priority"]> }[],
@@ -94,9 +200,28 @@ interface BoardState {
     data: { yesterday: string; today: string; blockers: string },
   ) => void;
   replyToStandupChat: (standupId: string, text: string, asMemberId?: string) => void;
+  applyStandupAiTurn: (
+    standupId: string,
+    input: {
+      memberId: string;
+      userText: string;
+      managerMessage: string;
+      extract: Partial<{ yesterday: string; today: string; blockers: string }>;
+      advanceQuestion: boolean;
+      completeMember: boolean;
+    },
+  ) => void;
+  appendManagerChat: (standupId: string, content: string, memberId?: string | null) => void;
   setActiveStandup: (standupId: string | null) => void;
   closeStandup: (standupId: string, summary: string) => void;
-  applyManagerActions: (actions: import("./types").AiAction[]) => void;
+  applyManagerActions: (actions: AiAction[], boardId?: string) => void;
+  ensureAsesiBoard: () => string;
+  mergeBoardSnapshot: (snapshot: BoardSnapshot, opts?: { setActive?: boolean }) => void;
+  exportBoardSnapshot: (boardId: string) => BoardSnapshot | null;
+  addBoardMemberFromProfile: (
+    boardId: string,
+    profile: { name: string; email: string; image?: string | null },
+  ) => string;
   recordActivity: (input: {
     boardId: string;
     memberId?: string | null;
@@ -112,10 +237,26 @@ const sample = createSampleWorkspace();
 const MEMBER_COLORS: LabelColor[] = ["teal", "amber", "rose", "sky", "lime", "violet"];
 
 function ensureBoardMembers(board: Board): Board {
-  return {
-    ...board,
-    memberIds: board.memberIds ?? [],
-  };
+  return ensureBoardAppearance(board);
+}
+
+function syncBoardsWithTeam(
+  boards: Record<string, Board>,
+  teamId: string,
+  memberIds: string[],
+  now: string,
+): Record<string, Board> {
+  const next = { ...boards };
+  for (const [id, board] of Object.entries(next)) {
+    if (board.teamId === teamId) {
+      next[id] = {
+        ...ensureBoardMembers(board),
+        memberIds: [...memberIds],
+        updatedAt: now,
+      };
+    }
+  }
+  return next;
 }
 
 export const useBoardStore = create<BoardState>()(
@@ -125,13 +266,21 @@ export const useBoardStore = create<BoardState>()(
       hydrated: false,
       setHydrated: (value) => set({ hydrated: value }),
 
-      createBoard: (title, description = "") => {
+      createBoard: (title, description = "", appearance) => {
         const boardId = nanoid();
         const listDefs = ["A fazer", "Em progresso", "Concluído"];
         const now = new Date().toISOString();
         const listIds: string[] = [];
         const lists: Record<string, List> = {};
         const currentUserId = get().currentUserId;
+        const teamId = appearance?.teamId ?? null;
+        const team = teamId ? get().teams[teamId] : null;
+        const memberIds =
+          team?.memberIds?.length
+            ? [...team.memberIds]
+            : currentUserId
+              ? [currentUserId]
+              : [];
 
         for (const listTitle of listDefs) {
           const listId = nanoid();
@@ -149,7 +298,10 @@ export const useBoardStore = create<BoardState>()(
           title: title.trim() || "Novo board",
           description,
           listIds,
-          memberIds: currentUserId ? [currentUserId] : [],
+          memberIds,
+          teamId: team ? team.id : null,
+          backgroundId: appearance?.backgroundId ?? DEFAULT_BACKGROUND_ID,
+          designId: appearance?.designId ?? DEFAULT_DESIGN_ID,
           createdAt: now,
           updatedAt: now,
         };
@@ -191,6 +343,262 @@ export const useBoardStore = create<BoardState>()(
                 updatedAt: new Date().toISOString(),
               },
             },
+          };
+        }),
+
+      updateBoardDescription: (boardId, description) =>
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+          return {
+            boards: {
+              ...state.boards,
+              [boardId]: {
+                ...ensureBoardMembers(board),
+                description,
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          };
+        }),
+
+      updateBoardAppearance: (boardId, appearance) =>
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+          return {
+            boards: {
+              ...state.boards,
+              [boardId]: {
+                ...ensureBoardMembers(board),
+                ...(appearance.backgroundId
+                  ? { backgroundId: appearance.backgroundId }
+                  : {}),
+                ...(appearance.designId ? { designId: appearance.designId } : {}),
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          };
+        }),
+
+      assignTeamToBoard: (boardId, teamId) =>
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+          const now = new Date().toISOString();
+          if (!teamId) {
+            return {
+              boards: {
+                ...state.boards,
+                [boardId]: {
+                  ...ensureBoardMembers(board),
+                  teamId: null,
+                  updatedAt: now,
+                },
+              },
+            };
+          }
+          const team = state.teams[teamId];
+          if (!team) return state;
+          return {
+            boards: {
+              ...state.boards,
+              [boardId]: {
+                ...ensureBoardMembers(board),
+                teamId,
+                memberIds: [...team.memberIds],
+                updatedAt: now,
+              },
+            },
+          };
+        }),
+
+      createTeam: ({ name, description = "", color, memberIds }) => {
+        const teamId = nanoid();
+        const now = new Date().toISOString();
+        const currentUserId = get().currentUserId;
+        const ids =
+          memberIds && memberIds.length > 0
+            ? [...memberIds]
+            : currentUserId
+              ? [currentUserId]
+              : [];
+
+        const team: Team = {
+          id: teamId,
+          name: name.trim() || "Nova equipe",
+          description: description.trim(),
+          memberIds: ids,
+          color: color ?? MEMBER_COLORS[Object.keys(get().teams).length % MEMBER_COLORS.length],
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        set((state) => ({
+          teams: { ...state.teams, [teamId]: team },
+        }));
+        return teamId;
+      },
+
+      updateTeam: (teamId, patch) =>
+        set((state) => {
+          const team = state.teams[teamId];
+          if (!team) return state;
+          return {
+            teams: {
+              ...state.teams,
+              [teamId]: {
+                ...team,
+                ...patch,
+                name: patch.name !== undefined ? patch.name.trim() || team.name : team.name,
+                description:
+                  patch.description !== undefined ? patch.description : team.description,
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          };
+        }),
+
+      deleteTeam: (teamId) =>
+        set((state) => {
+          if (!state.teams[teamId]) return state;
+          const teams = { ...state.teams };
+          delete teams[teamId];
+          const boards = { ...state.boards };
+          const now = new Date().toISOString();
+          for (const [id, board] of Object.entries(boards)) {
+            if (board.teamId === teamId) {
+              boards[id] = {
+                ...ensureBoardMembers(board),
+                teamId: null,
+                updatedAt: now,
+              };
+            }
+          }
+          return { teams, boards };
+        }),
+
+      addMemberToTeam: (teamId, data) => {
+        const memberId = nanoid();
+        const now = new Date().toISOString();
+        set((state) => {
+          const team = state.teams[teamId];
+          if (!team) return state;
+          const color =
+            data.color ??
+            MEMBER_COLORS[Object.keys(state.members).length % MEMBER_COLORS.length];
+          const member: TeamMember = {
+            id: memberId,
+            name: data.name.trim() || "Membro",
+            email: data.email.trim() || `${memberId}@equipe.local`,
+            role: data.role ?? "member",
+            color,
+            createdAt: now,
+          };
+          const memberIds = [...team.memberIds, memberId];
+          return {
+            members: { ...state.members, [memberId]: member },
+            teams: {
+              ...state.teams,
+              [teamId]: { ...team, memberIds, updatedAt: now },
+            },
+            boards: syncBoardsWithTeam(state.boards, teamId, memberIds, now),
+          };
+        });
+        return memberId;
+      },
+
+      removeMemberFromTeam: (teamId, memberId) =>
+        set((state) => {
+          const team = state.teams[teamId];
+          if (!team) return state;
+          if (memberId === state.currentUserId && team.memberIds.length <= 1) {
+            return state;
+          }
+          const now = new Date().toISOString();
+          const memberIds = team.memberIds.filter((id) => id !== memberId);
+          return {
+            teams: {
+              ...state.teams,
+              [teamId]: { ...team, memberIds, updatedAt: now },
+            },
+            boards: syncBoardsWithTeam(state.boards, teamId, memberIds, now),
+          };
+        }),
+
+      addExistingMemberToTeam: (teamId, memberId) =>
+        set((state) => {
+          const team = state.teams[teamId];
+          const member = state.members[memberId];
+          if (!team || !member || team.memberIds.includes(memberId)) return state;
+          const now = new Date().toISOString();
+          const memberIds = [...team.memberIds, memberId];
+          return {
+            teams: {
+              ...state.teams,
+              [teamId]: { ...team, memberIds, updatedAt: now },
+            },
+            boards: syncBoardsWithTeam(state.boards, teamId, memberIds, now),
+          };
+        }),
+
+      deleteBoard: (boardId) =>
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+
+          const boards = { ...state.boards };
+          delete boards[boardId];
+
+          const lists = { ...state.lists };
+          const cards = { ...state.cards };
+          for (const listId of board.listIds) {
+            const list = lists[listId];
+            if (list) {
+              for (const cardId of list.cardIds) delete cards[cardId];
+              delete lists[listId];
+            }
+          }
+
+          const managers = { ...state.managers };
+          delete managers[boardId];
+
+          const meetings = { ...state.meetings };
+          for (const [id, m] of Object.entries(meetings)) {
+            if (m.boardId === boardId) delete meetings[id];
+          }
+
+          const standups = { ...state.standups };
+          for (const [id, s] of Object.entries(standups)) {
+            if (s.boardId === boardId) delete standups[id];
+          }
+
+          const activities = { ...state.activities };
+          for (const [id, a] of Object.entries(activities)) {
+            if (a.boardId === boardId) delete activities[id];
+          }
+
+          const remaining = Object.keys(boards);
+          return {
+            boards,
+            lists,
+            cards,
+            managers,
+            meetings,
+            standups,
+            activities,
+            activeBoardId:
+              state.activeBoardId === boardId
+                ? remaining[0] ?? null
+                : state.activeBoardId,
+            activeStandupId:
+              state.activeStandupId && standups[state.activeStandupId]
+                ? state.activeStandupId
+                : null,
+            activeMeetingId:
+              state.activeMeetingId && meetings[state.activeMeetingId]
+                ? state.activeMeetingId
+                : null,
           };
         }),
 
@@ -250,6 +658,10 @@ export const useBoardStore = create<BoardState>()(
             labels: extras.labels ?? [],
             dueDate: extras.dueDate ?? null,
             priority: extras.priority ?? null,
+            assigneeId: extras.assigneeId ?? null,
+            requirementId: extras.requirementId ?? null,
+            acceptanceCriteria: extras.acceptanceCriteria ?? "",
+            checklist: extras.checklist ?? [],
             createdAt: now,
             updatedAt: now,
           };
@@ -327,6 +739,117 @@ export const useBoardStore = create<BoardState>()(
         }
       },
 
+      createRequirement: (input) => {
+        const id = nanoid();
+        const now = new Date().toISOString();
+        const boardReqs = Object.values(get().requirements || {}).filter(
+          (r) => r.boardId === input.boardId,
+        );
+        const code =
+          input.code?.trim() ||
+          `REQ-${String(boardReqs.length + 1).padStart(2, "0")}`;
+        const requirement: Requirement = {
+          id,
+          boardId: input.boardId,
+          code,
+          title: input.title.trim() || "Novo requisito",
+          description: input.description?.trim() || "",
+          status: input.status ?? "draft",
+          priority: input.priority ?? "medium",
+          ownerId: input.ownerId ?? null,
+          dueDate: input.dueDate ?? null,
+          createdAt: now,
+          updatedAt: now,
+        };
+        set((state) => ({
+          requirements: { ...(state.requirements || {}), [id]: requirement },
+        }));
+        return id;
+      },
+
+      updateRequirement: (requirementId, patch) => {
+        set((state) => {
+          const current = state.requirements?.[requirementId];
+          if (!current) return state;
+          return {
+            requirements: {
+              ...state.requirements,
+              [requirementId]: {
+                ...current,
+                ...patch,
+                id: current.id,
+                boardId: current.boardId,
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          };
+        });
+      },
+
+      deleteRequirement: (requirementId) => {
+        set((state) => {
+          const next = { ...(state.requirements || {}) };
+          delete next[requirementId];
+          const cards = { ...state.cards };
+          for (const [cid, card] of Object.entries(cards)) {
+            if (card.requirementId === requirementId) {
+              cards[cid] = { ...card, requirementId: null };
+            }
+          }
+          return { requirements: next, cards };
+        });
+      },
+
+      createCalendarEvent: (input) => {
+        const id = nanoid();
+        const now = new Date().toISOString();
+        const board = get().boards[input.boardId];
+        const event: TeamCalendarEvent = {
+          id,
+          boardId: input.boardId,
+          teamId: input.teamId ?? board?.teamId ?? null,
+          title: input.title.trim() || "Evento",
+          description: input.description?.trim() || "",
+          kind: input.kind ?? "other",
+          date: input.date,
+          time: input.time ?? null,
+          memberIds: input.memberIds ?? [],
+          createdAt: now,
+          updatedAt: now,
+        };
+        set((state) => ({
+          calendarEvents: { ...(state.calendarEvents || {}), [id]: event },
+        }));
+        return id;
+      },
+
+      updateCalendarEvent: (eventId, patch) => {
+        set((state) => {
+          const current = state.calendarEvents?.[eventId];
+          if (!current) return state;
+          return {
+            calendarEvents: {
+              ...state.calendarEvents,
+              [eventId]: {
+                ...current,
+                ...patch,
+                id: current.id,
+                boardId: current.boardId,
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          };
+        });
+      },
+
+      deleteCalendarEvent: (eventId) => {
+        set((state) => {
+          const next = { ...(state.calendarEvents || {}) };
+          delete next[eventId];
+          return { calendarEvents: next };
+        });
+      },
+
       moveCard: (cardId, toListId, toIndex) => {
         let boardId: string | null = null;
         set((state) => {
@@ -391,6 +914,8 @@ export const useBoardStore = create<BoardState>()(
           get().addCard(listId, item.title, {
             description: item.description,
             priority: item.priority ?? null,
+            assigneeId: item.assigneeId ?? null,
+            dueDate: item.dueDate ?? null,
           });
         }
       },
@@ -512,16 +1037,32 @@ export const useBoardStore = create<BoardState>()(
             createdAt: now,
           };
           const safeBoard = ensureBoardMembers(board);
+          let teams = state.teams;
+          let boards = {
+            ...state.boards,
+            [boardId]: {
+              ...safeBoard,
+              memberIds: [...safeBoard.memberIds, memberId],
+              updatedAt: now,
+            },
+          };
+
+          if (safeBoard.teamId && state.teams[safeBoard.teamId]) {
+            const team = state.teams[safeBoard.teamId];
+            const memberIds = team.memberIds.includes(memberId)
+              ? team.memberIds
+              : [...team.memberIds, memberId];
+            teams = {
+              ...state.teams,
+              [team.id]: { ...team, memberIds, updatedAt: now },
+            };
+            boards = syncBoardsWithTeam(boards, team.id, memberIds, now);
+          }
+
           return {
             members: { ...state.members, [memberId]: member },
-            boards: {
-              ...state.boards,
-              [boardId]: {
-                ...safeBoard,
-                memberIds: [...safeBoard.memberIds, memberId],
-                updatedAt: now,
-              },
-            },
+            teams,
+            boards,
           };
         });
         return memberId;
@@ -979,6 +1520,152 @@ export const useBoardStore = create<BoardState>()(
         }
       },
 
+      applyStandupAiTurn: (standupId, input) => {
+        const trimmed = input.userText.trim();
+        if (!trimmed) return;
+
+        let boardIdForActivity: string | null = null;
+
+        set((state) => {
+          const standup = state.standups[standupId];
+          if (!standup || standup.status !== "open") return state;
+
+          const memberIds = standup.checkIns.map((c) => c.memberId);
+          const memberIndex = Math.min(
+            standup.currentMemberIndex ?? 0,
+            Math.max(memberIds.length - 1, 0),
+          );
+          const questionIndex = standup.currentQuestionIndex ?? 0;
+          const targetMemberId = input.memberId;
+          boardIdForActivity = standup.boardId;
+
+          const now = new Date().toISOString();
+          const chat = [...(standup.chat ?? [])];
+          chat.push({
+            id: nanoid(),
+            role: "member",
+            memberId: targetMemberId,
+            content: trimmed,
+            createdAt: now,
+          });
+          chat.push({
+            id: nanoid(),
+            role: "manager",
+            memberId: targetMemberId,
+            content: input.managerMessage,
+            createdAt: now,
+          });
+
+          let checkIns = standup.checkIns.map((c) => {
+            if (c.memberId !== targetMemberId) return c;
+            return {
+              ...c,
+              yesterday: input.extract.yesterday ?? c.yesterday,
+              today: input.extract.today ?? c.today,
+              blockers: input.extract.blockers ?? c.blockers,
+            };
+          });
+
+          const questions =
+            standup.questions?.length > 0
+              ? standup.questions
+              : defaultManagerQuestions();
+
+          let nextMemberIndex = memberIndex;
+          let nextQuestionIndex = questionIndex;
+          let awaitingReplyFrom: string | null = targetMemberId;
+
+          if (input.completeMember || (input.advanceQuestion && questionIndex >= questions.length - 1)) {
+            checkIns = checkIns.map((c) =>
+              c.memberId === targetMemberId ? { ...c, submittedAt: now } : c,
+            );
+            nextMemberIndex = memberIndex + 1;
+            nextQuestionIndex = 0;
+
+            if (nextMemberIndex < memberIds.length) {
+              const nextId = memberIds[nextMemberIndex];
+              const nextName = state.members[nextId]?.name || "próximo";
+              awaitingReplyFrom = nextId;
+              chat.push({
+                id: nanoid(),
+                role: "manager",
+                memberId: nextId,
+                content: `${nextName}, ${questions[0]}`,
+                createdAt: now,
+              });
+            } else {
+              awaitingReplyFrom = null;
+              chat.push({
+                id: nanoid(),
+                role: "manager",
+                memberId: null,
+                content:
+                  "Pronto — falei com todo o time. Quando quiser, peço para processar a daily e eu crio/atualizo os cards no board com a IA.",
+                createdAt: now,
+              });
+            }
+          } else if (input.advanceQuestion) {
+            nextQuestionIndex = Math.min(questionIndex + 1, questions.length - 1);
+            awaitingReplyFrom = targetMemberId;
+          } else {
+            awaitingReplyFrom = targetMemberId;
+          }
+
+          return {
+            standups: {
+              ...state.standups,
+              [standupId]: {
+                ...standup,
+                chat,
+                checkIns,
+                currentMemberIndex: nextMemberIndex,
+                currentQuestionIndex: nextQuestionIndex,
+                awaitingReplyFrom,
+                updatedAt: now,
+              },
+            },
+          };
+        });
+
+        if (boardIdForActivity) {
+          get().recordActivity({
+            boardId: boardIdForActivity,
+            memberId: input.memberId,
+            kind: "standup_reply",
+            note: trimmed.slice(0, 120),
+          });
+        }
+      },
+
+      appendManagerChat: (standupId, content, memberId = null) => {
+        const text = content.trim();
+        if (!text) return;
+        set((state) => {
+          const standup = state.standups[standupId];
+          if (!standup) return state;
+          const now = new Date().toISOString();
+          return {
+            standups: {
+              ...state.standups,
+              [standupId]: {
+                ...standup,
+                chat: [
+                  ...(standup.chat ?? []),
+                  {
+                    id: nanoid(),
+                    role: "manager" as const,
+                    memberId,
+                    content: text,
+                    createdAt: now,
+                  },
+                ],
+                updatedAt: now,
+              },
+            },
+          };
+        });
+      },
+
       setActiveStandup: (standupId) => set({ activeStandupId: standupId }),
 
       closeStandup: (standupId, summary) =>
@@ -1000,10 +1687,15 @@ export const useBoardStore = create<BoardState>()(
           };
         }),
 
-      applyManagerActions: (actions) => {
+      applyManagerActions: (actions, boardId) => {
+        const targetBoardId =
+          boardId || get().activeBoardId || Object.keys(get().boards)[0] || null;
+
         for (const action of actions) {
           if (action.type === "create_cards") {
-            const listId = action.listId;
+            const listId =
+              action.listId ||
+              (targetBoardId ? get().boards[targetBoardId]?.listIds[0] : undefined);
             if (!listId) continue;
             get().addCardsBulk(listId, action.cards);
           }
@@ -1016,6 +1708,8 @@ export const useBoardStore = create<BoardState>()(
               if (u.title !== undefined) patch.title = u.title;
               if (u.description !== undefined) patch.description = u.description;
               if (u.priority !== undefined) patch.priority = u.priority;
+              if (u.assigneeId !== undefined) patch.assigneeId = u.assigneeId;
+              if (u.dueDate !== undefined) patch.dueDate = u.dueDate;
               if (Object.keys(patch).length) get().updateCard(u.cardId, patch);
               if (u.moveToListId) {
                 const list = get().lists[u.moveToListId];
@@ -1023,7 +1717,259 @@ export const useBoardStore = create<BoardState>()(
               }
             }
           }
+          if (action.type === "create_lists" && targetBoardId) {
+            for (const title of action.titles.slice(0, 6)) {
+              if (title.trim()) get().addList(targetBoardId, title.trim());
+            }
+          }
+          if (action.type === "assign_cards") {
+            for (const a of action.assignments) {
+              get().updateCard(a.cardId, { assigneeId: a.assigneeId });
+            }
+          }
         }
+      },
+
+      ensureAsesiBoard: () => {
+        const state = get();
+        if (state.boards[ASESI_BOARD_ID]) {
+          const hasReq = Object.values(state.requirements || {}).some(
+            (r) => r.boardId === ASESI_BOARD_ID,
+          );
+          const hasCal = Object.values(state.calendarEvents || {}).some(
+            (e) => e.boardId === ASESI_BOARD_ID,
+          );
+          if (!hasReq || !hasCal) {
+            const me = state.currentUserId
+              ? state.members[state.currentUserId]
+              : null;
+            const seed = createAsesiBoardSeed(
+              me
+                ? {
+                    id: me.id,
+                    name: me.name,
+                    email: me.email,
+                    image: me.image,
+                  }
+                : undefined,
+            );
+            set((s) => ({
+              requirements: hasReq
+                ? s.requirements
+                : { ...(s.requirements || {}), ...seed.requirements },
+              calendarEvents: hasCal
+                ? s.calendarEvents
+                : { ...(s.calendarEvents || {}), ...seed.calendarEvents },
+            }));
+          }
+          return ASESI_BOARD_ID;
+        }
+
+        const me = state.currentUserId ? state.members[state.currentUserId] : null;
+        const seed = createAsesiBoardSeed(
+          me
+            ? { id: me.id, name: me.name, email: me.email, image: me.image }
+            : undefined,
+        );
+
+        set((s) => {
+          const members = { ...s.members, ...seed.members };
+          const ownerId = seed.ownerId;
+          const team = {
+            ...seed.team,
+            memberIds: Array.from(
+              new Set([ownerId, ...(s.currentUserId ? [s.currentUserId] : [])]),
+            ),
+          };
+          if (s.currentUserId && s.members[s.currentUserId] && s.currentUserId !== ownerId) {
+            members[s.currentUserId] = s.members[s.currentUserId];
+          }
+
+          const board = {
+            ...seed.board,
+            memberIds: [...team.memberIds],
+          };
+
+          return {
+            boards: { ...s.boards, [ASESI_BOARD_ID]: board },
+            lists: { ...s.lists, ...seed.lists },
+            cards: { ...s.cards, ...seed.cards },
+            members,
+            teams: { ...s.teams, [seed.team.id]: team },
+            managers: { ...s.managers, [ASESI_BOARD_ID]: seed.manager },
+            requirements: { ...(s.requirements || {}), ...seed.requirements },
+            calendarEvents: {
+              ...(s.calendarEvents || {}),
+              ...seed.calendarEvents,
+            },
+          };
+        });
+
+        return ASESI_BOARD_ID;
+      },
+
+      exportBoardSnapshot: (boardId) => {
+        const state = get();
+        const board = state.boards[boardId];
+        if (!board) return null;
+
+        const lists: Record<string, List> = {};
+        const cards: Record<string, Card> = {};
+        for (const listId of board.listIds) {
+          const list = state.lists[listId];
+          if (!list) continue;
+          lists[listId] = list;
+          for (const cardId of list.cardIds) {
+            if (state.cards[cardId]) cards[cardId] = state.cards[cardId];
+          }
+        }
+
+        const members: Record<string, TeamMember> = {};
+        for (const memberId of board.memberIds || []) {
+          if (state.members[memberId]) members[memberId] = state.members[memberId];
+        }
+
+        const teams: Record<string, Team> = {};
+        if (board.teamId && state.teams[board.teamId]) {
+          teams[board.teamId] = state.teams[board.teamId];
+        }
+
+        const meetings: Record<string, Meeting> = {};
+        for (const [id, meeting] of Object.entries(state.meetings)) {
+          if (meeting.boardId === boardId) meetings[id] = meeting;
+        }
+
+        const standups: Record<string, StandupSession> = {};
+        for (const [id, standup] of Object.entries(state.standups)) {
+          if (standup.boardId === boardId) standups[id] = standup;
+        }
+
+        const activities: Record<string, KanbanActivity> = {};
+        for (const [id, activity] of Object.entries(state.activities || {})) {
+          if (activity.boardId === boardId) activities[id] = activity;
+        }
+
+        const requirements: Record<string, Requirement> = {};
+        for (const [id, req] of Object.entries(state.requirements || {})) {
+          if (req.boardId === boardId) requirements[id] = req;
+        }
+
+        const calendarEvents: Record<string, TeamCalendarEvent> = {};
+        for (const [id, ev] of Object.entries(state.calendarEvents || {})) {
+          if (ev.boardId === boardId) calendarEvents[id] = ev;
+        }
+
+        const managers: Record<string, VirtualManager> = {};
+        if (state.managers[boardId]) managers[boardId] = state.managers[boardId];
+
+        return {
+          board,
+          lists,
+          cards,
+          members,
+          teams,
+          meetings,
+          managers,
+          standups,
+          activities,
+          requirements,
+          calendarEvents,
+          updatedAt: new Date().toISOString(),
+        };
+      },
+
+      mergeBoardSnapshot: (snapshot, opts) => {
+        set((state) => {
+          const board = ensureBoardMembers(snapshot.board);
+          const cards = { ...state.cards };
+          for (const [id, card] of Object.entries(snapshot.cards)) {
+            cards[id] = normalizeCard(card);
+          }
+          return {
+            boards: { ...state.boards, [board.id]: board },
+            lists: { ...state.lists, ...snapshot.lists },
+            cards,
+            members: { ...state.members, ...snapshot.members },
+            teams: { ...state.teams, ...snapshot.teams },
+            meetings: { ...state.meetings, ...snapshot.meetings },
+            managers: { ...state.managers, ...snapshot.managers },
+            standups: { ...state.standups, ...snapshot.standups },
+            activities: { ...(state.activities || {}), ...snapshot.activities },
+            requirements: {
+              ...(state.requirements || {}),
+              ...(snapshot.requirements || {}),
+            },
+            calendarEvents: {
+              ...(state.calendarEvents || {}),
+              ...(snapshot.calendarEvents || {}),
+            },
+            activeBoardId: opts?.setActive ? board.id : state.activeBoardId,
+          };
+        });
+      },
+
+      addBoardMemberFromProfile: (boardId, profile) => {
+        const email = profile.email.trim().toLowerCase();
+        const name = profile.name.trim() || "Membro";
+        const now = new Date().toISOString();
+        let memberId = "";
+
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+
+          const existing = Object.values(state.members).find(
+            (m) => m.email.trim().toLowerCase() === email && email.length > 0,
+          );
+
+          memberId = existing?.id || nanoid();
+          const member: TeamMember = existing
+            ? {
+                ...existing,
+                name,
+                email: email || existing.email,
+                image: profile.image ?? existing.image,
+              }
+            : {
+                id: memberId,
+                name,
+                email: email || `${memberId}@invite.local`,
+                role: "member",
+                color: "sky",
+                image: profile.image ?? null,
+                createdAt: now,
+              };
+
+          const memberIds = Array.from(new Set([...(board.memberIds || []), memberId]));
+          let teams = state.teams;
+          if (board.teamId && state.teams[board.teamId]) {
+            const team = state.teams[board.teamId];
+            teams = {
+              ...state.teams,
+              [team.id]: {
+                ...team,
+                memberIds: Array.from(new Set([...team.memberIds, memberId])),
+                updatedAt: now,
+              },
+            };
+          }
+
+          return {
+            members: { ...state.members, [memberId]: member },
+            boards: {
+              ...state.boards,
+              [boardId]: {
+                ...ensureBoardMembers(board),
+                memberIds,
+                updatedAt: now,
+              },
+            },
+            teams,
+            currentUserId: state.currentUserId || memberId,
+          };
+        });
+
+        return memberId;
       },
 
       recordActivity: ({ boardId, memberId, kind, cardId, note }) => {
@@ -1110,10 +2056,13 @@ export const useBoardStore = create<BoardState>()(
         lists: state.lists,
         cards: state.cards,
         members: state.members,
+        teams: state.teams,
         meetings: state.meetings,
         managers: state.managers,
         standups: state.standups,
         activities: state.activities,
+        requirements: state.requirements,
+        calendarEvents: state.calendarEvents,
         currentUserId: state.currentUserId,
         activeBoardId: state.activeBoardId,
       }),
@@ -1125,10 +2074,18 @@ export const useBoardStore = create<BoardState>()(
         }
         state.boards = boards;
         if (!state.members) state.members = {};
+        if (!state.teams) state.teams = {};
         if (!state.meetings) state.meetings = {};
         if (!state.managers) state.managers = {};
         if (!state.standups) state.standups = {};
         if (!state.activities) state.activities = {};
+        if (!state.requirements) state.requirements = {};
+        if (!state.calendarEvents) state.calendarEvents = {};
+
+        for (const [id, card] of Object.entries(state.cards || {})) {
+          if (card) state.cards[id] = normalizeCard(card as Card);
+        }
+
         for (const boardId of Object.keys(state.boards)) {
           if (!state.managers[boardId]) {
             const now = new Date().toISOString();
@@ -1145,6 +2102,16 @@ export const useBoardStore = create<BoardState>()(
             };
           }
         }
+
+        // inject ASESI board once for existing installs
+        queueMicrotask(() => {
+          try {
+            useBoardStore.getState().ensureAsesiBoard();
+          } catch {
+            /* ignore */
+          }
+        });
+
         state.setHydrated(true);
       },
     },

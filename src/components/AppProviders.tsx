@@ -2,16 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useBoardStore } from "@/lib/store";
-import { BoardShell } from "@/components/BoardShell";
 import { AuthUserSync } from "@/components/AuthUserSync";
 
-export function AppProviders({
-  children,
-  googleConfigured = false,
-}: {
-  children?: React.ReactNode;
-  googleConfigured?: boolean;
-}) {
+export function AppProviders({ children }: { children: React.ReactNode }) {
   const hydrated = useBoardStore((s) => s.hydrated);
   const setHydrated = useBoardStore((s) => s.setHydrated);
   const [ready, setReady] = useState(false);
@@ -31,8 +24,8 @@ export function AppProviders({
 
   if (!ready && !hydrated) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-[var(--muted)]">
-        Carregando board…
+      <div className="flex min-h-dvh items-center justify-center text-[var(--muted)]">
+        Carregando…
       </div>
     );
   }
@@ -40,7 +33,7 @@ export function AppProviders({
   return (
     <>
       <AuthUserSync />
-      {children ?? <BoardShell googleConfigured={googleConfigured} />}
+      {children}
     </>
   );
 }

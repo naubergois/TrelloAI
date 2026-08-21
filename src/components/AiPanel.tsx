@@ -33,7 +33,7 @@ export function AiPanel({
       id: "welcome",
       role: "assistant",
       content:
-        "Olá — sou o assistente do board. Peça para gerar cards a partir de um briefing ou sugerir prioridades. Sem OPENAI_API_KEY uso um motor local.",
+        "Olá — sou o assistente do board. Peça para gerar cards a partir de um briefing ou sugerir prioridades. Uso DeepSeek quando DEEPSEEK_API_KEY estiver configurada; senão, o motor local.",
       createdAt: new Date().toISOString(),
     },
   ]);

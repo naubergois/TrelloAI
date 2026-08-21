@@ -1,23 +1,59 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Bot, Plus, RotateCcw, Sparkles, Video } from "lucide-react";
+import {
+  Bot,
+  CalendarDays,
+  ClipboardList,
+  Home,
+  LayoutGrid,
+  Palette,
+  Pencil,
+  RotateCcw,
+  Sparkles,
+  UserPlus,
+  Users,
+  Video,
+} from "lucide-react";
 import { useBoardStore } from "@/lib/store";
+import { boardThemeStyle } from "@/lib/board-themes";
 import { BoardCanvas } from "@/components/BoardCanvas";
 import { AiPanel } from "@/components/AiPanel";
 import { MeetingsPanel } from "@/components/MeetingsPanel";
 import { MeetingRoom } from "@/components/MeetingRoom";
 import { AuthButton } from "@/components/AuthButton";
 import { ManagerPanel } from "@/components/ManagerPanel";
+import { BoardAppearanceDrawer } from "@/components/BoardAppearanceDrawer";
+import { InvitePanel } from "@/components/InvitePanel";
+import { RequirementsPanel } from "@/components/RequirementsPanel";
+import { TeamCalendarPanel } from "@/components/TeamCalendarPanel";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
-type SidePanel = "manager" | "meetings" | "ai" | null;
+type SidePanel =
+  | "manager"
+  | "meetings"
+  | "ai"
+  | "invite"
+  | "requirements"
+  | "calendar"
+  | null;
 
-export function BoardShell({ googleConfigured = false }: { googleConfigured?: boolean }) {
+export function BoardShell({
+  boardId,
+  googleConfigured = false,
+}: {
+  boardId: string;
+  googleConfigured?: boolean;
+}) {
+  const router = useRouter();
   const boards = useBoardStore((s) => s.boards);
-  const activeBoardId = useBoardStore((s) => s.activeBoardId);
+  const teams = useBoardStore((s) => s.teams);
+  const requirements = useBoardStore((s) => s.requirements);
+  const calendarEvents = useBoardStore((s) => s.calendarEvents);
   const setActiveBoard = useBoardStore((s) => s.setActiveBoard);
-  const createBoard = useBoardStore((s) => s.createBoard);
   const renameBoard = useBoardStore((s) => s.renameBoard);
+  const updateBoardDescription = useBoardStore((s) => s.updateBoardDescription);
   const resetDemo = useBoardStore((s) => s.resetDemo);
   const meetings = useBoardStore((s) => s.meetings);
   const createMeeting = useBoardStore((s) => s.createMeeting);
@@ -25,14 +61,47 @@ export function BoardShell({ googleConfigured = false }: { googleConfigured?: bo
   const managers = useBoardStore((s) => s.managers);
 
   const [panel, setPanel] = useState<SidePanel>("manager");
-  const [newTitle, setNewTitle] = useState("");
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setActiveBoard(boardId);
+  }, [boardId, setActiveBoard]);
+
+  useEffect(() => {
+    if (!editingTitle) return;
+    const t = window.setTimeout(() => {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    }, 30);
+    return () => window.clearTimeout(t);
+  }, [editingTitle]);
 
   const boardList = useMemo(
     () => Object.values(boards).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
     [boards],
   );
 
-  const board = activeBoardId ? boards[activeBoardId] : null;
+  const board = boards[boardId] ?? null;
+  const assignedTeam = board?.teamId ? teams[board.teamId] : null;
+
+  const reqCount = useMemo(
+    () =>
+      Object.values(requirements || {}).filter((r) => r.boardId === boardId)
+        .length,
+    [requirements, boardId],
+  );
+
+  const calCount = useMemo(() => {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, "0");
+    const prefix = `${y}-${m}`;
+    return Object.values(calendarEvents || {}).filter(
+      (e) => e.boardId === boardId && e.date.startsWith(prefix),
+    ).length;
+  }, [calendarEvents, boardId]);
 
   const liveCount = useMemo(() => {
     if (!board) return 0;
@@ -53,27 +122,55 @@ export function BoardShell({ googleConfigured = false }: { googleConfigured?: bo
     setPanel((cur) => (cur === next ? null : next));
   };
 
+  const themeStyle = board ? boardThemeStyle(board) : undefined;
+
+  if (!board) {
+    return (
+      <div className="flex h-dvh flex-col items-center justify-center gap-4 px-4 text-center">
+        <p className="text-[var(--muted)]">Board não encontrado.</p>
+        <Link
+          href="/"
+          className="rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-teal-950"
+        >
+          Voltar aos boards
+        </Link>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-dvh max-h-dvh flex-col overflow-hidden">
+    <div
+      className="board-theme flex h-dvh max-h-dvh flex-col overflow-hidden"
+      style={themeStyle}
+    >
       <MeetingRoom />
 
-      <header className="z-30 shrink-0 border-b border-[var(--line)] bg-[var(--panel-strong)]/95 backdrop-blur-xl">
-        <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-2 px-3 sm:h-[3.75rem] sm:gap-3 sm:px-4 lg:px-6">
-          <div className="min-w-0 shrink">
-            <p className="font-[family-name:var(--font-display)] text-lg leading-tight tracking-tight text-white sm:text-xl">
-              Trello<span className="text-[var(--accent)]">AI</span>
-            </p>
-            <p className="hidden truncate text-[11px] text-[var(--muted)] md:block">
-              Kanban · Maya · reuniões
-            </p>
-          </div>
+      <header className="z-30 shrink-0 border-b border-[var(--line)] bg-black/35 backdrop-blur-xl">
+        <div className="mx-auto flex min-h-14 max-w-[1600px] flex-wrap items-center gap-2 px-3 py-2 sm:min-h-[3.75rem] sm:gap-3 sm:px-4 lg:px-6">
+          <Link
+            href="/"
+            className="flex min-w-0 shrink items-center gap-2 rounded-xl px-1 py-1 transition hover:bg-white/5"
+            title="Todos os boards"
+          >
+            <Home className="hidden h-4 w-4 text-[var(--accent)] sm:block" />
+            <div className="min-w-0">
+              <p className="font-[family-name:var(--font-display)] text-lg leading-tight tracking-tight text-white sm:text-xl">
+                Trello<span className="text-[var(--accent)]">AI</span>
+              </p>
+              <p className="hidden truncate text-[11px] text-[var(--muted)] md:block">
+                Meus boards
+              </p>
+            </div>
+          </Link>
 
-          <div className="ml-auto flex min-w-0 items-center gap-1.5 sm:gap-2">
-            <div className="hidden items-center gap-2 lg:flex">
+          <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+            <div className="hidden items-center gap-2 md:flex">
+              <LayoutGrid className="h-4 w-4 text-[var(--muted)]" />
               <select
-                className="max-w-[10rem] rounded-lg border border-[var(--line)] bg-[var(--ink-2)] px-2.5 py-1.5 text-sm outline-none focus:border-[var(--accent)] xl:max-w-[14rem]"
-                value={activeBoardId ?? ""}
-                onChange={(e) => setActiveBoard(e.target.value)}
+                className="max-w-[12rem] rounded-lg border border-[var(--line)] bg-[var(--ink-2)] px-2.5 py-1.5 text-sm outline-none focus:border-[var(--accent)] xl:max-w-[16rem]"
+                value={boardId}
+                onChange={(e) => router.push(`/board/${e.target.value}`)}
+                aria-label="Trocar board"
               >
                 {boardList.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -81,32 +178,67 @@ export function BoardShell({ googleConfigured = false }: { googleConfigured?: bo
                   </option>
                 ))}
               </select>
-              <form
-                className="flex items-center gap-1.5"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (!newTitle.trim()) return;
-                  createBoard(newTitle.trim());
-                  setNewTitle("");
-                }}
-              >
-                <input
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="Novo board"
-                  className="w-28 rounded-lg border border-[var(--line)] bg-[var(--ink-2)] px-2.5 py-1.5 text-sm outline-none placeholder:text-[var(--muted)] focus:border-[var(--accent)] xl:w-36"
-                />
-                <button
-                  type="submit"
-                  className="inline-flex items-center gap-1 rounded-lg bg-[var(--accent)] px-2.5 py-1.5 text-sm font-medium text-teal-950 transition hover:brightness-110"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span className="hidden xl:inline">Criar</span>
-                </button>
-              </form>
             </div>
 
             <AuthButton googleConfigured={googleConfigured} />
+
+            <button
+              type="button"
+              onClick={() => toggle("invite")}
+              title="Convidar usuários"
+              className={`rounded-xl border p-1.5 transition sm:p-2 ${
+                panel === "invite"
+                  ? "border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent)]"
+                  : "border-[var(--line)] text-[var(--muted)] hover:text-white"
+              }`}
+            >
+              <UserPlus className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => toggle("requirements")}
+              title="Requisitos"
+              className={`relative rounded-xl border p-1.5 transition sm:p-2 ${
+                panel === "requirements"
+                  ? "border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent)]"
+                  : "border-[var(--line)] text-[var(--muted)] hover:text-white"
+              }`}
+            >
+              <ClipboardList className="h-4 w-4" />
+              {reqCount > 0 ? (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--accent)] px-1 text-[9px] font-bold text-teal-950">
+                  {reqCount > 99 ? "99+" : reqCount}
+                </span>
+              ) : null}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => toggle("calendar")}
+              title="Calendário do time"
+              className={`relative rounded-xl border p-1.5 transition sm:p-2 ${
+                panel === "calendar"
+                  ? "border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent)]"
+                  : "border-[var(--line)] text-[var(--muted)] hover:text-white"
+              }`}
+            >
+              <CalendarDays className="h-4 w-4" />
+              {calCount > 0 ? (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--accent-2)] px-1 text-[9px] font-bold text-slate-950">
+                  {calCount > 99 ? "99+" : calCount}
+                </span>
+              ) : null}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setAppearanceOpen(true)}
+              title="Fundo e design"
+              className="rounded-xl border border-[var(--line)] p-1.5 text-[var(--muted)] transition hover:text-white sm:p-2"
+            >
+              <Palette className="h-4 w-4" />
+            </button>
 
             <div className="flex items-center gap-0.5 rounded-xl border border-[var(--line)] bg-black/20 p-0.5 sm:gap-1 sm:rounded-2xl sm:p-1">
               <button
@@ -155,22 +287,20 @@ export function BoardShell({ googleConfigured = false }: { googleConfigured?: bo
               </button>
             </div>
 
-            {board ? (
-              <button
-                type="button"
-                onClick={() =>
-                  createMeeting({
-                    boardId: board.id,
-                    title: `Reunião ao vivo — ${board.title}`,
-                    startNow: true,
-                  })
-                }
-                className="hidden items-center gap-1.5 rounded-xl bg-rose-500/90 px-2.5 py-1.5 text-sm font-medium text-white transition hover:brightness-110 xl:inline-flex"
-              >
-                <Video className="h-4 w-4" />
-                Ao vivo
-              </button>
-            ) : null}
+            <button
+              type="button"
+              onClick={() =>
+                createMeeting({
+                  boardId: board.id,
+                  title: `Reunião ao vivo — ${board.title}`,
+                  startNow: true,
+                })
+              }
+              className="hidden items-center gap-1.5 rounded-xl bg-rose-500/90 px-2.5 py-1.5 text-sm font-medium text-white transition hover:brightness-110 xl:inline-flex"
+            >
+              <Video className="h-4 w-4" />
+              Ao vivo
+            </button>
 
             <button
               type="button"
@@ -186,72 +316,100 @@ export function BoardShell({ googleConfigured = false }: { googleConfigured?: bo
 
       <div className="relative mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 overflow-hidden px-2 py-2 sm:px-4 sm:py-3 lg:gap-3 lg:px-6">
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          {board ? (
-            <>
-              <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2 sm:mb-3 sm:gap-3">
-                <div className="min-w-0 flex-1">
+          <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2 sm:mb-3 sm:gap-3">
+            <div className="min-w-0 flex-1">
+              {editingTitle ? (
+                <div className="space-y-2">
                   <input
+                    ref={titleInputRef}
                     value={board.title}
                     onChange={(e) => renameBoard(board.id, e.target.value)}
-                    className="w-full max-w-xl truncate bg-transparent font-[family-name:var(--font-display)] text-xl text-white outline-none sm:text-2xl"
+                    onBlur={() => setEditingTitle(false)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === "Escape") {
+                        e.preventDefault();
+                        setEditingTitle(false);
+                      }
+                    }}
+                    className="w-full max-w-xl rounded-xl border border-[var(--accent)]/50 bg-black/30 px-3 py-2 font-[family-name:var(--font-display)] text-xl text-white outline-none ring-2 ring-[var(--accent)]/20 sm:text-2xl"
+                    aria-label="Nome do board"
                   />
-                  <p className="mt-0.5 hidden truncate text-xs text-[var(--muted)] sm:block">
-                    {board.description}
-                    {managers[board.id] ? ` · ${managers[board.id].name}` : ""}
+                  <input
+                    value={board.description}
+                    onChange={(e) => updateBoardDescription(board.id, e.target.value)}
+                    placeholder="Descrição do board"
+                    className="w-full max-w-xl rounded-lg border border-[var(--line)] bg-black/20 px-3 py-1.5 text-sm text-[var(--muted)] outline-none focus:border-[var(--accent)]"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") setEditingTitle(false);
+                    }}
+                  />
+                  <p className="text-[11px] text-[var(--muted)]">
+                    Enter ou clique fora para salvar
                   </p>
                 </div>
-
-                <div className="flex items-center gap-2 lg:hidden">
-                  <select
-                    className="max-w-[9rem] rounded-lg border border-[var(--line)] bg-[var(--ink-2)] px-2 py-1.5 text-xs outline-none focus:border-[var(--accent)] sm:max-w-[12rem] sm:text-sm"
-                    value={activeBoardId ?? ""}
-                    onChange={(e) => setActiveBoard(e.target.value)}
-                    aria-label="Selecionar board"
-                  >
-                    {boardList.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.title}
-                      </option>
-                    ))}
-                  </select>
-                  <form
-                    className="flex items-center gap-1"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      if (!newTitle.trim()) return;
-                      createBoard(newTitle.trim());
-                      setNewTitle("");
-                    }}
-                  >
-                    <input
-                      value={newTitle}
-                      onChange={(e) => setNewTitle(e.target.value)}
-                      placeholder="Novo"
-                      className="w-20 rounded-lg border border-[var(--line)] bg-[var(--ink-2)] px-2 py-1.5 text-xs outline-none placeholder:text-[var(--muted)] focus:border-[var(--accent)] sm:w-28 sm:text-sm"
-                    />
-                    <button
-                      type="submit"
-                      className="rounded-lg bg-[var(--accent)] p-1.5 text-teal-950"
-                      aria-label="Criar board"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
-                  </form>
-                </div>
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-hidden">
-                <BoardCanvas boardId={board.id} />
-              </div>
-            </>
-          ) : (
-            <div className="flex h-full items-center justify-center rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-6 text-[var(--muted)]">
-              Nenhum board ativo. Crie um novo para começar.
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setEditingTitle(true)}
+                  className="group/title flex max-w-full items-start gap-2 rounded-xl text-left transition hover:bg-white/5"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-[family-name:var(--font-display)] text-xl text-white sm:text-2xl">
+                      {board.title}
+                    </p>
+                    <p className="mt-0.5 hidden truncate text-xs text-[var(--muted)] sm:block">
+                      {board.description || "Clique para editar nome e descrição"}
+                      {managers[board.id] ? ` · ${managers[board.id].name}` : ""}
+                    </p>
+                  </div>
+                  <span className="mt-1.5 shrink-0 rounded-lg border border-[var(--line)] p-1.5 text-[var(--muted)] opacity-100 transition group-hover/title:border-[var(--accent)]/40 group-hover/title:text-[var(--accent)] sm:opacity-70">
+                    <Pencil className="h-3.5 w-3.5" />
+                  </span>
+                </button>
+              )}
             </div>
-          )}
+
+            {assignedTeam ? (
+              <button
+                type="button"
+                onClick={() => setPanel("meetings")}
+                title="Equipe do board"
+                className="inline-flex max-w-[10rem] items-center gap-1.5 truncate rounded-xl border border-[var(--line)] bg-black/20 px-2.5 py-1.5 text-xs text-[var(--muted)] transition hover:border-[var(--accent)]/40 hover:text-white sm:max-w-[14rem]"
+              >
+                <Users className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                <span className="truncate">{assignedTeam.name}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setPanel("meetings")}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-[var(--line)] px-2.5 py-1.5 text-xs text-[var(--muted)] transition hover:border-[var(--accent)]/40 hover:text-white"
+              >
+                <Users className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Cadastrar time</span>
+              </button>
+            )}
+
+            <select
+              className="max-w-[9rem] rounded-lg border border-[var(--line)] bg-[var(--ink-2)] px-2 py-1.5 text-xs outline-none focus:border-[var(--accent)] md:hidden sm:max-w-[12rem] sm:text-sm"
+              value={boardId}
+              onChange={(e) => router.push(`/board/${e.target.value}`)}
+              aria-label="Trocar board"
+            >
+              {boardList.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.title}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <BoardCanvas boardId={board.id} />
+          </div>
         </main>
 
-        {panel && board ? (
+        {panel && panel !== "requirements" && panel !== "calendar" ? (
           <>
             <button
               type="button"
@@ -276,10 +434,29 @@ export function BoardShell({ googleConfigured = false }: { googleConfigured?: bo
               {panel === "ai" ? (
                 <AiPanel boardId={board.id} onClose={() => setPanel(null)} />
               ) : null}
+              {panel === "invite" ? (
+                <aside className="anim-rise panel-glass flex h-full min-h-0 w-full flex-col overflow-hidden rounded-t-3xl p-4 sm:rounded-3xl">
+                  <InvitePanel boardId={board.id} onClose={() => setPanel(null)} />
+                </aside>
+              ) : null}
             </div>
           </>
         ) : null}
       </div>
+
+      {panel === "requirements" ? (
+        <RequirementsPanel boardId={board.id} onClose={() => setPanel(null)} />
+      ) : null}
+      {panel === "calendar" ? (
+        <TeamCalendarPanel boardId={board.id} onClose={() => setPanel(null)} />
+      ) : null}
+
+      {appearanceOpen ? (
+        <BoardAppearanceDrawer
+          boardId={board.id}
+          onClose={() => setAppearanceOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

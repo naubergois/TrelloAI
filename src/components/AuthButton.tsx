@@ -1,18 +1,11 @@
 "use client";
 
-import { signIn, signOut, useSession } from "next-auth/react";
+import Link from "next/link";
+import { signOut, useSession } from "next-auth/react";
 import { LogIn, LogOut } from "lucide-react";
 
 export function AuthButton({ googleConfigured }: { googleConfigured: boolean }) {
   const { data: session, status } = useSession();
-
-  if (!googleConfigured) {
-    return (
-      <span className="hidden text-[11px] text-[var(--muted)] lg:inline">
-        Configure Google OAuth no .env.local
-      </span>
-    );
-  }
 
   if (status === "loading") {
     return <span className="text-xs text-[var(--muted)]">…</span>;
@@ -29,7 +22,11 @@ export function AuthButton({ googleConfigured }: { googleConfigured: boolean }) 
             className="h-8 w-8 rounded-full ring-1 ring-[var(--line)]"
             referrerPolicy="no-referrer"
           />
-        ) : null}
+        ) : (
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-white ring-1 ring-[var(--line)]">
+            {(session.user.name || session.user.email || "?").slice(0, 1).toUpperCase()}
+          </span>
+        )}
         <span className="hidden max-w-[120px] truncate text-xs text-[var(--muted)] sm:inline">
           {session.user.name || session.user.email}
         </span>
@@ -47,13 +44,13 @@ export function AuthButton({ googleConfigured }: { googleConfigured: boolean }) 
   }
 
   return (
-    <button
-      type="button"
-      onClick={() => void signIn("google", { callbackUrl: "/" })}
+    <Link
+      href="/login"
       className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-xs font-semibold text-slate-900 transition hover:brightness-95"
+      title={googleConfigured ? "Entrar com e-mail ou Google" : "Entrar com e-mail"}
     >
       <LogIn className="h-3.5 w-3.5" />
-      Google
-    </button>
+      Entrar
+    </Link>
   );
 }

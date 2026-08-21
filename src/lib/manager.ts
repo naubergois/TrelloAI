@@ -3,12 +3,32 @@ import type { AiRequestContext, AiResponse } from "./ai";
 
 export interface ManagerContext extends AiRequestContext {
   managerName: string;
-  members: { id: string; name: string }[];
+  members: { id: string; name: string; email?: string }[];
   checkIns: StandupCheckIn[];
   memberNames: Record<string, string>;
 }
 
 export type ManagerAiResponse = AiResponse & { extraAction?: AiAction };
+
+export type StandupTurnInput = {
+  managerName: string;
+  memberName: string;
+  memberId: string;
+  questionIndex: number;
+  questions: string[];
+  userReply: string;
+  checkIn: StandupCheckIn;
+  recentChat: { role: string; content: string }[];
+  boardTitle: string;
+};
+
+export type StandupTurnResult = {
+  message: string;
+  extract: Partial<Pick<StandupCheckIn, "yesterday" | "today" | "blockers">>;
+  advanceQuestion: boolean;
+  completeMember: boolean;
+  provider: "deepseek" | "local";
+};
 
 const DEFAULT_QUESTIONS = [
   "O que você fez desde a última daily?",
@@ -157,70 +177,305 @@ export function localManagerProcess(context: ManagerContext): ManagerAiResponse 
   };
 }
 
-export async function openAiManagerProcess(
+export async function deepSeekManagerProcess(
   context: ManagerContext,
   apiKey: string,
+  opts?: { mode?: "daily" | "chat"; userMessage?: string },
 ): Promise<ManagerAiResponse> {
-  const system = `Você é ${context.managerName}, gestor virtual do kanban "${context.boardTitle}".
-Fala português (Brasil). Após a daily, analise os check-ins e proponha ações no board.
-Retorne SOMENTE JSON:
+  const mode = opts?.mode || "daily";
+  const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+  const baseUrl = (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com").replace(
+    /\/$/,
+    "",
+  );
+
+  const system = `Você é ${context.managerName}, gestor(a) virtual do kanban "${context.boardTitle}".
+Fala português (Brasil). Você GERENCIA o projeto de verdade: cria listas/cards, move, prioriza, atribui responsáveis e define prazos.
+Retorne SOMENTE JSON válido (sem markdown):
 {
-  "message": string (resumo da daily para a equipe),
+  "message": string (resumo claro das decisões para a equipe),
   "action":
     | { "type": "none" }
-    | { "type": "create_cards", "listId": string | null, "cards": [{ "title": string, "description"?: string, "priority"?: "low"|"medium"|"high" }] }
-    | { "type": "update_cards", "updates": [{ "cardId": string, "title"?: string, "description"?: string, "priority"?: "low"|"medium"|"high"|null, "moveToListId"?: string }] },
-  "extraAction": mesma forma de action ou omitido (use para segunda ação, ex. updates além de creates)
+    | { "type": "create_cards", "listId": string | null, "cards": [{ "title": string, "description"?: string, "priority"?: "low"|"medium"|"high", "assigneeId"?: string|null, "dueDate"?: string|null }] }
+    | { "type": "update_cards", "updates": [{ "cardId": string, "title"?: string, "description"?: string, "priority"?: "low"|"medium"|"high"|null, "moveToListId"?: string, "assigneeId"?: string|null, "dueDate"?: string|null }] }
+    | { "type": "create_lists", "titles": string[] }
+    | { "type": "assign_cards", "assignments": [{ "cardId": string, "assigneeId": string|null }] }
+    | { "type": "suggest_priorities", "updates": [{ "cardId": string, "priority": "low"|"medium"|"high" }] },
+  "extraAction": mesma forma de action ou omitido
 }
 Regras:
-- Criar cards para trabalho novo ou bloqueios explícitos.
-- Atualizar/mover cards existentes quando o check-in claramente se refere a eles (use cardIds do contexto).
-- Listas: primeira = a fazer, segunda = em progresso, terceira = concluído.
-- Max 8 creates e 8 updates.
+- Use ids reais do contexto (listas, cards, membros).
+- Atribua trabalho com assigneeId quando fizer sentido.
+- Mova cards entre listas conforme progresso (backlog → andamento → revisão → concluído).
+- Crie listas só se o fluxo do projeto precisar.
+- Max 8 creates / 8 updates / 4 listas novas.
 Contexto:
 ${JSON.stringify(context, null, 2)}`;
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const userContent =
+    mode === "chat"
+      ? opts?.userMessage || "Ajude a organizar o projeto."
+      : "Processe a daily: aplique ações concretas no board com base nos check-ins.";
+
+  const res = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+      model,
       temperature: 0.3,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: system },
-        {
-          role: "user",
-          content: "Processe a daily: pergunte implicitamente pelo status e aplique ações no board.",
-        },
+        { role: "user", content: userContent },
       ],
     }),
   });
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`OpenAI error ${res.status}: ${text.slice(0, 200)}`);
+    throw new Error(`DeepSeek error ${res.status}: ${text.slice(0, 200)}`);
   }
 
   const data = (await res.json()) as {
     choices?: { message?: { content?: string } }[];
   };
   const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error("Empty OpenAI response");
+  if (!content) throw new Error("Empty DeepSeek response");
 
-  const parsed = JSON.parse(content) as {
+  const cleaned = content.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "");
+  const parsed = JSON.parse(cleaned) as {
     message?: string;
     action?: AiAction;
     extraAction?: AiAction;
   };
 
   return {
-    message: parsed.message || "Daily processada.",
+    message: parsed.message || (mode === "chat" ? "Pronto." : "Daily processada."),
     action: parsed.action || { type: "none" },
     extraAction: parsed.extraAction,
-    provider: "openai",
+    provider: "deepseek",
   };
 }
+
+/** @deprecated use deepSeekManagerProcess — kept as alias for older call sites */
+export async function openAiManagerProcess(
+  context: ManagerContext,
+  apiKey: string,
+  opts?: { mode?: "daily" | "chat"; userMessage?: string },
+): Promise<ManagerAiResponse> {
+  return deepSeekManagerProcess(context, apiKey, opts);
+}
+
+export function localManagerChat(
+  prompt: string,
+  context: ManagerContext,
+): ManagerAiResponse {
+  const lower = prompt.toLowerCase();
+  const todo = context.lists[0];
+  const doing = context.lists[1] ?? todo;
+  const done = context.lists[context.lists.length - 1] ?? todo;
+
+  if (/lista|coluna|swim/.test(lower) && /cri|add|nova/.test(lower)) {
+    const titleMatch = prompt.match(/["“](.+?)["”]/) || prompt.match(/lista\s+(.+)$/i);
+    const title = titleMatch?.[1]?.trim() || "Nova etapa";
+    return {
+      message: `Criei a lista "${title}" para organizar melhor o fluxo.`,
+      action: { type: "create_lists", titles: [title] },
+      provider: "local",
+    };
+  }
+
+  if (/atribu|responsáv|assignee|dono/.test(lower)) {
+    const member = context.members.find((m) =>
+      lower.includes(m.name.toLowerCase().split(" ")[0] || ""),
+    );
+    const card = context.lists
+      .flatMap((l) => l.cards.map((c) => ({ ...c, listId: l.id })))
+      .find((c) => lower.includes(c.title.toLowerCase().slice(0, 12)));
+    if (member && card) {
+      return {
+        message: `Atribuí "${card.title}" para ${member.name}.`,
+        action: {
+          type: "assign_cards",
+          assignments: [{ cardId: card.id, assigneeId: member.id }],
+        },
+        provider: "local",
+      };
+    }
+  }
+
+  if (/mover|mova|conclu|andamento|progresso/.test(lower)) {
+    const card = context.lists
+      .flatMap((l) => l.cards)
+      .find((c) => lower.includes(c.title.toLowerCase().slice(0, 10)));
+    if (card && done) {
+      const target = /conclu|feito|done/.test(lower) ? done.id : doing?.id;
+      if (target) {
+        return {
+          message: `Movimentei o card no fluxo do projeto.`,
+          action: {
+            type: "update_cards",
+            updates: [{ cardId: card.id, moveToListId: target }],
+          },
+          provider: "local",
+        };
+      }
+    }
+  }
+
+  // fallback: create task from prompt
+  const title = prompt.replace(/^(crie|criar|adicione|faça)\s+/i, "").trim().slice(0, 100);
+  if (title.length > 3 && todo) {
+    return {
+      message: `Criei o card "${title}" no backlog para a Maya acompanhar.`,
+      action: {
+        type: "create_cards",
+        listId: todo.id,
+        cards: [{ title, description: `Pedido ao gestor: ${prompt}`, priority: "medium" }],
+      },
+      provider: "local",
+    };
+  }
+
+  return {
+    message:
+      "Posso gerir o projeto. Exemplos:\n• \"Crie cards para o plano de validação ASESI\"\n• \"Atribua Validar TrelloAI para Ana\"\n• \"Crie a lista Bloqueios\"\n• \"Mova X para concluído\"",
+    action: { type: "none" },
+    provider: "local",
+  };
+}
+
+function fieldForQuestion(index: number): "yesterday" | "today" | "blockers" {
+  if (index <= 0) return "yesterday";
+  if (index === 1) return "today";
+  return "blockers";
+}
+
+export function localStandupTurn(input: StandupTurnInput): StandupTurnResult {
+  const reply = input.userReply.trim();
+  const q = input.questions[input.questionIndex] || input.questions[0];
+  const vague = !reply || reply.length < 4 || /^(oi+|olá+|ola+|ok|sim|não|nao|blz|eae|hey)$/i.test(reply);
+
+  if (vague) {
+    return {
+      message: `${input.memberName}, preciso de um pouco mais de contexto. ${q}`,
+      extract: {},
+      advanceQuestion: false,
+      completeMember: false,
+      provider: "local",
+    };
+  }
+
+  const field = fieldForQuestion(input.questionIndex);
+  const nextIndex = input.questionIndex + 1;
+  const completeMember = nextIndex >= input.questions.length;
+  const extract = { [field]: reply } as StandupTurnResult["extract"];
+
+  if (completeMember) {
+    return {
+      message: `Perfeito, ${input.memberName} — anotei: "${reply.slice(0, 80)}${reply.length > 80 ? "…" : ""}". Obrigado pelo check-in!`,
+      extract,
+      advanceQuestion: true,
+      completeMember: true,
+      provider: "local",
+    };
+  }
+
+  const nextQ = input.questions[nextIndex];
+  return {
+    message: `Entendi: "${reply.slice(0, 90)}${reply.length > 90 ? "…" : ""}". ${input.memberName}, ${nextQ}`,
+    extract,
+    advanceQuestion: true,
+    completeMember: false,
+    provider: "local",
+  };
+}
+
+export async function deepSeekStandupTurn(
+  input: StandupTurnInput,
+  apiKey: string,
+): Promise<StandupTurnResult> {
+  const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+  const baseUrl = (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com").replace(/\/$/, "");
+  const currentQ = input.questions[input.questionIndex] || input.questions[0];
+  const nextQ =
+    input.questionIndex + 1 < input.questions.length
+      ? input.questions[input.questionIndex + 1]
+      : null;
+
+  const system = `Você é ${input.managerName}, gestora virtual do board "${input.boardTitle}".
+Conduza a daily em português do Brasil de forma NATURAL e conversacional (não robótica).
+Pergunta atual (${input.questionIndex + 1}/${input.questions.length}): "${currentQ}"
+Membro: ${input.memberName}
+Check-in parcial: ${JSON.stringify(input.checkIn)}
+Histórico recente: ${JSON.stringify(input.recentChat.slice(-8))}
+
+Retorne SOMENTE JSON:
+{
+  "message": string,  // resposta da Maya: reconheça o que a pessoa disse; se advanceQuestion=true e ainda houver próxima pergunta, inclua a próxima naturalmente
+  "extract": { "yesterday"?: string, "today"?: string, "blockers"?: string },
+  "advanceQuestion": boolean, // false se a resposta for vaga (oi, ok, blz) — peça detalhes e repita a pergunta atual
+  "completeMember": boolean   // true só quando as 3 perguntas tiverem respostas úteis
+}
+
+Regras:
+- Nunca ignore a mensagem do usuário.
+- Se for só saudação/vaga, advanceQuestion=false e completeMember=false.
+- Ao avançar, preencha extract no campo correspondente (yesterday=perg0, today=perg1, blockers=perg2).
+- Se for a última pergunta e a resposta for útil: completeMember=true e agradeça.
+- Próxima pergunta (se houver): "${nextQ || ""}"
+- Máx ~3 frases em message.`;
+
+  const res = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0.5,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: input.userReply },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`DeepSeek error ${res.status}: ${text.slice(0, 200)}`);
+  }
+
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+  };
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error("Empty DeepSeek response");
+
+  const cleaned = content
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "");
+  const parsed = JSON.parse(cleaned) as {
+    message?: string;
+    extract?: StandupTurnResult["extract"];
+    advanceQuestion?: boolean;
+    completeMember?: boolean;
+  };
+
+  return {
+    message:
+      parsed.message ||
+      `${input.memberName}, ${currentQ}`,
+    extract: parsed.extract || {},
+    advanceQuestion: Boolean(parsed.advanceQuestion),
+    completeMember: Boolean(parsed.completeMember),
+    provider: "deepseek",
+  };
+}
+

@@ -47,10 +47,13 @@ export function MeetingsPanel({
 }) {
   const board = useBoardStore((s) => s.boards[boardId]);
   const members = useBoardStore((s) => s.members);
+  const teams = useBoardStore((s) => s.teams);
   const meetings = useBoardStore((s) => s.meetings);
   const currentUserId = useBoardStore((s) => s.currentUserId);
   const addTeamMember = useBoardStore((s) => s.addTeamMember);
   const removeTeamMember = useBoardStore((s) => s.removeTeamMember);
+  const assignTeamToBoard = useBoardStore((s) => s.assignTeamToBoard);
+  const createTeam = useBoardStore((s) => s.createTeam);
   const setCurrentUserName = useBoardStore((s) => s.setCurrentUserName);
   const createMeeting = useBoardStore((s) => s.createMeeting);
   const joinMeeting = useBoardStore((s) => s.joinMeeting);
@@ -61,6 +64,9 @@ export function MeetingsPanel({
   const [meetingTitle, setMeetingTitle] = useState("Sync da equipe");
   const [meetingWhen, setMeetingWhen] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [creatingTeam, setCreatingTeam] = useState(false);
+  const [newTeamName, setNewTeamName] = useState("");
+  const [newTeamDescription, setNewTeamDescription] = useState("");
 
   const team = useMemo(() => {
     if (!board) return [];
@@ -68,6 +74,13 @@ export function MeetingsPanel({
       .map((id) => members[id])
       .filter(Boolean);
   }, [board, members]);
+
+  const teamOptions = useMemo(
+    () => Object.values(teams).sort((a, b) => a.name.localeCompare(b.name)),
+    [teams],
+  );
+
+  const assignedTeam = board?.teamId ? teams[board.teamId] : null;
 
   const boardMeetings = useMemo(() => {
     return Object.values(meetings)
@@ -92,6 +105,25 @@ export function MeetingsPanel({
     });
     setMemberName("");
     setMemberEmail("");
+  };
+
+  const onCreateTeam = (e: FormEvent) => {
+    e.preventDefault();
+    if (!newTeamName.trim()) return;
+    const existingMemberIds = board.memberIds?.length
+      ? [...board.memberIds]
+      : currentUserId
+        ? [currentUserId]
+        : [];
+    const id = createTeam({
+      name: newTeamName.trim(),
+      description: newTeamDescription.trim(),
+      memberIds: existingMemberIds,
+    });
+    assignTeamToBoard(boardId, id);
+    setNewTeamName("");
+    setNewTeamDescription("");
+    setCreatingTeam(false);
   };
 
   const onSchedule = (e: FormEvent) => {
@@ -151,11 +183,93 @@ export function MeetingsPanel({
         </section>
 
         <section>
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-2 flex items-center justify-between gap-2">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-              Equipe ({team.length})
+              Equipe do board ({team.length})
             </h3>
+            {!creatingTeam ? (
+              <button
+                type="button"
+                onClick={() => setCreatingTeam(true)}
+                className="rounded-lg border border-[var(--line)] px-2 py-1 text-[11px] text-[var(--accent)] hover:bg-[var(--accent)]/10"
+              >
+                + Cadastrar time
+              </button>
+            ) : null}
           </div>
+
+          {creatingTeam ? (
+            <form
+              onSubmit={onCreateTeam}
+              className="mb-3 space-y-2 rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/5 p-3"
+            >
+              <p className="text-xs font-medium text-white">Nova equipe neste board</p>
+              <input
+                value={newTeamName}
+                onChange={(e) => setNewTeamName(e.target.value)}
+                placeholder="Nome do time (ex.: ASESI)"
+                className="w-full rounded-lg border border-[var(--line)] bg-[var(--ink)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
+                autoFocus
+                required
+              />
+              <input
+                value={newTeamDescription}
+                onChange={(e) => setNewTeamDescription(e.target.value)}
+                placeholder="Descrição (opcional)"
+                className="w-full rounded-lg border border-[var(--line)] bg-[var(--ink)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
+              />
+              <p className="text-[11px] text-[var(--muted)]">
+                Os membros atuais do board entram automaticamente na nova equipe.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreatingTeam(false);
+                    setNewTeamName("");
+                    setNewTeamDescription("");
+                  }}
+                  className="flex-1 rounded-lg border border-[var(--line)] px-3 py-2 text-sm text-[var(--muted)] hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-teal-950"
+                >
+                  Criar e vincular
+                </button>
+              </div>
+            </form>
+          ) : null}
+
+          <label className="mb-3 block text-[11px] text-[var(--muted)]">
+            Equipe vinculada
+            <select
+              value={board.teamId ?? ""}
+              onChange={(e) => assignTeamToBoard(boardId, e.target.value || null)}
+              className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--ink)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
+            >
+              <option value="">Sem equipe (membros manuais)</option>
+              {teamOptions.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} ({t.memberIds.length})
+                </option>
+              ))}
+            </select>
+          </label>
+          {assignedTeam ? (
+            <p className="mb-3 text-[11px] text-[var(--muted)]">
+              Usando <strong className="text-white">{assignedTeam.name}</strong>. Novos
+              membros adicionados aqui também entram na equipe.
+            </p>
+          ) : teamOptions.length === 0 ? (
+            <p className="mb-3 text-[11px] text-[var(--muted)]">
+              Nenhuma equipe cadastrada. Use <strong className="text-white">+ Cadastrar time</strong>{" "}
+              para criar e vincular ao board.
+            </p>
+          ) : null}
+
           <ul className="mb-3 space-y-2">
             {team.map((member) => (
               <li

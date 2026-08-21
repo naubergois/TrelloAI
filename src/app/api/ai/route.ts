@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { localAiRespond, openAiRespond, type AiRequestContext } from "@/lib/ai";
+import {
+  deepSeekRespond,
+  localAiRespond,
+  openAiRespond,
+  type AiRequestContext,
+} from "@/lib/ai";
 
 export async function POST(request: Request) {
   try {
@@ -18,10 +23,26 @@ export async function POST(request: Request) {
       lists: [],
     };
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (apiKey) {
+    const deepSeekKey = process.env.DEEPSEEK_API_KEY;
+    if (deepSeekKey) {
       try {
-        const result = await openAiRespond(prompt, context, apiKey);
+        const result = await deepSeekRespond(prompt, context, deepSeekKey);
+        return NextResponse.json(result);
+      } catch (error) {
+        const fallback = localAiRespond(prompt, context);
+        return NextResponse.json({
+          ...fallback,
+          message: `${fallback.message}\n\n(Nota: DeepSeek falhou — usei o assistente local. ${
+            error instanceof Error ? error.message : ""
+          })`,
+        });
+      }
+    }
+
+    const openAiKey = process.env.OPENAI_API_KEY;
+    if (openAiKey) {
+      try {
+        const result = await openAiRespond(prompt, context, openAiKey);
         return NextResponse.json(result);
       } catch (error) {
         const fallback = localAiRespond(prompt, context);

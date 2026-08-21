@@ -1,6 +1,18 @@
 import { nanoid } from "nanoid";
-import type { Board, Card, List, Meeting, StandupSession, TeamMember, VirtualManager } from "./types";
+import type {
+  Board,
+  Card,
+  List,
+  Meeting,
+  Requirement,
+  StandupSession,
+  Team,
+  TeamCalendarEvent,
+  TeamMember,
+  VirtualManager,
+} from "./types";
 import { defaultManagerQuestions } from "./manager";
+import { calendarDayKey, shiftCalendarDay } from "./calendar-report";
 
 function slugify(input: string) {
   return input
@@ -64,6 +76,10 @@ export function createSampleWorkspace() {
       labels: [{ id: nanoid(), name: "produto", color: "teal" }],
       dueDate: null,
       priority: "high",
+      assigneeId: null,
+      requirementId: null,
+      acceptanceCriteria: "Visão alinhada com stakeholders e registrada no board.",
+      checklist: [],
     },
     {
       listId: todoId,
@@ -72,6 +88,10 @@ export function createSampleWorkspace() {
       labels: [{ id: nanoid(), name: "ux", color: "sky" }],
       dueDate: null,
       priority: "medium",
+      assigneeId: null,
+      requirementId: null,
+      acceptanceCriteria: "",
+      checklist: [],
     },
     {
       listId: doingId,
@@ -80,6 +100,13 @@ export function createSampleWorkspace() {
       labels: [{ id: nanoid(), name: "ia", color: "violet" }],
       dueDate: null,
       priority: "high",
+      assigneeId: null,
+      requirementId: null,
+      acceptanceCriteria: "Assistente cria cards e sugere prioridades no board demo.",
+      checklist: [
+        { id: nanoid(), text: "Prompt de criação", done: true },
+        { id: nanoid(), text: "Aplicar ações no store", done: false },
+      ],
     },
     {
       listId: doneId,
@@ -88,6 +115,10 @@ export function createSampleWorkspace() {
       labels: [{ id: nanoid(), name: "dev", color: "lime" }],
       dueDate: null,
       priority: "low",
+      assigneeId: null,
+      requirementId: null,
+      acceptanceCriteria: "",
+      checklist: [],
     },
   ];
 
@@ -124,12 +155,26 @@ export function createSampleWorkspace() {
     },
   };
 
+  const teamId = nanoid();
+  const team: Team = {
+    id: teamId,
+    name: "Equipe produto",
+    description: "Time demo do TrelloAI",
+    memberIds: [youId, anaId, leoId],
+    color: "teal",
+    createdAt: now,
+    updatedAt: now,
+  };
+
   const board: Board = {
     id: boardId,
     title: "TrelloAI — MVP",
     description: "Kanban com gestor virtual diário, IA e reuniões da equipe.",
     listIds: [todoId, doingId, doneId],
     memberIds: [youId, anaId, leoId],
+    teamId,
+    backgroundId: "midnight",
+    designId: "classic",
     createdAt: now,
     updatedAt: now,
   };
@@ -166,14 +211,87 @@ export function createSampleWorkspace() {
 
   const standups: Record<string, StandupSession> = {};
 
+  const reqId1 = nanoid();
+  const reqId2 = nanoid();
+  const requirements: Record<string, Requirement> = {
+    [reqId1]: {
+      id: reqId1,
+      boardId,
+      code: "REQ-01",
+      title: "Kanban colaborativo com IA",
+      description: "Board com listas, cards, drag-and-drop e assistente para gerar tarefas.",
+      status: "in_progress",
+      priority: "high",
+      ownerId: youId,
+      dueDate: shiftCalendarDay(calendarDayKey(), 14),
+      createdAt: now,
+      updatedAt: now,
+    },
+    [reqId2]: {
+      id: reqId2,
+      boardId,
+      code: "REQ-02",
+      title: "Daily com gestor virtual",
+      description: "Maya conduz standup e atualiza o kanban com base nas respostas.",
+      status: "approved",
+      priority: "medium",
+      ownerId: anaId,
+      dueDate: shiftCalendarDay(calendarDayKey(), 7),
+      createdAt: now,
+      updatedAt: now,
+    },
+  };
+
+  // link first card to REQ-01 after creation loop — patch below
+  for (const [id, card] of Object.entries(cards)) {
+    if (card.title.includes("visão")) {
+      cards[id] = { ...card, requirementId: reqId1 };
+      break;
+    }
+  }
+
+  const ev1 = nanoid();
+  const ev2 = nanoid();
+  const calendarEvents: Record<string, TeamCalendarEvent> = {
+    [ev1]: {
+      id: ev1,
+      boardId,
+      teamId,
+      title: "Daily da equipe",
+      description: "Standup com Maya",
+      kind: "meeting",
+      date: calendarDayKey(),
+      time: "09:30",
+      memberIds: [youId, anaId, leoId],
+      createdAt: now,
+      updatedAt: now,
+    },
+    [ev2]: {
+      id: ev2,
+      boardId,
+      teamId,
+      title: "Demo MVP",
+      description: "Apresentação do piloto",
+      kind: "milestone",
+      date: shiftCalendarDay(calendarDayKey(), 5),
+      time: "15:00",
+      memberIds: [youId, anaId],
+      createdAt: now,
+      updatedAt: now,
+    },
+  };
+
   return {
     boards: { [boardId]: board } as Record<string, Board>,
     lists,
     cards,
     members,
+    teams: { [teamId]: team } as Record<string, Team>,
     meetings,
     managers,
     standups,
+    requirements,
+    calendarEvents,
     activities: {},
     currentUserId: youId,
     activeBoardId: boardId,

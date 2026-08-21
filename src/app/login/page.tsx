@@ -1,5 +1,6 @@
-import { auth, isGoogleAuthConfigured, signIn } from "@/auth";
+import { auth, isGoogleAuthConfigured } from "@/auth";
 import { AuthActions } from "@/components/LoginActions";
+import { CredentialsAuthForm } from "@/components/CredentialsAuthForm";
 import { redirect } from "next/navigation";
 
 export default async function LoginPage({
@@ -10,9 +11,11 @@ export default async function LoginPage({
   const session = await auth();
   const params = await searchParams;
   const googleConfigured = isGoogleAuthConfigured();
+  const callbackUrl = params.callbackUrl || "/";
+  const authUrl = process.env.AUTH_URL || process.env.NEXTAUTH_URL || "";
 
   if (session?.user) {
-    redirect(params.callbackUrl || "/");
+    redirect(callbackUrl);
   }
 
   return (
@@ -27,43 +30,35 @@ export default async function LoginPage({
           Trello<span className="text-[var(--accent)]">AI</span>
         </p>
         <h1 className="mt-3 font-[family-name:var(--font-display)] text-xl text-white">
-          Entre com sua conta Google
+          Entrar ou criar conta
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
-          Use o login Google para identificar você na equipe, nas reuniões virtuais e no
-          board compartilhável.
+          Cadastre-se com e-mail e senha para usar o board. O Google é opcional.
         </p>
 
         {params.error ? (
           <p className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
-            Falha no login ({params.error}). Confira as credenciais OAuth e a URI de
-            redirecionamento.
+            Falha no login ({params.error}). Se usou Google, confira a URI de redirecionamento
+            no Cloud Console.
           </p>
         ) : null}
 
-        {googleConfigured ? (
-          <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-100">
-            <p className="font-semibold">Se o Google mostrar “404. That’s an error”</p>
-            <p className="mt-1 text-[var(--muted)]">
-              No Cloud Console, no OAuth Client tipo <strong>Web application</strong>, adicione
-              exatamente esta Authorized redirect URI:
-            </p>
-            <code className="mt-2 block break-all rounded-lg bg-black/30 px-2 py-1.5 text-[11px] text-[var(--accent)]">
-              http://localhost:3000/api/auth/callback/google
-            </code>
-            <p className="mt-2 text-[var(--muted)]">
-              Origem JS autorizada:{" "}
-              <code className="text-amber-100">http://localhost:3000</code>
-            </p>
-          </div>
-        ) : null}
+        <div className="mt-6">
+          <CredentialsAuthForm callbackUrl={callbackUrl} />
+        </div>
 
-        <div className="mt-6 space-y-3">
-          {googleConfigured ? (
+        {googleConfigured ? (
+          <div className="mt-6 space-y-3">
+            <div className="flex items-center gap-3 text-[11px] text-[var(--muted)]">
+              <span className="h-px flex-1 bg-[var(--line)]" />
+              ou
+              <span className="h-px flex-1 bg-[var(--line)]" />
+            </div>
             <form
               action={async () => {
                 "use server";
-                await signIn("google", { redirectTo: params.callbackUrl || "/" });
+                const { signIn } = await import("@/auth");
+                await signIn("google", { redirectTo: callbackUrl });
               }}
             >
               <button
@@ -74,33 +69,20 @@ export default async function LoginPage({
                 Continuar com Google
               </button>
             </form>
-          ) : (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
-              <p className="font-semibold">Google OAuth ainda não configurado</p>
-              <ol className="mt-2 list-decimal space-y-1 pl-4 text-[var(--muted)]">
-                <li>Crie um OAuth Client no Google Cloud Console</li>
-                <li>
-                  Redirect URI:{" "}
-                  <code className="text-[var(--accent)]">
-                    http://localhost:3000/api/auth/callback/google
-                  </code>
-                </li>
-                <li>
-                  Preencha <code className="text-amber-100">AUTH_GOOGLE_ID</code> e{" "}
-                  <code className="text-amber-100">AUTH_GOOGLE_SECRET</code> em{" "}
-                  <code className="text-amber-100">.env.local</code>
-                </li>
-                <li>Reinicie o <code className="text-amber-100">npm run dev</code></li>
-              </ol>
-            </div>
-          )}
+            {authUrl ? (
+              <p className="text-[11px] leading-relaxed text-[var(--muted)]">
+                Redirect URI no Google:{" "}
+                <code className="break-all text-[var(--accent)]">
+                  {authUrl.replace(/\/$/, "")}/api/auth/callback/google
+                </code>
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
-          <AuthActions googleConfigured={googleConfigured} />
+        <div className="mt-6">
+          <AuthActions />
         </div>
-
-        <p className="mt-6 text-center text-[11px] text-[var(--muted)]">
-          Ao entrar, seu nome e foto do Google aparecem na equipe e nas reuniões.
-        </p>
       </section>
     </main>
   );
