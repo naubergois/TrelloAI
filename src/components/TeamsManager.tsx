@@ -73,7 +73,7 @@ export function TeamsManager() {
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="rounded-lg bg-[var(--accent)] p-1.5 text-teal-950"
+            className="rounded-lg bg-[var(--accent)] p-1.5 text-[var(--accent-on)]"
             aria-label="Nova equipe"
           >
             <Plus className="h-4 w-4" />
@@ -124,7 +124,7 @@ export function TeamsManager() {
             <button
               type="button"
               onClick={() => setCreating(true)}
-              className="mt-2 inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-teal-950"
+              className="mt-2 inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-[var(--accent-on)]"
             >
               <Plus className="h-4 w-4" />
               Nova equipe
@@ -260,7 +260,7 @@ export function TeamsManager() {
                 />
                 <button
                   type="submit"
-                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-teal-950"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-[var(--accent-on)]"
                 >
                   <UserPlus className="h-4 w-4" />
                   Adicionar
@@ -334,7 +334,7 @@ export function TeamsManager() {
               <button
                 type="submit"
                 disabled={!name.trim()}
-                className="flex-1 rounded-xl bg-[var(--accent)] py-2.5 text-sm font-semibold text-teal-950 disabled:opacity-40"
+                className="flex-1 rounded-xl bg-[var(--accent)] py-2.5 text-sm font-semibold text-[var(--accent-on)] disabled:opacity-40"
               >
                 Criar equipe
               </button>

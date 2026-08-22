@@ -156,7 +156,7 @@ export function InviteClient({ token }: { token: string }) {
             type="button"
             disabled={accepting}
             onClick={() => void accept()}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-teal-950 transition hover:brightness-110 disabled:opacity-60"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-[var(--accent-on)] transition hover:brightness-110 disabled:opacity-60"
           >
             {accepting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             Aceitar convite e abrir board

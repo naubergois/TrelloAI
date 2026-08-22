@@ -1,6 +1,12 @@
 import type { Board } from "./types";
 
 export type BoardBackgroundId =
+  | "trello"
+  | "trello-sage"
+  | "trello-gold"
+  | "trello-berry"
+  | "trello-lilac"
+  | "trello-petal"
   | "midnight"
   | "ocean"
   | "forest"
@@ -36,7 +42,66 @@ export interface BoardDesign {
   };
 }
 
+const BOARD_SURFACE_VARS = {
+  "--board-list-bg": "rgba(255, 255, 255, 0.14)",
+  "--board-list-border": "rgba(255, 255, 255, 0.22)",
+  "--board-list-header-border": "rgba(255, 255, 255, 0.14)",
+  "--board-card-bg": "#ffffff",
+  "--board-card-text": "#172b4d",
+  "--board-card-muted": "#5e6c84",
+  "--board-card-border": "rgba(9, 30, 66, 0.08)",
+  "--board-header-bar": "rgba(0, 0, 0, 0.15)",
+} as const;
+
 export const BOARD_BACKGROUNDS: BoardBackground[] = [
+  {
+    id: "trello",
+    name: "Trello azul",
+    description: "Azul clássico do Trello",
+    preview: "linear-gradient(160deg,#026aa7,#0079bf 55%,#055a8c)",
+    surface:
+      "radial-gradient(900px 480px at 12% -8%, rgba(255,255,255,0.14), transparent 55%), radial-gradient(700px 420px at 88% 0%, rgba(0,121,191,0.35), transparent 50%), linear-gradient(165deg,#026aa7 0%,#0079bf 42%,#055a8c 100%)",
+  },
+  {
+    id: "trello-sage",
+    name: "Verde",
+    description: "Verde Trello",
+    preview: "linear-gradient(155deg,#3f6f21,#519839 50%,#49852e)",
+    surface:
+      "radial-gradient(800px 420px at 15% 0%, rgba(255,255,255,0.12), transparent 55%), linear-gradient(165deg,#3f6f21 0%,#519839 48%,#49852e 100%)",
+  },
+  {
+    id: "trello-gold",
+    name: "Dourado",
+    description: "Âmbar caloroso",
+    preview: "linear-gradient(155deg,#8f5a18,#d29034 50%,#b87d2b)",
+    surface:
+      "radial-gradient(800px 420px at 85% 0%, rgba(255,255,255,0.1), transparent 55%), linear-gradient(165deg,#8f5a18 0%,#d29034 48%,#b87d2b 100%)",
+  },
+  {
+    id: "trello-berry",
+    name: "Vermelho",
+    description: "Vermelho terroso",
+    preview: "linear-gradient(155deg,#7a2e1f,#b04632 50%,#943b2a)",
+    surface:
+      "radial-gradient(800px 420px at 20% 0%, rgba(255,255,255,0.1), transparent 55%), linear-gradient(165deg,#7a2e1f 0%,#b04632 48%,#943b2a 100%)",
+  },
+  {
+    id: "trello-lilac",
+    name: "Lilás",
+    description: "Púrpura suave",
+    preview: "linear-gradient(155deg,#5c4778,#89609e 50%,#745589)",
+    surface:
+      "radial-gradient(800px 420px at 80% 0%, rgba(255,255,255,0.1), transparent 55%), linear-gradient(165deg,#5c4778 0%,#89609e 48%,#745589 100%)",
+  },
+  {
+    id: "trello-petal",
+    name: "Rosa",
+    description: "Rosa petal",
+    preview: "linear-gradient(155deg,#8a3d62,#cd5a91 50%,#b44d7d)",
+    surface:
+      "radial-gradient(800px 420px at 10% 0%, rgba(255,255,255,0.12), transparent 55%), linear-gradient(165deg,#8a3d62 0%,#cd5a91 48%,#b44d7d 100%)",
+  },
   {
     id: "midnight",
     name: "Meia-noite",
@@ -164,7 +229,7 @@ export const BOARD_DESIGNS: BoardDesign[] = [
   },
 ];
 
-export const DEFAULT_BACKGROUND_ID: BoardBackgroundId = "midnight";
+export const DEFAULT_BACKGROUND_ID: BoardBackgroundId = "trello";
 export const DEFAULT_DESIGN_ID: BoardDesignId = "classic";
 
 export function getBackground(id?: string | null): BoardBackground {
@@ -197,6 +262,7 @@ export function boardThemeStyle(board: Pick<Board, "backgroundId" | "designId">)
   return {
     backgroundImage: bg.surface,
     backgroundAttachment: "fixed" as const,
+    ...BOARD_SURFACE_VARS,
     ...design.vars,
   };
 }

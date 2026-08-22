@@ -127,7 +127,7 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="shrink-0 border-b border-[var(--line)] bg-[var(--panel-strong)]/95 backdrop-blur-xl">
+      <header className="app-bar shrink-0 border-b backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:h-16 sm:px-6">
           <div className="min-w-0 flex-1">
             <p className="font-[family-name:var(--font-display)] text-xl tracking-tight text-white sm:text-2xl">
@@ -141,7 +141,7 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-teal-950 transition hover:brightness-110"
+            className="inline-flex items-center gap-1.5 rounded-xl btn-accent px-3 py-2 text-sm font-semibold"
           >
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">Novo board</span>
@@ -168,7 +168,7 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
               onClick={() => setTab("boards")}
               className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition ${
                 tab === "boards"
-                  ? "bg-[var(--accent)] font-semibold text-teal-950"
+                  ? "bg-[var(--accent)] font-semibold text-[var(--accent-on)]"
                   : "text-[var(--muted)] hover:text-white"
               }`}
             >
@@ -180,7 +180,7 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
               onClick={() => setTab("teams")}
               className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition ${
                 tab === "teams"
-                  ? "bg-[var(--accent)] font-semibold text-teal-950"
+                  ? "bg-[var(--accent)] font-semibold text-[var(--accent-on)]"
                   : "text-[var(--muted)] hover:text-white"
               }`}
             >
@@ -210,7 +210,7 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
                 <button
                   type="button"
                   onClick={() => openBoard(ASESI_BOARD_ID)}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-teal-950 transition hover:brightness-110"
+                  className="inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-[var(--accent-on)] transition hover:brightness-110"
                 >
                   Abrir ASESI
                 </button>
@@ -246,7 +246,7 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="flex min-h-[180px] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-[var(--line)] bg-black/15 p-6 text-[var(--muted)] transition hover:border-[var(--accent)]/50 hover:text-white"
+            className="flex min-h-[132px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/35 bg-white/10 p-6 text-white/80 transition hover:border-white/55 hover:bg-white/15 hover:text-white"
           >
             <Plus className="h-8 w-8 text-[var(--accent)]" />
             <span className="text-sm font-medium">Criar board</span>
@@ -266,33 +266,35 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
             return (
               <article
                 key={board.id}
-                className="group relative flex min-h-[180px] flex-col overflow-hidden rounded-2xl border border-[var(--line)] shadow-[0_16px_40px_rgba(0,0,0,0.25)] transition hover:border-white/25"
+                className="group relative flex min-h-[132px] flex-col overflow-hidden rounded-xl border border-white/20 shadow-[0_8px_20px_rgba(9,30,66,0.22)] transition hover:border-white/40 hover:shadow-[0_12px_28px_rgba(9,30,66,0.28)]"
               >
                 <button
                   type="button"
                   onClick={() => openBoard(board.id)}
-                  className="flex flex-1 flex-col text-left"
+                  className="flex min-h-[132px] flex-1 flex-col text-left"
                 >
                   <div
-                    className="relative h-24 w-full"
+                    className="relative flex flex-1 flex-col justify-end p-4"
                     style={{ backgroundImage: bg.preview }}
                   >
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-                    <span className="absolute bottom-2 left-3 text-[10px] font-semibold uppercase tracking-wide text-white/80">
-                      {bg.name} · {design.name}
-                    </span>
-                  </div>
-                  <div className="flex flex-1 flex-col gap-1 bg-[var(--panel-strong)] p-4">
-                    <h2 className="font-[family-name:var(--font-display)] text-lg text-white">
-                      {board.title}
-                    </h2>
-                    <p className="line-clamp-2 text-xs text-[var(--muted)]">
-                      {board.description || "Sem descrição"}
-                    </p>
-                    <p className="mt-auto pt-3 text-[11px] text-[var(--muted)]">
-                      {team ? `${team.name} · ` : ""}
-                      {listCount} listas · {cardCount} cards · {memberCount} membros
-                    </p>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/10 to-transparent" />
+                    <div className="relative z-[1]">
+                      <h2 className="font-[family-name:var(--font-display)] text-lg leading-snug text-white drop-shadow-sm">
+                        {board.title}
+                      </h2>
+                      {board.description ? (
+                        <p className="mt-1 line-clamp-2 text-xs text-white/85">
+                          {board.description}
+                        </p>
+                      ) : null}
+                      <p className="mt-2 text-[11px] text-white/75">
+                        {team ? `${team.name} · ` : ""}
+                        {listCount} listas · {cardCount} cards · {memberCount} membros
+                      </p>
+                      <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-white/65">
+                        {bg.name} · {design.name}
+                      </p>
+                    </div>
                   </div>
                 </button>
 
@@ -440,7 +442,7 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
               <button
                 type="submit"
                 disabled={!title.trim()}
-                className="flex-1 rounded-xl bg-[var(--accent)] px-3 py-2.5 text-sm font-semibold text-teal-950 disabled:opacity-40"
+                className="flex-1 rounded-xl bg-[var(--accent)] px-3 py-2.5 text-sm font-semibold text-[var(--accent-on)] disabled:opacity-40"
               >
                 Criar e abrir
               </button>
@@ -535,7 +537,7 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
                     assignTeamToBoard(customizeBoard.id, id);
                     setCustomizeNewTeam("");
                   }}
-                  className="shrink-0 rounded-xl bg-[var(--accent)] px-3 py-2.5 text-sm font-semibold text-teal-950 disabled:opacity-40"
+                  className="shrink-0 rounded-xl bg-[var(--accent)] px-3 py-2.5 text-sm font-semibold text-[var(--accent-on)] disabled:opacity-40"
                 >
                   Criar
                 </button>
@@ -587,7 +589,7 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
                 <button
                   type="button"
                   onClick={() => openBoard(customizeBoard.id)}
-                  className="rounded-xl bg-[var(--accent)] px-3 py-2.5 text-sm font-semibold text-teal-950"
+                  className="rounded-xl bg-[var(--accent)] px-3 py-2.5 text-sm font-semibold text-[var(--accent-on)]"
                 >
                   Abrir board
                 </button>

@@ -1,18 +1,31 @@
 @import "tailwindcss";
 
 :root {
-  --ink: #07111f;
-  --ink-2: #0d1b2e;
-  --panel: rgba(14, 28, 48, 0.72);
-  --panel-strong: rgba(10, 22, 38, 0.92);
-  --line: rgba(148, 183, 214, 0.18);
-  --text: #e8f1fb;
-  --muted: #93a9c2;
-  --accent: #2ec4b6;
-  --accent-2: #ffb703;
-  --glow: rgba(46, 196, 182, 0.22);
-  --background: var(--ink);
+  --trello-blue: #0079bf;
+  --trello-blue-dark: #026aa7;
+  --trello-navy: #172b4d;
+  --trello-gray: #5e6c84;
+  --trello-green: #61bd4f;
+  --trello-yellow: #f2d600;
+  --trello-orange: #ff9f1a;
+  --trello-red: #eb5a46;
+  --trello-purple: #c377e0;
+
+  --ink: #091e42;
+  --ink-2: #0c2744;
+  --panel: rgba(9, 30, 66, 0.55);
+  --panel-strong: rgba(9, 30, 66, 0.88);
+  --line: rgba(255, 255, 255, 0.18);
+  --text: #f4f5f7;
+  --muted: rgba(255, 255, 255, 0.72);
+  --accent: var(--trello-blue);
+  --accent-hover: var(--trello-blue-dark);
+  --accent-on: #ffffff;
+  --accent-2: var(--trello-yellow);
+  --glow: rgba(0, 121, 191, 0.28);
+  --background: var(--trello-blue-dark);
   --foreground: var(--text);
+  --app-bar: var(--trello-blue-dark);
 }
 
 @theme inline {
@@ -37,13 +50,100 @@ body {
   color: var(--text);
   font-family: var(--font-body), system-ui, sans-serif;
   background:
-    radial-gradient(1200px 600px at 10% -10%, rgba(46, 196, 182, 0.18), transparent 55%),
-    radial-gradient(900px 500px at 90% 0%, rgba(255, 183, 3, 0.12), transparent 50%),
-    radial-gradient(800px 700px at 50% 110%, rgba(56, 132, 255, 0.14), transparent 55%),
-    linear-gradient(160deg, #06101c 0%, #0a1628 45%, #0d1f33 100%);
+    radial-gradient(900px 480px at 12% -8%, rgba(255, 255, 255, 0.14), transparent 55%),
+    radial-gradient(700px 420px at 88% 0%, rgba(0, 121, 191, 0.35), transparent 50%),
+    linear-gradient(165deg, #026aa7 0%, #0079bf 42%, #055a8c 100%);
   background-attachment: fixed;
   min-height: 100%;
   overscroll-behavior: none;
+}
+
+/* Board canvas: Trello-style lists + white cards */
+.board-theme {
+  --board-list-bg: rgba(255, 255, 255, 0.14);
+  --board-list-border: rgba(255, 255, 255, 0.22);
+  --board-list-header-border: rgba(255, 255, 255, 0.14);
+  --board-card-bg: #ffffff;
+  --board-card-text: var(--trello-navy);
+  --board-card-muted: var(--trello-gray);
+  --board-card-border: rgba(9, 30, 66, 0.08);
+  --board-header-bar: rgba(0, 0, 0, 0.15);
+}
+
+.board-theme .board-list-column {
+  background: var(--board-list-bg);
+  border-color: var(--board-list-border);
+  backdrop-filter: blur(6px);
+}
+
+.board-theme .board-list-column header {
+  border-color: var(--board-list-header-border);
+}
+
+.board-theme .board-list-column .list-add-input {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(9, 30, 66, 0.12);
+  color: var(--trello-navy);
+}
+
+.board-theme .board-list-column .list-add-input::placeholder {
+  color: var(--trello-gray);
+}
+
+.board-theme .board-card-surface {
+  background: var(--board-card-bg);
+  border-color: var(--board-card-border);
+  color: var(--board-card-text);
+  box-shadow: 0 1px 1px rgba(9, 30, 66, 0.25);
+}
+
+.board-theme .board-card-surface:hover {
+  border-color: rgba(9, 30, 66, 0.14);
+  box-shadow: 0 4px 8px rgba(9, 30, 66, 0.12);
+}
+
+.board-theme .board-card-surface .board-card-title {
+  color: var(--board-card-text);
+}
+
+.board-theme .board-card-surface .board-card-muted {
+  color: var(--board-card-muted);
+}
+
+.board-theme .board-header-bar {
+  background: var(--board-header-bar);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.board-theme .board-filter-bar {
+  background: rgba(0, 0, 0, 0.12);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.board-theme .board-filter-bar input,
+.board-theme .board-filter-bar select {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(9, 30, 66, 0.12);
+  color: var(--trello-navy);
+}
+
+.board-theme .board-filter-bar input::placeholder {
+  color: var(--trello-gray);
+}
+
+.app-bar {
+  background: var(--app-bar);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.btn-accent {
+  background: var(--accent);
+  color: var(--accent-on);
+  transition: filter 160ms ease;
+}
+
+.btn-accent:hover {
+  filter: brightness(1.08);
 }
 
 /* Thin scrollbars only inside columns / chat */
@@ -52,7 +152,7 @@ body {
 }
 
 ::selection {
-  background: rgba(46, 196, 182, 0.35);
+  background: rgba(0, 121, 191, 0.35);
 }
 
 .board-scroll::-webkit-scrollbar {
@@ -61,7 +161,7 @@ body {
 }
 
 .board-scroll::-webkit-scrollbar-thumb {
-  background: rgba(147, 169, 194, 0.35);
+  background: rgba(255, 255, 255, 0.28);
   border-radius: 999px;
 }
 
@@ -168,17 +268,17 @@ body {
 
 .maya-avatar {
   background:
-    radial-gradient(circle at 30% 25%, #7ef0e0, transparent 45%),
-    linear-gradient(145deg, #1a9f92 0%, #0b3d4a 100%);
+    radial-gradient(circle at 30% 25%, #7ec8f2, transparent 45%),
+    linear-gradient(145deg, #0079bf 0%, #026aa7 100%);
 }
 
 .panel-glass {
   background: linear-gradient(
     165deg,
-    rgba(16, 32, 52, 0.95) 0%,
-    rgba(8, 18, 32, 0.98) 100%
+    rgba(8, 30, 56, 0.96) 0%,
+    rgba(4, 20, 40, 0.98) 100%
   );
   box-shadow:
-    0 0 0 1px rgba(148, 183, 214, 0.12),
+    0 0 0 1px rgba(255, 255, 255, 0.1),
     0 24px 48px rgba(0, 0, 0, 0.35);
 }

@@ -145,7 +145,7 @@ export function InviteAcceptClient({ token }: { token: string }) {
               type="button"
               disabled={busy}
               onClick={() => void accept()}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-teal-950 transition hover:brightness-110 disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-[var(--accent-on)] transition hover:brightness-110 disabled:opacity-60"
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Entrar no board
@@ -154,7 +154,7 @@ export function InviteAcceptClient({ token }: { token: string }) {
             <>
               <Link
                 href={`/login?callbackUrl=${encodeURIComponent(`/invite/${token}`)}&invite=${token}`}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-teal-950 transition hover:brightness-110"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-[var(--accent-on)] transition hover:brightness-110"
               >
                 <LogIn className="h-4 w-4" />
                 Criar conta ou entrar

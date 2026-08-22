@@ -41,21 +41,21 @@ export function ListColumn({
   return (
     <section
       ref={setNodeRef}
-      className={`flex h-full shrink-0 flex-col border bg-[var(--panel)] ${
-        isOver ? "border-[var(--accent)]/60" : "border-[var(--line)]"
+      className={`board-list-column flex h-full shrink-0 flex-col border ${
+        isOver ? "border-[var(--accent)]/60" : ""
       }`}
       style={{
         borderRadius: "var(--board-list-radius, 1rem)",
         width: "min(var(--board-list-width, 18rem), 78vw)",
       }}
     >
-      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] px-3 py-2.5">
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2.5">
         <input
           value={list.title}
           onChange={(e) => renameList(listId, e.target.value)}
-          className="w-full bg-transparent text-sm font-semibold tracking-wide text-white outline-none"
+          className="w-full bg-transparent text-sm font-semibold tracking-wide text-white outline-none placeholder:text-white/60"
         />
-        <span className="rounded-md bg-white/5 px-2 py-0.5 text-xs text-[var(--muted)]">
+        <span className="rounded-md bg-white/15 px-2 py-0.5 text-xs text-white/80">
           {cardItems.length}
           {cardItems.length !== list.cardIds.length
             ? `/${list.cardIds.length}`
@@ -73,14 +73,14 @@ export function ListColumn({
           ))}
         </SortableContext>
         {cardItems.length === 0 ? (
-          <p className="px-1 py-4 text-center text-xs text-[var(--muted)]">
+          <p className="px-1 py-4 text-center text-xs text-white/65">
             Nenhum card neste filtro
           </p>
         ) : null}
       </div>
 
       <form
-        className="shrink-0 border-t border-[var(--line)] p-2.5 sm:p-3"
+        className="shrink-0 border-t border-white/12 p-2.5 sm:p-3"
         onSubmit={(e) => {
           e.preventDefault();
           if (!title.trim()) return;
@@ -93,11 +93,11 @@ export function ListColumn({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Adicionar card"
-            className="w-full rounded-lg border border-[var(--line)] bg-[var(--ink-2)] px-3 py-2 text-sm outline-none placeholder:text-[var(--muted)] focus:border-[var(--accent)]"
+            className="list-add-input w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
           />
           <button
             type="submit"
-            className="rounded-lg bg-white/10 p-2 text-white transition hover:bg-[var(--accent)] hover:text-teal-950"
+            className="rounded-lg bg-white/20 p-2 text-white transition hover:bg-[var(--accent)] hover:text-[var(--accent-on)]"
             aria-label="Adicionar card"
           >
             <Plus className="h-4 w-4" />

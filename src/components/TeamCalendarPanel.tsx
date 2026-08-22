@@ -31,6 +31,8 @@ const KINDS: TeamEventKind[] = [
   "other",
 ];
 
+const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+
 function monthMatrix(anchor: string) {
   const [y, m] = anchor.split("-").map(Number);
   const first = new Date(y, m - 1, 1);
@@ -148,6 +150,7 @@ export function TeamCalendarPanel({
   const dayCardDues = dayEntry.cardDues;
   const dayItemCount = dayEvents.length + dayCardDues.length;
   const cells = useMemo(() => monthMatrix(monthAnchor), [monthAnchor]);
+  const rowCount = Math.ceil(cells.length / 7);
 
   const boardMembers = useMemo(() => {
     if (!board) return [];
@@ -163,7 +166,7 @@ export function TeamCalendarPanel({
       kind: "event" | "card";
       eventKind?: TeamEventKind;
     }[] = [];
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < 21; i++) {
       const d = shiftCalendarDay(today, i);
       const entry = byDay.get(d);
       if (!entry) continue;
@@ -186,7 +189,7 @@ export function TeamCalendarPanel({
         });
       }
     }
-    return items.slice(0, 10);
+    return items.slice(0, 14);
   }, [byDay, today]);
 
   const monthEventCount = useMemo(() => {
@@ -228,19 +231,19 @@ export function TeamCalendarPanel({
       role="dialog"
       aria-modal="true"
       aria-label="Calendário do time"
-      className="anim-overlay fixed inset-0 z-[200] flex h-[100dvh] w-screen flex-col bg-[var(--ink)]"
+      className="anim-overlay fixed inset-0 z-[200] flex h-dvh max-h-dvh w-screen flex-col bg-[#026aa7]"
     >
       <div
-        className="pointer-events-none absolute inset-0 opacity-80"
+        className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "radial-gradient(900px 420px at 90% -5%, rgba(46,196,182,0.14), transparent 55%), radial-gradient(700px 380px at 10% 0%, rgba(56,132,255,0.12), transparent 50%)",
+            "radial-gradient(1100px 520px at 88% -8%, rgba(255,255,255,0.14), transparent 55%), radial-gradient(900px 480px at 8% 0%, rgba(0,121,191,0.45), transparent 50%), linear-gradient(165deg,#026aa7 0%,#0079bf 42%,#055a8c 100%)",
         }}
       />
 
-      <header className="anim-sheet relative z-10 flex shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] bg-black/25 px-4 py-3 backdrop-blur-md sm:px-6 sm:py-4 lg:px-10">
+      <header className="relative z-10 flex shrink-0 items-center justify-between gap-3 border-b border-white/12 bg-black/15 px-4 py-3 backdrop-blur-md sm:px-6 sm:py-3.5 lg:px-8">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/65">
             {board?.title ?? "Board"}
           </p>
           <h2 className="font-[family-name:var(--font-display)] text-xl tracking-tight text-white sm:text-2xl">
@@ -248,13 +251,13 @@ export function TeamCalendarPanel({
           </h2>
         </div>
         <div className="flex items-center gap-2">
-          <span className="hidden rounded-full border border-[var(--line)] bg-black/20 px-3 py-1 text-xs text-[var(--muted)] sm:inline">
+          <span className="hidden rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white/85 sm:inline">
             {monthEventCount} neste mês
           </span>
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded-xl border border-[var(--line)] bg-black/20 p-2.5 text-[var(--muted)] transition hover:border-white/20 hover:text-white"
+            className="shrink-0 rounded-xl border border-white/20 bg-white/10 p-2.5 text-white/80 transition hover:bg-white/20 hover:text-white"
             aria-label="Fechar"
           >
             <X className="h-5 w-5" />
@@ -262,25 +265,28 @@ export function TeamCalendarPanel({
         </div>
       </header>
 
-      <div className="board-scroll relative z-10 min-h-0 flex-1 overflow-y-auto">
-        <div className="anim-sheet mx-auto grid w-full max-w-6xl gap-5 px-4 py-5 sm:gap-6 sm:px-6 sm:py-8 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:px-10">
-          <section className="rounded-3xl border border-[var(--line)] bg-[var(--panel-strong)] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] sm:p-5">
-            <div className="mb-4 flex items-center justify-between gap-2">
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col lg:flex-row">
+        {/* Calendário — ocupa a maior parte da tela */}
+        <section
+          className="flex min-h-0 flex-1 flex-col px-3 py-3 sm:px-5 sm:py-4 lg:min-h-0 lg:flex-[1.55] lg:px-6 lg:py-5"
+        >
+          <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-white/18 bg-white/95 shadow-[0_12px_40px_rgba(9,30,66,0.18)] sm:rounded-3xl">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#091e42]/8 px-3 py-3 sm:px-5 sm:py-4">
               <button
                 type="button"
-                className="rounded-xl border border-[var(--line)] p-2.5 text-[var(--muted)] transition hover:border-white/20 hover:text-white"
+                className="rounded-xl border border-[#091e42]/10 p-2.5 text-[var(--trello-gray)] transition hover:border-[#0079bf]/30 hover:bg-[#0079bf]/5 hover:text-[#0079bf]"
                 onClick={() => shiftMonth(-1)}
                 aria-label="Mês anterior"
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
               <div className="text-center">
-                <p className="font-[family-name:var(--font-display)] text-lg capitalize text-white sm:text-xl">
+                <p className="font-[family-name:var(--font-display)] text-lg capitalize text-[var(--trello-navy)] sm:text-2xl">
                   {monthLabel(monthAnchor)}
                 </p>
                 <button
                   type="button"
-                  className="mt-0.5 text-xs text-[var(--accent)] hover:underline"
+                  className="mt-0.5 text-xs font-medium text-[#0079bf] hover:underline"
                   onClick={() => {
                     setSelectedDay(today);
                     setMonthAnchor(today.slice(0, 7) + "-01");
@@ -291,7 +297,7 @@ export function TeamCalendarPanel({
               </div>
               <button
                 type="button"
-                className="rounded-xl border border-[var(--line)] p-2.5 text-[var(--muted)] transition hover:border-white/20 hover:text-white"
+                className="rounded-xl border border-[#091e42]/10 p-2.5 text-[var(--trello-gray)] transition hover:border-[#0079bf]/30 hover:bg-[#0079bf]/5 hover:text-[#0079bf]"
                 onClick={() => shiftMonth(1)}
                 aria-label="Próximo mês"
               >
@@ -299,21 +305,22 @@ export function TeamCalendarPanel({
               </button>
             </div>
 
-            <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[11px] font-medium uppercase tracking-wide text-[var(--muted)] sm:text-xs">
-              {["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map((d) => (
-                <span key={d} className="py-1">
-                  {d}
-                </span>
+            <div className="grid shrink-0 grid-cols-7 gap-1 border-b border-[#091e42]/6 px-2 py-2 text-center text-[11px] font-semibold uppercase tracking-wide text-[var(--trello-gray)] sm:gap-2 sm:px-4 sm:text-xs">
+              {WEEKDAYS.map((d) => (
+                <span key={d} className="py-1">{d}</span>
               ))}
             </div>
 
-            <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
+            <div
+              className="grid min-h-0 flex-1 auto-rows-fr grid-cols-7 gap-1 px-2 py-2 sm:gap-2 sm:px-4 sm:py-3"
+              style={{ gridTemplateRows: `repeat(${rowCount}, minmax(0, 1fr))` }}
+            >
               {cells.map((day, idx) => {
                 if (!day) {
                   return (
                     <span
                       key={`empty-${idx}`}
-                      className="min-h-11 sm:min-h-[4.5rem]"
+                      className="min-h-[3.25rem] rounded-xl bg-[#f4f5f7]/60 sm:min-h-0"
                     />
                   );
                 }
@@ -323,6 +330,25 @@ export function TeamCalendarPanel({
                 const total = dayList.length + dueList.length;
                 const isSelected = day === selectedDay;
                 const isToday = day === today;
+                const previewItems = [
+                  ...dayList.slice(0, 2).map((ev) => ({
+                    key: ev.id,
+                    label: `${ev.time ? `${ev.time} ` : ""}${ev.title}`,
+                    style: isSelected
+                      ? "bg-[var(--trello-navy)]/12 text-[var(--trello-navy)]"
+                      : teamEventKindStyles[ev.kind],
+                    dot: teamEventKindDot[ev.kind],
+                  })),
+                  ...dueList.slice(0, Math.max(0, 2 - dayList.length)).map((due) => ({
+                    key: due.id,
+                    label: `Prazo · ${due.title}`,
+                    style: isSelected
+                      ? "bg-[var(--trello-navy)]/12 text-[var(--trello-navy)]"
+                      : "bg-amber-100 text-amber-900",
+                    dot: "bg-amber-400",
+                  })),
+                ];
+
                 return (
                   <button
                     key={day}
@@ -331,81 +357,61 @@ export function TeamCalendarPanel({
                       setSelectedDay(day);
                       setFormOpen(false);
                     }}
-                    className={`flex min-h-11 flex-col items-stretch rounded-2xl p-1 text-left transition sm:min-h-[4.5rem] sm:p-1.5 ${
+                    className={`flex min-h-[3.25rem] flex-col rounded-xl border p-1.5 text-left transition sm:min-h-0 sm:p-2 ${
                       isSelected
-                        ? "bg-[var(--accent)] text-teal-950 shadow-[0_8px_24px_rgba(46,196,182,0.25)]"
+                        ? "border-[#0079bf] bg-[#0079bf] text-white shadow-[0_6px_20px_rgba(0,121,191,0.35)]"
                         : isToday
-                          ? "bg-white/10 text-white ring-1 ring-[var(--accent)]/40"
-                          : "bg-black/15 text-[var(--muted)] hover:bg-white/5 hover:text-white"
+                          ? "border-[#0079bf]/45 bg-[#0079bf]/8 text-[var(--trello-navy)] ring-1 ring-[#0079bf]/25"
+                          : "border-transparent bg-[#f4f5f7] text-[var(--trello-navy)] hover:border-[#091e42]/10 hover:bg-white"
                     }`}
                   >
                     <span
-                      className={`text-sm font-semibold sm:text-base ${
-                        isSelected ? "text-teal-950" : ""
+                      className={`text-sm font-bold sm:text-base ${
+                        isSelected ? "text-white" : ""
                       }`}
                     >
                       {Number(day.slice(-2))}
                     </span>
                     {total > 0 ? (
-                      <div className="mt-auto hidden space-y-0.5 sm:block">
-                        {dayList.slice(0, 2).map((ev) => (
+                      <div className="mt-1 hidden min-h-0 flex-1 flex-col gap-0.5 overflow-hidden md:flex">
+                        {previewItems.map((item) => (
                           <p
-                            key={ev.id}
-                            className={`truncate rounded px-1 text-[9px] leading-4 ${
-                              isSelected
-                                ? "bg-teal-950/15 text-teal-950"
-                                : teamEventKindStyles[ev.kind]
-                            }`}
+                            key={item.key}
+                            className={`truncate rounded px-1 py-0.5 text-[10px] leading-tight sm:text-[11px] ${item.style}`}
                           >
-                            {ev.time ? `${ev.time} ` : ""}
-                            {ev.title}
+                            {item.label}
                           </p>
                         ))}
-                        {dayList.length < 2
-                          ? dueList.slice(0, 2 - dayList.length).map((due) => (
-                              <p
-                                key={due.id}
-                                className={`truncate rounded px-1 text-[9px] leading-4 ${
-                                  isSelected
-                                    ? "bg-teal-950/15 text-teal-950"
-                                    : "bg-amber-500/20 text-amber-100"
-                                }`}
-                              >
-                                Prazo · {due.title}
-                              </p>
-                            ))
-                          : null}
                         {total > 2 ? (
                           <p
-                            className={`text-[9px] ${
-                              isSelected ? "text-teal-900/80" : "text-[var(--muted)]"
+                            className={`text-[10px] ${
+                              isSelected ? "text-white/80" : "text-[var(--trello-gray)]"
                             }`}
                           >
-                            +{total - 2}
+                            +{total - 2} mais
                           </p>
                         ) : null}
                       </div>
                     ) : null}
                     {total > 0 ? (
-                      <span className="mt-auto flex justify-center gap-0.5 pb-0.5 sm:hidden">
-                        {dayList.slice(0, 2).map((ev) => (
+                      <span className="mt-auto flex flex-wrap justify-start gap-0.5 pt-1 md:hidden">
+                        {previewItems.slice(0, 3).map((item) => (
                           <span
-                            key={ev.id}
+                            key={item.key}
                             className={`h-1.5 w-1.5 rounded-full ${
-                              isSelected
-                                ? "bg-teal-950"
-                                : teamEventKindDot[ev.kind]
+                              isSelected ? "bg-white" : item.dot
                             }`}
                           />
                         ))}
-                        {dueList.slice(0, Math.max(0, 3 - Math.min(dayList.length, 2))).map((due) => (
+                        {total > 3 ? (
                           <span
-                            key={due.id}
-                            className={`h-1.5 w-1.5 rounded-full ${
-                              isSelected ? "bg-teal-950" : "bg-amber-400"
+                            className={`text-[9px] leading-none ${
+                              isSelected ? "text-white/80" : "text-[var(--trello-gray)]"
                             }`}
-                          />
-                        ))}
+                          >
+                            +
+                          </span>
+                        ) : null}
                       </span>
                     ) : null}
                   </button>
@@ -413,7 +419,7 @@ export function TeamCalendarPanel({
               })}
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="flex shrink-0 flex-wrap gap-2 border-t border-[#091e42]/6 px-3 py-2.5 sm:px-5 sm:py-3">
               {KINDS.map((k) => (
                 <span
                   key={k}
@@ -423,42 +429,52 @@ export function TeamCalendarPanel({
                   {teamEventKindLabel[k]}
                 </span>
               ))}
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 px-2.5 py-1 text-[10px] text-amber-100">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-[10px] text-amber-900">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
                 Prazo de card
               </span>
             </div>
-          </section>
+          </div>
+        </section>
 
-          <section className="flex min-h-0 flex-col gap-4">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
-                  Dia selecionado
-                </p>
-                <p className="font-[family-name:var(--font-display)] text-xl capitalize text-white">
-                  {formatCalendarDayLabel(selectedDay)}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setFormOpen((v) => !v)}
-                className="inline-flex items-center gap-1.5 rounded-2xl bg-[var(--accent)] px-3.5 py-2.5 text-sm font-semibold text-teal-950 transition hover:brightness-110"
-              >
-                <Plus className="h-4 w-4" />
-                {formOpen ? "Fechar formulário" : "Novo evento"}
-              </button>
+        {/* Detalhes do dia — sidebar fixa com scroll */}
+        <aside
+          className="board-scroll flex min-h-0 w-full shrink-0 flex-col border-t border-white/12 bg-[#091e42]/88 backdrop-blur-md lg:w-[min(26rem,34vw)] lg:border-l lg:border-t-0"
+        >
+          <div className="flex shrink-0 flex-wrap items-end justify-between gap-3 border-b border-white/10 px-4 py-4 sm:px-5">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/55">
+                Dia selecionado
+              </p>
+              <p className="font-[family-name:var(--font-display)] text-xl capitalize text-white sm:text-2xl">
+                {formatCalendarDayLabel(selectedDay)}
+              </p>
+              <p className="mt-0.5 text-xs text-white/60">
+                {dayItemCount === 0
+                  ? "Sem eventos"
+                  : `${dayItemCount} item${dayItemCount === 1 ? "" : "s"}`}
+              </p>
             </div>
+            <button
+              type="button"
+              onClick={() => setFormOpen((v) => !v)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3.5 py-2.5 text-sm font-semibold text-[#0079bf] transition hover:bg-[#f4f5f7]"
+            >
+              <Plus className="h-4 w-4" />
+              {formOpen ? "Fechar" : "Novo evento"}
+            </button>
+          </div>
 
+          <div className="board-scroll min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">
             {formOpen ? (
               <form
                 onSubmit={onCreate}
-                className="space-y-3 rounded-3xl border border-[var(--accent)]/35 bg-[var(--accent)]/5 p-4 sm:p-5"
+                className="space-y-3 rounded-2xl border border-white/15 bg-white/10 p-4"
               >
-                <label className="block text-xs text-[var(--muted)]">
+                <label className="block text-xs text-white/70">
                   Título
                   <input
-                    className="mt-1.5 w-full rounded-2xl border border-[var(--line)] bg-[var(--ink)] px-4 py-3 text-sm text-white outline-none focus:border-[var(--accent)]"
+                    className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/95 px-4 py-3 text-sm text-[var(--trello-navy)] outline-none focus:border-[#0079bf]"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="Ex.: Review da sprint"
@@ -467,10 +483,10 @@ export function TeamCalendarPanel({
                   />
                 </label>
                 <div className="grid grid-cols-2 gap-3">
-                  <label className="block text-xs text-[var(--muted)]">
+                  <label className="block text-xs text-white/70">
                     Tipo
                     <select
-                      className="mt-1.5 w-full rounded-2xl border border-[var(--line)] bg-[var(--ink)] px-3 py-3 text-sm text-white outline-none focus:border-[var(--accent)]"
+                      className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/95 px-3 py-3 text-sm text-[var(--trello-navy)] outline-none focus:border-[#0079bf]"
                       value={kind}
                       onChange={(e) => setKind(e.target.value as TeamEventKind)}
                     >
@@ -481,20 +497,20 @@ export function TeamCalendarPanel({
                       ))}
                     </select>
                   </label>
-                  <label className="block text-xs text-[var(--muted)]">
+                  <label className="block text-xs text-white/70">
                     Horário
                     <input
                       type="time"
-                      className="mt-1.5 w-full rounded-2xl border border-[var(--line)] bg-[var(--ink)] px-3 py-3 text-sm text-white outline-none focus:border-[var(--accent)]"
+                      className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/95 px-3 py-3 text-sm text-[var(--trello-navy)] outline-none focus:border-[#0079bf]"
                       value={time}
                       onChange={(e) => setTime(e.target.value)}
                     />
                   </label>
                 </div>
-                <label className="block text-xs text-[var(--muted)]">
+                <label className="block text-xs text-white/70">
                   Descrição
                   <textarea
-                    className="mt-1.5 min-h-20 w-full rounded-2xl border border-[var(--line)] bg-[var(--ink)] px-4 py-3 text-sm text-white outline-none focus:border-[var(--accent)]"
+                    className="mt-1.5 min-h-20 w-full rounded-xl border border-white/15 bg-white/95 px-4 py-3 text-sm text-[var(--trello-navy)] outline-none focus:border-[#0079bf]"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Notas, sala, link…"
@@ -502,7 +518,7 @@ export function TeamCalendarPanel({
                 </label>
                 <button
                   type="submit"
-                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-2xl bg-[var(--accent)] px-4 py-3.5 text-sm font-semibold text-teal-950"
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#0079bf] px-4 py-3.5 text-sm font-semibold text-white"
                 >
                   <Plus className="h-4 w-4" />
                   Adicionar em {formatCalendarDayLabel(selectedDay)}
@@ -512,11 +528,11 @@ export function TeamCalendarPanel({
 
             <div className="space-y-2">
               {dayItemCount === 0 ? (
-                <div className="rounded-3xl border border-dashed border-[var(--line)] bg-black/15 px-4 py-12 text-center">
-                  <CalendarDays className="mx-auto mb-3 h-8 w-8 text-[var(--muted)] opacity-70" />
-                  <p className="text-sm text-white">Nada neste dia</p>
-                  <p className="mt-1 text-xs text-[var(--muted)]">
-                    Clique em &quot;Novo evento&quot; para agendar.
+                <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 px-4 py-10 text-center">
+                  <CalendarDays className="mx-auto mb-3 h-9 w-9 text-white/45" />
+                  <p className="text-sm font-medium text-white">Nada neste dia</p>
+                  <p className="mt-1 text-xs text-white/55">
+                    Use &quot;Novo evento&quot; para agendar.
                   </p>
                 </div>
               ) : (
@@ -524,14 +540,12 @@ export function TeamCalendarPanel({
                   {dayCardDues.map((due) => (
                     <article
                       key={`due-${due.id}`}
-                      className="rounded-3xl border border-amber-400/30 bg-amber-500/10 p-4"
+                      className="rounded-2xl border border-amber-400/35 bg-amber-500/15 p-4"
                     >
-                      <div className="mb-1 flex flex-wrap items-center gap-2">
-                        <span className="rounded-md bg-amber-500/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100">
-                          Prazo de card
-                        </span>
-                      </div>
-                      <h3 className="text-base font-medium text-white">
+                      <span className="rounded-md bg-amber-400/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100">
+                        Prazo de card
+                      </span>
+                      <h3 className="mt-2 text-base font-medium text-white">
                         {due.title}
                       </h3>
                     </article>
@@ -539,7 +553,7 @@ export function TeamCalendarPanel({
                   {dayEvents.map((ev) => (
                     <article
                       key={ev.id}
-                      className="group rounded-3xl border border-[var(--line)] bg-[var(--panel-strong)] p-4 transition hover:border-[var(--accent)]/35"
+                      className="group rounded-2xl border border-white/12 bg-white/10 p-4 transition hover:border-white/25 hover:bg-white/14"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -550,23 +564,21 @@ export function TeamCalendarPanel({
                               {teamEventKindLabel[ev.kind]}
                             </span>
                             {ev.time ? (
-                              <span className="text-xs text-[var(--muted)]">
-                                {ev.time}
-                              </span>
+                              <span className="text-xs text-white/65">{ev.time}</span>
                             ) : null}
                           </div>
                           <h3 className="text-base font-medium text-white">
                             {ev.title}
                           </h3>
                           {ev.description ? (
-                            <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">
+                            <p className="mt-1 text-sm leading-relaxed text-white/65">
                               {ev.description}
                             </p>
                           ) : null}
                         </div>
                         <button
                           type="button"
-                          className="shrink-0 rounded-lg p-1.5 text-[var(--muted)] opacity-100 transition hover:bg-white/5 hover:text-rose-300 sm:opacity-0 sm:group-hover:opacity-100"
+                          className="shrink-0 rounded-lg p-1.5 text-white/50 opacity-100 transition hover:bg-white/10 hover:text-rose-300 sm:opacity-0 sm:group-hover:opacity-100"
                           onClick={() => {
                             if (confirm(`Excluir "${ev.title}"?`)) {
                               deleteCalendarEvent(ev.id);
@@ -585,16 +597,16 @@ export function TeamCalendarPanel({
 
             {upcoming.length > 0 ? (
               <div>
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
-                  Agenda próxima
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">
+                  Próximas 3 semanas
                 </p>
-                <div className="overflow-hidden rounded-3xl border border-[var(--line)] bg-black/20">
+                <div className="overflow-hidden rounded-2xl border border-white/12 bg-white/8">
                   {upcoming.map((item, i) => (
                     <button
                       key={`soon-${item.id}`}
                       type="button"
-                      className={`flex w-full items-center gap-3 px-3.5 py-3 text-left transition hover:bg-white/5 ${
-                        i > 0 ? "border-t border-[var(--line)]" : ""
+                      className={`flex w-full items-center gap-3 px-3.5 py-3 text-left transition hover:bg-white/10 ${
+                        i > 0 ? "border-t border-white/10" : ""
                       }`}
                       onClick={() => {
                         setSelectedDay(item._day);
@@ -612,7 +624,7 @@ export function TeamCalendarPanel({
                       <span className="min-w-0 flex-1 truncate text-sm text-white">
                         {item.kind === "card" ? `Prazo · ${item.title}` : item.title}
                       </span>
-                      <span className="shrink-0 text-xs text-[var(--muted)]">
+                      <span className="shrink-0 text-xs text-white/55">
                         {formatCalendarDayLabel(item._day)}
                         {item.time ? ` · ${item.time}` : ""}
                       </span>
@@ -621,8 +633,8 @@ export function TeamCalendarPanel({
                 </div>
               </div>
             ) : null}
-          </section>
-        </div>
+          </div>
+        </aside>
       </div>
     </div>,
     document.body,

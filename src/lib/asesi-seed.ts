@@ -169,7 +169,7 @@ export function createAsesiBoardSeed(owner?: {
     ],
     memberIds: [ownerId],
     teamId: ASESI_TEAM_ID,
-    backgroundId: "ocean",
+    backgroundId: "trello",
     designId: "soft",
     createdAt: now,
     updatedAt: now,

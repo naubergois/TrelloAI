@@ -6,13 +6,20 @@ export function cn(...inputs: Array<string | false | null | undefined>) {
 }
 
 export const labelStyles: Record<LabelColor, string> = {
-  teal: "bg-teal-500/90 text-teal-950",
-  amber: "bg-amber-400/90 text-amber-950",
-  rose: "bg-rose-400/90 text-rose-950",
-  sky: "bg-sky-400/90 text-sky-950",
-  lime: "bg-lime-400/90 text-lime-950",
-  violet: "bg-violet-400/90 text-violet-950",
+  teal: "bg-[#0079bf] text-white",
+  amber: "bg-[#f2d600] text-[#172b4d]",
+  rose: "bg-[#eb5a46] text-white",
+  sky: "bg-[#00c2e0] text-[#172b4d]",
+  lime: "bg-[#61bd4f] text-[#172b4d]",
+  violet: "bg-[#c377e0] text-[#172b4d]",
 };
+
+/** Priority badges on white board cards */
+export const cardPriorityStyles = {
+  high: "bg-rose-100 text-rose-700 ring-rose-200",
+  medium: "bg-amber-100 text-amber-800 ring-amber-200",
+  low: "bg-emerald-100 text-emerald-800 ring-emerald-200",
+} as const;
 
 export const priorityStyles = {
   high: "bg-rose-500/15 text-rose-300 ring-rose-500/30",
@@ -67,10 +74,10 @@ export const teamEventKindDot = {
 } as const;
 
 export const LABEL_COLOR_OPTIONS: { id: import("./types").LabelColor; name: string }[] = [
-  { id: "teal", name: "Teal" },
-  { id: "amber", name: "Âmbar" },
-  { id: "rose", name: "Rosa" },
-  { id: "sky", name: "Céu" },
-  { id: "lime", name: "Lima" },
-  { id: "violet", name: "Violeta" },
+  { id: "teal", name: "Azul" },
+  { id: "lime", name: "Verde" },
+  { id: "amber", name: "Amarelo" },
+  { id: "rose", name: "Vermelho" },
+  { id: "violet", name: "Roxo" },
+  { id: "sky", name: "Ciano" },
 ];

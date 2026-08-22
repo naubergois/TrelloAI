@@ -159,7 +159,7 @@ export function BoardShell({
         <p className="text-[var(--muted)]">Board não encontrado.</p>
         <Link
           href="/"
-          className="rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-teal-950"
+          className="rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-on)]"
         >
           Voltar aos boards
         </Link>
@@ -174,7 +174,7 @@ export function BoardShell({
     >
       <MeetingRoom />
 
-      <header className="z-30 shrink-0 border-b border-[var(--line)] bg-black/35 backdrop-blur-xl">
+      <header className="board-header-bar z-30 shrink-0 border-b backdrop-blur-md">
         <div className="mx-auto flex min-h-14 max-w-[1600px] flex-wrap items-center gap-2 px-3 py-2 sm:min-h-[3.75rem] sm:gap-3 sm:px-4 lg:px-6">
           <Link
             href="/"
@@ -236,7 +236,7 @@ export function BoardShell({
             >
               <ClipboardList className="h-4 w-4" />
               {reqCount > 0 ? (
-                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--accent)] px-1 text-[9px] font-bold text-teal-950">
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--accent)] px-1 text-[9px] font-bold text-[var(--accent-on)]">
                   {reqCount > 99 ? "99+" : reqCount}
                 </span>
               ) : null}
@@ -275,7 +275,7 @@ export function BoardShell({
                 onClick={() => toggle("manager")}
                 className={`relative inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm transition sm:rounded-xl sm:px-2.5 sm:py-2 ${
                   panel === "manager"
-                    ? "bg-[var(--accent)] font-semibold text-teal-950"
+                    ? "bg-[var(--accent)] font-semibold text-[var(--accent-on)]"
                     : "text-[var(--muted)] hover:text-white"
                 }`}
               >

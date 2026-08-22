@@ -24,21 +24,21 @@ export function BoardFilterBar({
   const active = isBoardFilterActive(filter);
 
   return (
-    <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2 rounded-2xl border border-[var(--line)] bg-black/20 px-2.5 py-2 sm:mb-3 sm:px-3">
+    <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2 rounded-2xl border px-2.5 py-2 sm:mb-3 sm:px-3 board-filter-bar">
       <div className="relative min-w-[10rem] flex-1 sm:max-w-xs">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" />
         <input
           value={filter.query}
           onChange={(e) => onChange({ ...filter, query: e.target.value })}
           placeholder="Buscar cards…"
-          className="w-full rounded-xl border border-[var(--line)] bg-[var(--ink)] py-1.5 pl-8 pr-2 text-xs text-white outline-none focus:border-[var(--accent)] sm:text-sm"
+          className="w-full rounded-xl border py-1.5 pl-8 pr-2 text-xs outline-none focus:border-[var(--accent)] sm:text-sm"
         />
       </div>
 
       <select
         value={filter.assigneeId}
         onChange={(e) => onChange({ ...filter, assigneeId: e.target.value })}
-        className="rounded-xl border border-[var(--line)] bg-[var(--ink)] px-2 py-1.5 text-xs text-white outline-none focus:border-[var(--accent)] sm:text-sm"
+        className="rounded-xl border px-2 py-1.5 text-xs outline-none focus:border-[var(--accent)] sm:text-sm"
         aria-label="Filtrar por responsável"
       >
         <option value="">Responsável</option>
@@ -57,7 +57,7 @@ export function BoardFilterBar({
             priority: e.target.value as BoardCardFilter["priority"],
           })
         }
-        className="rounded-xl border border-[var(--line)] bg-[var(--ink)] px-2 py-1.5 text-xs text-white outline-none focus:border-[var(--accent)] sm:text-sm"
+        className="rounded-xl border px-2 py-1.5 text-xs outline-none focus:border-[var(--accent)] sm:text-sm"
         aria-label="Filtrar por prioridade"
       >
         <option value="">Prioridade</option>
@@ -71,7 +71,7 @@ export function BoardFilterBar({
         onChange={(e) =>
           onChange({ ...filter, due: e.target.value as BoardCardFilter["due"] })
         }
-        className="rounded-xl border border-[var(--line)] bg-[var(--ink)] px-2 py-1.5 text-xs text-white outline-none focus:border-[var(--accent)] sm:text-sm"
+        className="rounded-xl border px-2 py-1.5 text-xs outline-none focus:border-[var(--accent)] sm:text-sm"
         aria-label="Filtrar por prazo"
       >
         <option value="">Prazo</option>

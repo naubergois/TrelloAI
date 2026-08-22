@@ -15,6 +15,7 @@ import type { Card, ChecklistItem, Label, LabelColor } from "@/lib/types";
 import { useBoardStore } from "@/lib/store";
 import {
   LABEL_COLOR_OPTIONS,
+  cardPriorityStyles,
   labelStyles,
   priorityLabel,
   priorityStyles,
@@ -459,7 +460,7 @@ export function CardItem({
                 </button>
                 <button
                   type="button"
-                  className="flex-[1.4] rounded-xl bg-[var(--accent)] px-3 py-3.5 text-sm font-semibold text-teal-950"
+                  className="flex-[1.4] rounded-xl bg-[var(--accent)] px-3 py-3.5 text-sm font-semibold text-[var(--accent-on)]"
                   onClick={save}
                 >
                   Salvar
@@ -476,14 +477,14 @@ export function CardItem({
       <article
         role="button"
         tabIndex={0}
-        className={`group/card cursor-pointer border bg-[var(--panel-strong)] p-3 shadow-[0_8px_24px_rgba(0,0,0,0.18)] transition ${
+        className={`group/card board-card-surface cursor-pointer border p-3 transition ${
           urgency === "overdue"
             ? "border-rose-400/55"
             : urgency === "today" || urgency === "soon"
               ? "border-amber-400/40"
-              : "border-[var(--line)]"
+              : ""
         } ${dragging ? "opacity-40" : "opacity-100"} ${
-          overlay ? "ring-2 ring-[var(--accent)]" : "hover:border-[var(--accent)]/50"
+          overlay ? "ring-2 ring-[var(--accent)]" : "hover:border-[rgba(9,30,66,0.14)]"
         }`}
         style={{ borderRadius: "var(--board-card-radius, 0.75rem)" }}
         onClick={() => {
@@ -501,7 +502,7 @@ export function CardItem({
           {dragHandleProps ? (
             <button
               type="button"
-              className="mt-0.5 shrink-0 cursor-grab rounded p-0.5 text-[var(--muted)] hover:bg-white/5 hover:text-white active:cursor-grabbing"
+              className="mt-0.5 shrink-0 cursor-grab rounded p-0.5 board-card-muted hover:bg-black/5 hover:text-[var(--board-card-text)] active:cursor-grabbing"
               aria-label="Arrastar card"
               onClick={(e) => e.stopPropagation()}
               {...dragHandleProps}
@@ -524,12 +525,12 @@ export function CardItem({
               </div>
             ) : null}
 
-            <h3 className="text-sm font-medium leading-snug text-white">
+            <h3 className="board-card-title text-sm font-medium leading-snug">
               {card.title}
             </h3>
 
             {card.description ? (
-              <p className="mt-1 line-clamp-2 text-xs text-[var(--muted)]">
+              <p className="board-card-muted mt-1 line-clamp-2 text-xs">
                 {card.description}
               </p>
             ) : null}
@@ -543,7 +544,7 @@ export function CardItem({
 
           <button
             type="button"
-            className="shrink-0 rounded p-1 text-[var(--muted)] opacity-100 transition hover:bg-white/5 hover:text-[var(--accent)] sm:opacity-0 sm:group-hover/card:opacity-100"
+            className="shrink-0 rounded p-1 board-card-muted opacity-100 transition hover:bg-black/5 hover:text-[var(--accent)] sm:opacity-0 sm:group-hover/card:opacity-100"
             onClick={(e) => {
               e.stopPropagation();
               setOpen(true);
@@ -559,12 +560,12 @@ export function CardItem({
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             {card.priority ? (
               <span
-                className={`rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 ${priorityStyles[card.priority]}`}
+                className={`rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 ${cardPriorityStyles[card.priority]}`}
               >
                 {priorityLabel[card.priority]}
               </span>
             ) : (
-              <span className="text-[10px] text-[var(--muted)]">
+              <span className="board-card-muted text-[10px]">
                 sem prioridade
               </span>
             )}
@@ -572,12 +573,12 @@ export function CardItem({
               <span
                 className={`text-[10px] font-medium ${
                   urgency === "overdue"
-                    ? "text-rose-300"
+                    ? "text-rose-600"
                     : urgency === "today"
-                      ? "text-amber-300"
+                      ? "text-amber-700"
                       : urgency === "soon"
-                        ? "text-amber-200/90"
-                        : "text-[var(--muted)]"
+                        ? "text-amber-600"
+                        : "board-card-muted"
                 }`}
               >
                 {urgency === "overdue" ? "Atrasado · " : ""}
@@ -585,7 +586,7 @@ export function CardItem({
               </span>
             ) : null}
             {checklistTotal > 0 ? (
-              <span className="inline-flex items-center gap-0.5 text-[10px] text-[var(--muted)]">
+              <span className="board-card-muted inline-flex items-center gap-0.5 text-[10px]">
                 <CheckSquare className="h-3 w-3" />
                 {checklistDone}/{checklistTotal}
               </span>
@@ -604,7 +605,7 @@ export function CardItem({
           </div>
           <button
             type="button"
-            className="rounded p-1 text-[var(--muted)] hover:bg-white/5 hover:text-rose-300"
+            className="board-card-muted rounded p-1 hover:bg-black/5 hover:text-rose-600"
             onClick={(e) => {
               e.stopPropagation();
               if (confirm(`Excluir o card "${card.title}"?`)) deleteCard(card.id);

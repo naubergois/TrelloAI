@@ -105,7 +105,7 @@ export function BoardAppearanceDrawer({
           <button
             type="button"
             onClick={onClose}
-            className="w-full rounded-xl bg-[var(--accent)] px-3 py-2.5 text-sm font-semibold text-teal-950"
+            className="w-full rounded-xl bg-[var(--accent)] px-3 py-2.5 text-sm font-semibold text-[var(--accent-on)]"
           >
             Pronto
           </button>

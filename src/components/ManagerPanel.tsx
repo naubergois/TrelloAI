@@ -431,7 +431,7 @@ export function ManagerPanel({
                 onClick={() => setTab(t.id)}
                 className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium transition ${
                   active
-                    ? "bg-[var(--accent)] text-teal-950 shadow"
+                    ? "bg-[var(--accent)] text-[var(--accent-on)] shadow"
                     : "text-[var(--muted)] hover:text-white"
                 }`}
               >
@@ -461,7 +461,7 @@ export function ManagerPanel({
                 <button
                   type="button"
                   onClick={() => startDailyStandup(boardId, { withMeeting: true })}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-teal-950 transition hover:brightness-110"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-[var(--accent-on)] transition hover:brightness-110"
                 >
                   <Play className="h-4 w-4" />
                   Começar daily com {manager.name}
@@ -484,7 +484,7 @@ export function ManagerPanel({
                   <button
                     type="submit"
                     disabled={!draft.trim() || processing}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-teal-950 disabled:opacity-40"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-[var(--accent-on)] disabled:opacity-40"
                   >
                     {processing ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -524,7 +524,7 @@ export function ManagerPanel({
                         className={`max-w-[78%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm ${
                           isManager
                             ? "rounded-bl-md border border-white/10 bg-[#132536] text-[var(--text)]"
-                            : "rounded-br-md bg-[var(--accent)] text-teal-950"
+                            : "rounded-br-md bg-[var(--accent)] text-[var(--accent-on)]"
                         }`}
                       >
                         <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide opacity-70">
@@ -665,7 +665,7 @@ export function ManagerPanel({
                     <button
                       type="submit"
                       disabled={!draft.trim() || processing}
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-teal-950 transition hover:brightness-110 disabled:opacity-40 sm:h-11 sm:w-11 sm:rounded-2xl"
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-[var(--accent-on)] transition hover:brightness-110 disabled:opacity-40 sm:h-11 sm:w-11 sm:rounded-2xl"
                       aria-label="Enviar"
                     >
                       {processing ? (
@@ -698,7 +698,7 @@ export function ManagerPanel({
                     <button
                       type="submit"
                       disabled={!draft.trim() || processing}
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-teal-950 transition hover:brightness-110 disabled:opacity-40 sm:h-11 sm:w-11 sm:rounded-2xl"
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-[var(--accent-on)] transition hover:brightness-110 disabled:opacity-40 sm:h-11 sm:w-11 sm:rounded-2xl"
                       aria-label="Enviar para Maya"
                     >
                       {processing ? (
@@ -865,7 +865,7 @@ export function ManagerPanel({
               setTab("chat");
               startDailyStandup(boardId, { withMeeting: true });
             }}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-teal-950"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-[var(--accent-on)]"
           >
             <Play className="h-4 w-4" />
             Iniciar daily agora

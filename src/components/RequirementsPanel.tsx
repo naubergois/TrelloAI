@@ -118,7 +118,7 @@ function PromptViewer({
             onClick={() => setTab(t.id)}
             className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition ${
               tab === t.id
-                ? "bg-[var(--accent)] font-semibold text-teal-950"
+                ? "bg-[var(--accent)] font-semibold text-[var(--accent-on)]"
                 : "border border-[var(--line)] text-[var(--muted)] hover:text-white"
             }`}
           >
@@ -137,7 +137,7 @@ function PromptViewer({
       <footer className="flex shrink-0 border-t border-[var(--line)] bg-black/40 px-3 py-2.5 sm:px-6 sm:py-4">
         <button
           type="button"
-          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-teal-950"
+          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-[var(--accent-on)]"
           onClick={async () => {
             if (!content) return;
             await copyText(content);
@@ -422,7 +422,7 @@ export function RequirementsPanel({
           <button
             type="button"
             onClick={openCreate}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-teal-950 transition hover:brightness-110"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-[var(--accent-on)] transition hover:brightness-110"
           >
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">Novo requisito</span>
@@ -468,7 +468,7 @@ export function RequirementsPanel({
                 onClick={() => setStatusFilter(f.id)}
                 className={`shrink-0 rounded-full px-3 py-1.5 text-xs transition ${
                   statusFilter === f.id
-                    ? "bg-[var(--accent)] font-semibold text-teal-950"
+                    ? "bg-[var(--accent)] font-semibold text-[var(--accent-on)]"
                     : "border border-[var(--line)] bg-black/20 text-[var(--muted)] hover:text-white"
                 }`}
               >
@@ -495,7 +495,7 @@ export function RequirementsPanel({
                 <button
                   type="button"
                   onClick={openCreate}
-                  className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-teal-950"
+                  className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-[var(--accent-on)]"
                 >
                   <Plus className="h-4 w-4" />
                   Novo requisito
@@ -779,7 +779,7 @@ export function RequirementsPanel({
                   </button>
                   <button
                     type="button"
-                    className="min-h-12 flex-[1.4] touch-manipulation rounded-xl bg-[var(--accent)] px-3 py-3 text-sm font-semibold text-teal-950 disabled:opacity-50 sm:flex-[1.6] sm:rounded-2xl sm:text-base"
+                    className="min-h-12 flex-[1.4] touch-manipulation rounded-xl bg-[var(--accent)] px-3 py-3 text-sm font-semibold text-[var(--accent-on)] disabled:opacity-50 sm:flex-[1.6] sm:rounded-2xl sm:text-base"
                     onClick={saveEditor}
                     disabled={!draftTitle.trim()}
                   >

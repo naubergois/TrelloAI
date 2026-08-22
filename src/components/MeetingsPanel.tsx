@@ -235,7 +235,7 @@ export function MeetingsPanel({
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-teal-950"
+                  className="flex-1 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-[var(--accent-on)]"
                 >
                   Criar e vincular
                 </button>
@@ -350,7 +350,7 @@ export function MeetingsPanel({
                 startNow: true,
               })
             }
-            className="mb-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-3 py-2.5 text-sm font-semibold text-teal-950 transition hover:brightness-110"
+            className="mb-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-3 py-2.5 text-sm font-semibold text-[var(--accent-on)] transition hover:brightness-110"
           >
             <Radio className="h-4 w-4" />
             Iniciar reunião agora
@@ -414,7 +414,7 @@ export function MeetingsPanel({
                       <button
                         type="button"
                         onClick={() => joinMeeting(meeting.id)}
-                        className="inline-flex items-center gap-1 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs text-white transition hover:bg-[var(--accent)] hover:text-teal-950"
+                        className="inline-flex items-center gap-1 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs text-white transition hover:bg-[var(--accent)] hover:text-[var(--accent-on)]"
                       >
                         <Video className="h-3.5 w-3.5" />
                         Entrar

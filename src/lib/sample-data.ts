@@ -174,7 +174,7 @@ export function createSampleWorkspace() {
     listIds: [todoId, doingId, doneId],
     memberIds: [youId, anaId, leoId],
     teamId,
-    backgroundId: "midnight",
+    backgroundId: "trello",
     designId: "classic",
     createdAt: now,
     updatedAt: now,
