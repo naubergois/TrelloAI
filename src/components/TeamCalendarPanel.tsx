@@ -64,6 +64,8 @@ export function TeamCalendarPanel({
 }) {
   const board = useBoardStore((s) => s.boards[boardId]);
   const members = useBoardStore((s) => s.members);
+  const lists = useBoardStore((s) => s.lists);
+  const cards = useBoardStore((s) => s.cards);
   const calendarEvents = useBoardStore((s) => s.calendarEvents);
   const createCalendarEvent = useBoardStore((s) => s.createCalendarEvent);
   const deleteCalendarEvent = useBoardStore((s) => s.deleteCalendarEvent);
@@ -105,17 +107,46 @@ export function TeamCalendarPanel({
     [calendarEvents, boardId],
   );
 
+  const boardCardDues = useMemo(() => {
+    if (!board) return [] as { id: string; title: string; date: string }[];
+    return board.listIds
+      .flatMap((listId) =>
+        (lists[listId]?.cardIds ?? [])
+          .map((id) => cards[id])
+          .filter((c): c is NonNullable<typeof c> => Boolean(c?.dueDate)),
+      )
+      .map((c) => ({
+        id: c.id,
+        title: c.title,
+        date: c.dueDate as string,
+      }));
+  }, [board, lists, cards]);
+
   const byDay = useMemo(() => {
-    const map = new Map<string, typeof boardEvents>();
+    const map = new Map<
+      string,
+      {
+        events: typeof boardEvents;
+        cardDues: typeof boardCardDues;
+      }
+    >();
     for (const ev of boardEvents) {
-      const list = map.get(ev.date) || [];
-      list.push(ev);
-      map.set(ev.date, list);
+      const entry = map.get(ev.date) || { events: [], cardDues: [] };
+      entry.events.push(ev);
+      map.set(ev.date, entry);
+    }
+    for (const due of boardCardDues) {
+      const entry = map.get(due.date) || { events: [], cardDues: [] };
+      entry.cardDues.push(due);
+      map.set(due.date, entry);
     }
     return map;
-  }, [boardEvents]);
+  }, [boardEvents, boardCardDues]);
 
-  const dayEvents = byDay.get(selectedDay) || [];
+  const dayEntry = byDay.get(selectedDay) || { events: [], cardDues: [] };
+  const dayEvents = dayEntry.events;
+  const dayCardDues = dayEntry.cardDues;
+  const dayItemCount = dayEvents.length + dayCardDues.length;
   const cells = useMemo(() => monthMatrix(monthAnchor), [monthAnchor]);
 
   const boardMembers = useMemo(() => {
@@ -123,18 +154,47 @@ export function TeamCalendarPanel({
     return (board.memberIds ?? []).map((id) => members[id]).filter(Boolean);
   }, [board, members]);
 
-  const upcoming = useMemo(
-    () =>
-      Array.from({ length: 14 }, (_, i) => shiftCalendarDay(today, i))
-        .flatMap((d) => (byDay.get(d) || []).map((ev) => ({ ...ev, _day: d })))
-        .slice(0, 8),
-    [byDay, today],
-  );
+  const upcoming = useMemo(() => {
+    const items: {
+      id: string;
+      title: string;
+      _day: string;
+      time?: string | null;
+      kind: "event" | "card";
+      eventKind?: TeamEventKind;
+    }[] = [];
+    for (let i = 0; i < 14; i++) {
+      const d = shiftCalendarDay(today, i);
+      const entry = byDay.get(d);
+      if (!entry) continue;
+      for (const ev of entry.events) {
+        items.push({
+          id: `ev-${ev.id}`,
+          title: ev.title,
+          _day: d,
+          time: ev.time,
+          kind: "event",
+          eventKind: ev.kind,
+        });
+      }
+      for (const due of entry.cardDues) {
+        items.push({
+          id: `card-${due.id}`,
+          title: due.title,
+          _day: d,
+          kind: "card",
+        });
+      }
+    }
+    return items.slice(0, 10);
+  }, [byDay, today]);
 
   const monthEventCount = useMemo(() => {
     const prefix = monthAnchor.slice(0, 7);
-    return boardEvents.filter((e) => e.date.startsWith(prefix)).length;
-  }, [boardEvents, monthAnchor]);
+    const events = boardEvents.filter((e) => e.date.startsWith(prefix)).length;
+    const dues = boardCardDues.filter((c) => c.date.startsWith(prefix)).length;
+    return events + dues;
+  }, [boardEvents, boardCardDues, monthAnchor]);
 
   const shiftMonth = (delta: number) => {
     const [y, m] = monthAnchor.split("-").map(Number);
@@ -257,7 +317,10 @@ export function TeamCalendarPanel({
                     />
                   );
                 }
-                const dayList = byDay.get(day) || [];
+                const entry = byDay.get(day) || { events: [], cardDues: [] };
+                const dayList = entry.events;
+                const dueList = entry.cardDues;
+                const total = dayList.length + dueList.length;
                 const isSelected = day === selectedDay;
                 const isToday = day === today;
                 return (
@@ -283,7 +346,7 @@ export function TeamCalendarPanel({
                     >
                       {Number(day.slice(-2))}
                     </span>
-                    {dayList.length > 0 ? (
+                    {total > 0 ? (
                       <div className="mt-auto hidden space-y-0.5 sm:block">
                         {dayList.slice(0, 2).map((ev) => (
                           <p
@@ -298,26 +361,48 @@ export function TeamCalendarPanel({
                             {ev.title}
                           </p>
                         ))}
-                        {dayList.length > 2 ? (
+                        {dayList.length < 2
+                          ? dueList.slice(0, 2 - dayList.length).map((due) => (
+                              <p
+                                key={due.id}
+                                className={`truncate rounded px-1 text-[9px] leading-4 ${
+                                  isSelected
+                                    ? "bg-teal-950/15 text-teal-950"
+                                    : "bg-amber-500/20 text-amber-100"
+                                }`}
+                              >
+                                Prazo · {due.title}
+                              </p>
+                            ))
+                          : null}
+                        {total > 2 ? (
                           <p
                             className={`text-[9px] ${
                               isSelected ? "text-teal-900/80" : "text-[var(--muted)]"
                             }`}
                           >
-                            +{dayList.length - 2}
+                            +{total - 2}
                           </p>
                         ) : null}
                       </div>
                     ) : null}
-                    {dayList.length > 0 ? (
+                    {total > 0 ? (
                       <span className="mt-auto flex justify-center gap-0.5 pb-0.5 sm:hidden">
-                        {dayList.slice(0, 3).map((ev) => (
+                        {dayList.slice(0, 2).map((ev) => (
                           <span
                             key={ev.id}
                             className={`h-1.5 w-1.5 rounded-full ${
                               isSelected
                                 ? "bg-teal-950"
                                 : teamEventKindDot[ev.kind]
+                            }`}
+                          />
+                        ))}
+                        {dueList.slice(0, Math.max(0, 3 - Math.min(dayList.length, 2))).map((due) => (
+                          <span
+                            key={due.id}
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              isSelected ? "bg-teal-950" : "bg-amber-400"
                             }`}
                           />
                         ))}
@@ -338,6 +423,10 @@ export function TeamCalendarPanel({
                   {teamEventKindLabel[k]}
                 </span>
               ))}
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 px-2.5 py-1 text-[10px] text-amber-100">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                Prazo de card
+              </span>
             </div>
           </section>
 
@@ -422,7 +511,7 @@ export function TeamCalendarPanel({
             ) : null}
 
             <div className="space-y-2">
-              {dayEvents.length === 0 ? (
+              {dayItemCount === 0 ? (
                 <div className="rounded-3xl border border-dashed border-[var(--line)] bg-black/15 px-4 py-12 text-center">
                   <CalendarDays className="mx-auto mb-3 h-8 w-8 text-[var(--muted)] opacity-70" />
                   <p className="text-sm text-white">Nada neste dia</p>
@@ -431,49 +520,66 @@ export function TeamCalendarPanel({
                   </p>
                 </div>
               ) : (
-                dayEvents.map((ev) => (
-                  <article
-                    key={ev.id}
-                    className="group rounded-3xl border border-[var(--line)] bg-[var(--panel-strong)] p-4 transition hover:border-[var(--accent)]/35"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="mb-1 flex flex-wrap items-center gap-2">
-                          <span
-                            className={`rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${teamEventKindStyles[ev.kind]}`}
-                          >
-                            {teamEventKindLabel[ev.kind]}
-                          </span>
-                          {ev.time ? (
-                            <span className="text-xs text-[var(--muted)]">
-                              {ev.time}
+                <>
+                  {dayCardDues.map((due) => (
+                    <article
+                      key={`due-${due.id}`}
+                      className="rounded-3xl border border-amber-400/30 bg-amber-500/10 p-4"
+                    >
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <span className="rounded-md bg-amber-500/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100">
+                          Prazo de card
+                        </span>
+                      </div>
+                      <h3 className="text-base font-medium text-white">
+                        {due.title}
+                      </h3>
+                    </article>
+                  ))}
+                  {dayEvents.map((ev) => (
+                    <article
+                      key={ev.id}
+                      className="group rounded-3xl border border-[var(--line)] bg-[var(--panel-strong)] p-4 transition hover:border-[var(--accent)]/35"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="mb-1 flex flex-wrap items-center gap-2">
+                            <span
+                              className={`rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${teamEventKindStyles[ev.kind]}`}
+                            >
+                              {teamEventKindLabel[ev.kind]}
                             </span>
+                            {ev.time ? (
+                              <span className="text-xs text-[var(--muted)]">
+                                {ev.time}
+                              </span>
+                            ) : null}
+                          </div>
+                          <h3 className="text-base font-medium text-white">
+                            {ev.title}
+                          </h3>
+                          {ev.description ? (
+                            <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">
+                              {ev.description}
+                            </p>
                           ) : null}
                         </div>
-                        <h3 className="text-base font-medium text-white">
-                          {ev.title}
-                        </h3>
-                        {ev.description ? (
-                          <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">
-                            {ev.description}
-                          </p>
-                        ) : null}
+                        <button
+                          type="button"
+                          className="shrink-0 rounded-lg p-1.5 text-[var(--muted)] opacity-100 transition hover:bg-white/5 hover:text-rose-300 sm:opacity-0 sm:group-hover:opacity-100"
+                          onClick={() => {
+                            if (confirm(`Excluir "${ev.title}"?`)) {
+                              deleteCalendarEvent(ev.id);
+                            }
+                          }}
+                          aria-label="Excluir evento"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        className="shrink-0 rounded-lg p-1.5 text-[var(--muted)] opacity-100 transition hover:bg-white/5 hover:text-rose-300 sm:opacity-0 sm:group-hover:opacity-100"
-                        onClick={() => {
-                          if (confirm(`Excluir "${ev.title}"?`)) {
-                            deleteCalendarEvent(ev.id);
-                          }
-                        }}
-                        aria-label="Excluir evento"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </article>
-                ))
+                    </article>
+                  ))}
+                </>
               )}
             </div>
 
@@ -483,28 +589,32 @@ export function TeamCalendarPanel({
                   Agenda próxima
                 </p>
                 <div className="overflow-hidden rounded-3xl border border-[var(--line)] bg-black/20">
-                  {upcoming.map((ev, i) => (
+                  {upcoming.map((item, i) => (
                     <button
-                      key={`soon-${ev.id}`}
+                      key={`soon-${item.id}`}
                       type="button"
                       className={`flex w-full items-center gap-3 px-3.5 py-3 text-left transition hover:bg-white/5 ${
                         i > 0 ? "border-t border-[var(--line)]" : ""
                       }`}
                       onClick={() => {
-                        setSelectedDay(ev._day);
-                        setMonthAnchor(ev._day.slice(0, 7) + "-01");
+                        setSelectedDay(item._day);
+                        setMonthAnchor(item._day.slice(0, 7) + "-01");
                         setFormOpen(false);
                       }}
                     >
                       <span
-                        className={`h-2 w-2 shrink-0 rounded-full ${teamEventKindDot[ev.kind]}`}
+                        className={`h-2 w-2 shrink-0 rounded-full ${
+                          item.kind === "card"
+                            ? "bg-amber-400"
+                            : teamEventKindDot[item.eventKind || "other"]
+                        }`}
                       />
                       <span className="min-w-0 flex-1 truncate text-sm text-white">
-                        {ev.title}
+                        {item.kind === "card" ? `Prazo · ${item.title}` : item.title}
                       </span>
                       <span className="shrink-0 text-xs text-[var(--muted)]">
-                        {formatCalendarDayLabel(ev._day)}
-                        {ev.time ? ` · ${ev.time}` : ""}
+                        {formatCalendarDayLabel(item._day)}
+                        {item.time ? ` · ${item.time}` : ""}
                       </span>
                     </button>
                   ))}

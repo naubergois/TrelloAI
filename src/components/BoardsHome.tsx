@@ -8,6 +8,7 @@ import {
   Palette,
   Pencil,
   Plus,
+  Search,
   Settings2,
   Trash2,
   UserPlus,
@@ -70,6 +71,7 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
 
   const [tab, setTab] = useState<HomeTab>("boards");
   const [creating, setCreating] = useState(false);
+  const [boardQuery, setBoardQuery] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [bgId, setBgId] = useState<BoardBackgroundId>(DEFAULT_BACKGROUND_ID);
@@ -81,6 +83,19 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
   const [customizeNewTeam, setCustomizeNewTeam] = useState("");
 
   const customizeBoard = customizeId ? boards[customizeId] : null;
+
+  const filteredBoards = useMemo(() => {
+    const q = boardQuery.trim().toLowerCase();
+    if (!q) return boardList;
+    return boardList.filter((b) => {
+      const teamName = b.teamId ? teams[b.teamId]?.name ?? "" : "";
+      return (
+        b.title.toLowerCase().includes(q) ||
+        (b.description || "").toLowerCase().includes(q) ||
+        teamName.toLowerCase().includes(q)
+      );
+    });
+  }, [boardList, boardQuery, teams]);
 
   const openBoard = (boardId: string) => {
     setActiveBoard(boardId);
@@ -213,6 +228,20 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
         ) : null}
 
         {tab === "boards" ? (
+          <div className="mb-4">
+            <div className="relative max-w-md">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
+              <input
+                value={boardQuery}
+                onChange={(e) => setBoardQuery(e.target.value)}
+                placeholder="Buscar boards ou times…"
+                className="w-full rounded-2xl border border-[var(--line)] bg-black/25 py-2.5 pl-10 pr-3 text-sm text-white outline-none focus:border-[var(--accent)]"
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {tab === "boards" ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <button
             type="button"
@@ -223,7 +252,7 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
             <span className="text-sm font-medium">Criar board</span>
           </button>
 
-          {boardList.map((board) => {
+          {filteredBoards.map((board) => {
             const bg = getBackground(board.backgroundId);
             const design = getDesign(board.designId);
             const team = board.teamId ? teams[board.teamId] : null;
@@ -305,6 +334,14 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
               </article>
             );
           })}
+          {boardQuery.trim() && filteredBoards.length === 0 ? (
+            <div className="col-span-full rounded-2xl border border-dashed border-[var(--line)] bg-black/15 px-6 py-12 text-center">
+              <p className="text-sm text-white">Nenhum board encontrado</p>
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                Tente outro termo de busca.
+              </p>
+            </div>
+          ) : null}
         </div>
         ) : null}
       </main>

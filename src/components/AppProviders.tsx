@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useBoardStore } from "@/lib/store";
 import { AuthUserSync } from "@/components/AuthUserSync";
+import { ToastProvider } from "@/components/Toast";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const hydrated = useBoardStore((s) => s.hydrated);
@@ -31,9 +32,9 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <>
+    <ToastProvider>
       <AuthUserSync />
       {children}
-    </>
+    </ToastProvider>
   );
 }

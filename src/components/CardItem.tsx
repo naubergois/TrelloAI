@@ -19,6 +19,8 @@ import {
   priorityLabel,
   priorityStyles,
 } from "@/lib/utils";
+import { dueUrgency } from "@/lib/board-filters";
+import { useToast } from "@/components/Toast";
 
 export function CardItem({
   card,
@@ -33,10 +35,12 @@ export function CardItem({
 }) {
   const updateCard = useBoardStore((s) => s.updateCard);
   const deleteCard = useBoardStore((s) => s.deleteCard);
+  const moveCard = useBoardStore((s) => s.moveCard);
   const boards = useBoardStore((s) => s.boards);
   const lists = useBoardStore((s) => s.lists);
   const members = useBoardStore((s) => s.members);
   const requirements = useBoardStore((s) => s.requirements);
+  const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [draftTitle, setDraftTitle] = useState(card.title);
@@ -45,6 +49,7 @@ export function CardItem({
   const [draftAssigneeId, setDraftAssigneeId] = useState<string | null>(
     card.assigneeId ?? null,
   );
+  const [draftListId, setDraftListId] = useState(card.listId);
   const [draftDueDate, setDraftDueDate] = useState(card.dueDate ?? "");
   const [draftRequirementId, setDraftRequirementId] = useState<string | null>(
     card.requirementId ?? null,
@@ -65,6 +70,9 @@ export function CardItem({
   const boardMembers = boardId
     ? (boards[boardId]?.memberIds || []).map((id) => members[id]).filter(Boolean)
     : [];
+  const boardLists = boardId
+    ? (boards[boardId]?.listIds || []).map((id) => lists[id]).filter(Boolean)
+    : [];
   const boardReqs = boardId
     ? Object.values(requirements || {})
         .filter((r) => r.boardId === boardId)
@@ -76,6 +84,7 @@ export function CardItem({
     : null;
   const checklistDone = (card.checklist || []).filter((i) => i.done).length;
   const checklistTotal = (card.checklist || []).length;
+  const urgency = dueUrgency(card.dueDate);
 
   useEffect(() => {
     setMounted(true);
@@ -87,6 +96,7 @@ export function CardItem({
     setDraftDescription(card.description);
     setDraftPriority(card.priority);
     setDraftAssigneeId(card.assigneeId ?? null);
+    setDraftListId(card.listId);
     setDraftDueDate(card.dueDate ?? "");
     setDraftRequirementId(card.requirementId ?? null);
     setDraftAcceptance(card.acceptanceCriteria ?? "");
@@ -101,6 +111,7 @@ export function CardItem({
     card.description,
     card.priority,
     card.assigneeId,
+    card.listId,
     card.dueDate,
     card.requirementId,
     card.acceptanceCriteria,
@@ -134,6 +145,11 @@ export function CardItem({
       labels: draftLabels,
       checklist: draftChecklist,
     });
+    if (draftListId && draftListId !== card.listId) {
+      const target = lists[draftListId];
+      if (target) moveCard(card.id, draftListId, target.cardIds.length);
+    }
+    toast("Card salvo");
     setOpen(false);
   };
 
@@ -205,6 +221,21 @@ export function CardItem({
                       />
                     </label>
                   </div>
+
+                  <label className="block text-xs text-[var(--muted)] sm:text-sm">
+                    Lista
+                    <select
+                      className="mt-1.5 w-full rounded-2xl border border-[var(--line)] bg-[var(--ink)] px-4 py-3 text-sm text-white outline-none focus:border-[var(--accent)]"
+                      value={draftListId}
+                      onChange={(e) => setDraftListId(e.target.value)}
+                    >
+                      {boardLists.map((list) => (
+                        <option key={list.id} value={list.id}>
+                          {list.title}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
 
                   <label className="block text-xs text-[var(--muted)] sm:text-sm">
                     Prioridade
@@ -445,9 +476,15 @@ export function CardItem({
       <article
         role="button"
         tabIndex={0}
-        className={`group/card cursor-pointer border border-[var(--line)] bg-[var(--panel-strong)] p-3 shadow-[0_8px_24px_rgba(0,0,0,0.18)] transition ${
-          dragging ? "opacity-40" : "opacity-100"
-        } ${overlay ? "ring-2 ring-[var(--accent)]" : "hover:border-[var(--accent)]/50"}`}
+        className={`group/card cursor-pointer border bg-[var(--panel-strong)] p-3 shadow-[0_8px_24px_rgba(0,0,0,0.18)] transition ${
+          urgency === "overdue"
+            ? "border-rose-400/55"
+            : urgency === "today" || urgency === "soon"
+              ? "border-amber-400/40"
+              : "border-[var(--line)]"
+        } ${dragging ? "opacity-40" : "opacity-100"} ${
+          overlay ? "ring-2 ring-[var(--accent)]" : "hover:border-[var(--accent)]/50"
+        }`}
         style={{ borderRadius: "var(--board-card-radius, 0.75rem)" }}
         onClick={() => {
           if (!overlay) setOpen(true);
@@ -532,7 +569,18 @@ export function CardItem({
               </span>
             )}
             {card.dueDate ? (
-              <span className="text-[10px] text-[var(--muted)]">
+              <span
+                className={`text-[10px] font-medium ${
+                  urgency === "overdue"
+                    ? "text-rose-300"
+                    : urgency === "today"
+                      ? "text-amber-300"
+                      : urgency === "soon"
+                        ? "text-amber-200/90"
+                        : "text-[var(--muted)]"
+                }`}
+              >
+                {urgency === "overdue" ? "Atrasado · " : ""}
                 {card.dueDate.split("-").reverse().join("/")}
               </span>
             ) : null}

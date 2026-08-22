@@ -26,6 +26,12 @@ import { BoardAppearanceDrawer } from "@/components/BoardAppearanceDrawer";
 import { InvitePanel } from "@/components/InvitePanel";
 import { RequirementsPanel } from "@/components/RequirementsPanel";
 import { TeamCalendarPanel } from "@/components/TeamCalendarPanel";
+import { BoardFilterBar } from "@/components/BoardFilterBar";
+import {
+  EMPTY_BOARD_FILTER,
+  cardMatchesFilter,
+  type BoardCardFilter,
+} from "@/lib/board-filters";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -49,6 +55,9 @@ export function BoardShell({
   const router = useRouter();
   const boards = useBoardStore((s) => s.boards);
   const teams = useBoardStore((s) => s.teams);
+  const lists = useBoardStore((s) => s.lists);
+  const cards = useBoardStore((s) => s.cards);
+  const members = useBoardStore((s) => s.members);
   const requirements = useBoardStore((s) => s.requirements);
   const calendarEvents = useBoardStore((s) => s.calendarEvents);
   const setActiveBoard = useBoardStore((s) => s.setActiveBoard);
@@ -63,6 +72,7 @@ export function BoardShell({
   const [panel, setPanel] = useState<SidePanel>("manager");
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
+  const [cardFilter, setCardFilter] = useState<BoardCardFilter>(EMPTY_BOARD_FILTER);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -85,6 +95,25 @@ export function BoardShell({
 
   const board = boards[boardId] ?? null;
   const assignedTeam = board?.teamId ? teams[board.teamId] : null;
+
+  const boardMembers = useMemo(() => {
+    if (!board) return [];
+    return (board.memberIds ?? []).map((id) => members[id]).filter(Boolean);
+  }, [board, members]);
+
+  const { matchCount, totalCount } = useMemo(() => {
+    if (!board) return { matchCount: 0, totalCount: 0 };
+    const boardCards = board.listIds.flatMap((listId) =>
+      (lists[listId]?.cardIds ?? [])
+        .map((id) => cards[id])
+        .filter(Boolean),
+    );
+    return {
+      totalCount: boardCards.length,
+      matchCount: boardCards.filter((c) => cardMatchesFilter(c, cardFilter))
+        .length,
+    };
+  }, [board, lists, cards, cardFilter]);
 
   const reqCount = useMemo(
     () =>
@@ -404,8 +433,17 @@ export function BoardShell({
             </select>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <BoardCanvas boardId={board.id} />
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-2 sm:px-3">
+            <BoardFilterBar
+              filter={cardFilter}
+              onChange={setCardFilter}
+              members={boardMembers}
+              matchCount={matchCount}
+              totalCount={totalCount}
+            />
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <BoardCanvas boardId={board.id} filter={cardFilter} />
+            </div>
           </div>
         </main>
 

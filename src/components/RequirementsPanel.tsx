@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import {
   ClipboardList,
+  LayoutList,
   Pencil,
   Plus,
   Search,
@@ -18,6 +19,7 @@ import {
   requirementStatusStyles,
 } from "@/lib/utils";
 import type { Requirement, RequirementStatus } from "@/lib/types";
+import { useToast } from "@/components/Toast";
 
 const STATUSES: RequirementStatus[] = [
   "draft",
@@ -43,6 +45,8 @@ export function RequirementsPanel({
   const createRequirement = useBoardStore((s) => s.createRequirement);
   const updateRequirement = useBoardStore((s) => s.updateRequirement);
   const deleteRequirement = useBoardStore((s) => s.deleteRequirement);
+  const addCard = useBoardStore((s) => s.addCard);
+  const { toast } = useToast();
 
   const [mounted, setMounted] = useState(false);
   const [title, setTitle] = useState("");
@@ -136,6 +140,7 @@ export function RequirementsPanel({
     setOwnerId("");
     setPriority("medium");
     setJustCreated(id);
+    toast(`Requisito cadastrado`);
     window.setTimeout(() => setJustCreated(null), 1800);
   };
 
@@ -152,6 +157,22 @@ export function RequirementsPanel({
       description: editDescription,
     });
     setEditingId(null);
+  };
+
+  const createCardFromRequirement = (req: Requirement) => {
+    const firstListId = board?.listIds?.[0];
+    if (!firstListId) {
+      toast("Crie uma lista no board antes de gerar o card");
+      return;
+    }
+    addCard(firstListId, req.title, {
+      description: req.description,
+      priority: req.priority,
+      dueDate: req.dueDate ?? null,
+      assigneeId: req.ownerId ?? null,
+      requirementId: req.id,
+    });
+    toast(`Card criado a partir de ${req.code}`);
   };
 
   if (!mounted) return null;
@@ -461,6 +482,17 @@ export function RequirementsPanel({
                           ))}
                         </select>
                       </label>
+
+                      {!isEditing ? (
+                        <button
+                          type="button"
+                          onClick={() => createCardFromRequirement(req)}
+                          className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] px-3 py-2.5 text-xs font-medium text-white transition hover:border-[var(--accent)]/50 hover:bg-white/5"
+                        >
+                          <LayoutList className="h-3.5 w-3.5 text-[var(--accent)]" />
+                          Criar card no board
+                        </button>
+                      ) : null}
                     </article>
                   );
                 })}

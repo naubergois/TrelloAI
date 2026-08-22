@@ -16,8 +16,15 @@ import { Plus } from "lucide-react";
 import { useBoardStore } from "@/lib/store";
 import { ListColumn } from "@/components/ListColumn";
 import { CardItem } from "@/components/CardItem";
+import type { BoardCardFilter } from "@/lib/board-filters";
 
-export function BoardCanvas({ boardId }: { boardId: string }) {
+export function BoardCanvas({
+  boardId,
+  filter,
+}: {
+  boardId: string;
+  filter: BoardCardFilter;
+}) {
   const board = useBoardStore((s) => s.boards[boardId]);
   const lists = useBoardStore((s) => s.lists);
   const cards = useBoardStore((s) => s.cards);
@@ -106,7 +113,7 @@ export function BoardCanvas({ boardId }: { boardId: string }) {
               className="anim-rise flex h-full shrink-0"
               style={{ animationDelay: `${index * 60}ms` }}
             >
-              <ListColumn listId={list.id} />
+              <ListColumn listId={list.id} filter={filter} />
             </div>
           ))}
 

@@ -6,8 +6,18 @@ import { useDroppable } from "@dnd-kit/core";
 import { Plus } from "lucide-react";
 import { useBoardStore } from "@/lib/store";
 import { SortableCard } from "@/components/SortableCard";
+import {
+  cardMatchesFilter,
+  type BoardCardFilter,
+} from "@/lib/board-filters";
 
-export function ListColumn({ listId }: { listId: string }) {
+export function ListColumn({
+  listId,
+  filter,
+}: {
+  listId: string;
+  filter: BoardCardFilter;
+}) {
   const list = useBoardStore((s) => s.lists[listId]);
   const cards = useBoardStore((s) => s.cards);
   const addCard = useBoardStore((s) => s.addCard);
@@ -16,10 +26,15 @@ export function ListColumn({ listId }: { listId: string }) {
 
   const { setNodeRef, isOver } = useDroppable({ id: listId });
 
-  const cardItems = useMemo(
-    () => (list ? list.cardIds.map((id) => cards[id]).filter(Boolean) : []),
-    [list, cards],
-  );
+  const cardItems = useMemo(() => {
+    if (!list) return [];
+    return list.cardIds
+      .map((id) => cards[id])
+      .filter(Boolean)
+      .filter((card) => cardMatchesFilter(card, filter));
+  }, [list, cards, filter]);
+
+  const visibleIds = useMemo(() => cardItems.map((c) => c.id), [cardItems]);
 
   if (!list) return null;
 
@@ -42,6 +57,9 @@ export function ListColumn({ listId }: { listId: string }) {
         />
         <span className="rounded-md bg-white/5 px-2 py-0.5 text-xs text-[var(--muted)]">
           {cardItems.length}
+          {cardItems.length !== list.cardIds.length
+            ? `/${list.cardIds.length}`
+            : ""}
         </span>
       </header>
 
@@ -49,11 +67,16 @@ export function ListColumn({ listId }: { listId: string }) {
         className="board-scroll flex min-h-0 flex-1 flex-col overflow-y-auto p-2.5 sm:p-3"
         style={{ gap: "var(--board-gap, 0.75rem)" }}
       >
-        <SortableContext items={list.cardIds} strategy={verticalListSortingStrategy}>
+        <SortableContext items={visibleIds} strategy={verticalListSortingStrategy}>
           {cardItems.map((card) => (
             <SortableCard key={card.id} card={card} />
           ))}
         </SortableContext>
+        {cardItems.length === 0 ? (
+          <p className="px-1 py-4 text-center text-xs text-[var(--muted)]">
+            Nenhum card neste filtro
+          </p>
+        ) : null}
       </div>
 
       <form
