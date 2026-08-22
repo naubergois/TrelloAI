@@ -11,6 +11,7 @@ import type {
 } from "./types";
 import { ASESI_BOARD_ID, ASESI_LIST_IDS, ASESI_TEAM_ID } from "./constants";
 import { calendarDayKey, shiftCalendarDay } from "./calendar-report";
+import { withRequirementPrompts } from "./requirement-prompts";
 
 /** Seed do board ASESI (id estável para convites e sync). */
 export function createAsesiBoardSeed(owner?: {
@@ -227,6 +228,10 @@ export function createAsesiBoardSeed(owner?: {
       updatedAt: now,
     },
   };
+
+  for (const [id, req] of Object.entries(requirements)) {
+    requirements[id] = withRequirementPrompts(req, "ASESI — Gestão de Projetos");
+  }
 
   const evDaily = nanoid();
   const evReview = nanoid();

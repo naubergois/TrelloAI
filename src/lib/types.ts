@@ -50,6 +50,15 @@ export interface Requirement {
   priority: "low" | "medium" | "high";
   ownerId: string | null;
   dueDate: string | null;
+  /** Prompt para implementação spec-based / SDD */
+  specPrompt?: string;
+  /** Prompt para plano de testes (Gherkin + automação) */
+  testPrompt?: string;
+  /** Payload JSON para ferramentas MCP (software_planning, handoff, etc.) */
+  mcpPayload?: string;
+  /** Objetivo compacto para colaboração A2A */
+  a2aObjective?: string;
+  promptsGeneratedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

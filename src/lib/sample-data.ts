@@ -13,6 +13,7 @@ import type {
 } from "./types";
 import { defaultManagerQuestions } from "./manager";
 import { calendarDayKey, shiftCalendarDay } from "./calendar-report";
+import { withRequirementPrompts } from "./requirement-prompts";
 
 function slugify(input: string) {
   return input
@@ -241,6 +242,10 @@ export function createSampleWorkspace() {
       updatedAt: now,
     },
   };
+
+  for (const [id, req] of Object.entries(requirements)) {
+    requirements[id] = withRequirementPrompts(req, "TrelloAI — MVP");
+  }
 
   // link first card to REQ-01 after creation loop — patch below
   for (const [id, card] of Object.entries(cards)) {

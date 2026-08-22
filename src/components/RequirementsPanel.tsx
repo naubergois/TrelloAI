@@ -1,13 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
+  Bot,
   ClipboardList,
+  Copy,
+  FileCode2,
+  FlaskConical,
   LayoutList,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
+  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -30,8 +36,128 @@ const STATUSES: RequirementStatus[] = [
 ];
 
 type StatusFilter = "all" | RequirementStatus;
-
 type EditorMode = "create" | "edit" | null;
+type PromptTab = "spec" | "test" | "mcp" | "a2a";
+
+async function copyText(text: string) {
+  await navigator.clipboard.writeText(text);
+}
+
+function PromptViewer({
+  req,
+  onClose,
+  onRegenerate,
+}: {
+  req: Requirement;
+  onClose: () => void;
+  onRegenerate: () => void;
+}) {
+  const { toast } = useToast();
+  const [tab, setTab] = useState<PromptTab>("spec");
+
+  const tabs: { id: PromptTab; label: string; icon: ReactNode }[] = [
+    { id: "spec", label: "Spec-based", icon: <FileCode2 className="h-3.5 w-3.5" /> },
+    { id: "test", label: "Testes", icon: <FlaskConical className="h-3.5 w-3.5" /> },
+    { id: "mcp", label: "MCP", icon: <Sparkles className="h-3.5 w-3.5" /> },
+    { id: "a2a", label: "A2A", icon: <Bot className="h-3.5 w-3.5" /> },
+  ];
+
+  const content =
+    tab === "spec"
+      ? req.specPrompt || ""
+      : tab === "test"
+        ? req.testPrompt || ""
+        : tab === "mcp"
+          ? req.mcpPayload || ""
+          : req.a2aObjective || "";
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Prompts ${req.code}`}
+      className="fixed inset-0 z-[230] flex h-[100dvh] max-h-[100dvh] w-screen max-w-[100vw] flex-col bg-[var(--ink-2)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+    >
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] bg-black/40 px-3 py-2.5 backdrop-blur-md sm:px-6 sm:py-4">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">
+            {req.code} · prompts
+          </p>
+          <h3 className="truncate font-[family-name:var(--font-display)] text-lg text-white sm:text-2xl">
+            Spec · Testes · MCP · A2A
+          </h3>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              onRegenerate();
+              toast("Prompts regenerados");
+            }}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--line)] px-2.5 py-2 text-xs text-white hover:bg-white/5 sm:text-sm"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Regenerar</span>
+          </button>
+          <button
+            type="button"
+            className="rounded-xl border border-[var(--line)] p-2.5 text-[var(--muted)] hover:text-white"
+            onClick={onClose}
+            aria-label="Fechar"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+      </header>
+
+      <div className="board-scroll flex shrink-0 gap-1.5 overflow-x-auto border-b border-[var(--line)] px-3 py-2 sm:px-6">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition ${
+              tab === t.id
+                ? "bg-[var(--accent)] font-semibold text-teal-950"
+                : "border border-[var(--line)] text-[var(--muted)] hover:text-white"
+            }`}
+          >
+            {t.icon}
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="board-scroll min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-6">
+        <pre className="min-h-full whitespace-pre-wrap break-words rounded-2xl border border-[var(--line)] bg-black/30 p-4 font-mono text-[11px] leading-relaxed text-white/90 sm:p-5 sm:text-xs md:text-sm">
+          {content || "Sem conteúdo — regenerar prompts."}
+        </pre>
+      </div>
+
+      <footer className="flex shrink-0 border-t border-[var(--line)] bg-black/40 px-3 py-2.5 sm:px-6 sm:py-4">
+        <button
+          type="button"
+          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-teal-950"
+          onClick={async () => {
+            if (!content) return;
+            await copyText(content);
+            toast(
+              tab === "mcp"
+                ? "Payload MCP copiado"
+                : tab === "a2a"
+                  ? "Objetivo A2A copiado"
+                  : "Prompt copiado",
+            );
+          }}
+        >
+          <Copy className="h-4 w-4" />
+          Copiar {tabs.find((t) => t.id === tab)?.label}
+        </button>
+      </footer>
+    </div>,
+    document.body,
+  );
+}
 
 export function RequirementsPanel({
   boardId,
@@ -47,6 +173,15 @@ export function RequirementsPanel({
   const createRequirement = useBoardStore((s) => s.createRequirement);
   const updateRequirement = useBoardStore((s) => s.updateRequirement);
   const deleteRequirement = useBoardStore((s) => s.deleteRequirement);
+  const regenerateRequirementPrompts = useBoardStore(
+    (s) => s.regenerateRequirementPrompts,
+  );
+  const regenerateBoardRequirementPrompts = useBoardStore(
+    (s) => s.regenerateBoardRequirementPrompts,
+  );
+  const ensureBoardRequirementPrompts = useBoardStore(
+    (s) => s.ensureBoardRequirementPrompts,
+  );
   const addCard = useBoardStore((s) => s.addCard);
   const { toast } = useToast();
 
@@ -54,6 +189,7 @@ export function RequirementsPanel({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [query, setQuery] = useState("");
   const [justCreated, setJustCreated] = useState<string | null>(null);
+  const [promptsReqId, setPromptsReqId] = useState<string | null>(null);
 
   const [editorMode, setEditorMode] = useState<EditorMode>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -72,11 +208,16 @@ export function RequirementsPanel({
   }, []);
 
   useEffect(() => {
+    ensureBoardRequirementPrompts(boardId);
+  }, [boardId, ensureBoardRequirementPrompts]);
+
+  useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (editorMode) closeEditor();
+      if (promptsReqId) setPromptsReqId(null);
+      else if (editorMode) closeEditor();
       else onClose();
     };
     window.addEventListener("keydown", onKey);
@@ -84,7 +225,7 @@ export function RequirementsPanel({
       document.body.style.overflow = prev;
       window.removeEventListener("keydown", onKey);
     };
-  }, [onClose, editorMode]);
+  }, [onClose, editorMode, promptsReqId]);
 
   useEffect(() => {
     if (!editorMode) return;
@@ -132,6 +273,7 @@ export function RequirementsPanel({
   }, [list, statusFilter, query]);
 
   const editingReq = editingId ? requirements?.[editingId] : null;
+  const promptsReq = promptsReqId ? requirements?.[promptsReqId] : null;
 
   const linkedCount = (requirementId: string) =>
     Object.values(cards).filter((c) => c.requirementId === requirementId).length;
@@ -182,7 +324,7 @@ export function RequirementsPanel({
         status: draftStatus,
       });
       setJustCreated(id);
-      toast("Requisito cadastrado");
+      toast("Requisito cadastrado com prompts Spec/Testes/MCP/A2A");
       window.setTimeout(() => setJustCreated(null), 1800);
       closeEditor();
       return;
@@ -197,7 +339,7 @@ export function RequirementsPanel({
         ownerId: draftOwnerId || null,
         dueDate: draftDueDate || null,
       });
-      toast("Requisito salvo");
+      toast("Requisito salvo (prompts atualizados)");
       closeEditor();
     }
   };
@@ -214,6 +356,9 @@ export function RequirementsPanel({
       dueDate: req.dueDate ?? null,
       assigneeId: req.ownerId ?? null,
       requirementId: req.id,
+      acceptanceCriteria: req.testPrompt
+        ? `Ver plano de testes em ${req.code}`
+        : "",
     });
     toast(`Card criado a partir de ${req.code}`);
   };
@@ -254,10 +399,26 @@ export function RequirementsPanel({
             Requisitos
           </h2>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="hidden rounded-full border border-[var(--line)] bg-black/20 px-3 py-1 text-xs text-[var(--muted)] sm:inline">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <span className="hidden rounded-full border border-[var(--line)] bg-black/20 px-3 py-1 text-xs text-[var(--muted)] lg:inline">
             {list.length} no total
           </span>
+          <button
+            type="button"
+            onClick={() => {
+              const n = regenerateBoardRequirementPrompts(boardId);
+              toast(
+                n
+                  ? `${n} requisito(s) com prompts Spec/Testes/MCP/A2A`
+                  : "Nenhum requisito neste board",
+              );
+            }}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--line)] px-2.5 py-2 text-xs text-white hover:bg-white/5 sm:text-sm"
+            title="Gerar/regenerar prompts de todos"
+          >
+            <Sparkles className="h-4 w-4 text-[var(--accent)]" />
+            <span className="hidden sm:inline">Prompts todos</span>
+          </button>
           <button
             type="button"
             onClick={openCreate}
@@ -279,6 +440,14 @@ export function RequirementsPanel({
 
       <div className="board-scroll relative z-10 min-h-0 flex-1 overflow-y-auto">
         <div className="anim-sheet mx-auto w-full max-w-7xl space-y-4 px-4 py-5 sm:px-6 sm:py-8 lg:px-10">
+          <p className="text-xs text-[var(--muted)] sm:text-sm">
+            Cada requisito gera automaticamente prompts de{" "}
+            <span className="text-white/80">spec-based</span>,{" "}
+            <span className="text-white/80">testes</span>, payload{" "}
+            <span className="text-white/80">MCP</span> e objetivo{" "}
+            <span className="text-white/80">A2A</span>.
+          </p>
+
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
@@ -319,7 +488,7 @@ export function RequirementsPanel({
               </p>
               <p className="mt-1 text-sm text-[var(--muted)]">
                 {list.length === 0
-                  ? "Abra o editor em tela cheia para cadastrar o primeiro."
+                  ? "Cadastre um requisito para gerar prompts Spec/Testes/MCP/A2A."
                   : "Ajuste a busca ou o status."}
               </p>
               {list.length === 0 ? (
@@ -337,6 +506,9 @@ export function RequirementsPanel({
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {filtered.map((req, index) => {
                 const owner = req.ownerId ? members[req.ownerId] : null;
+                const hasPrompts = Boolean(
+                  req.specPrompt && req.testPrompt && req.mcpPayload,
+                );
                 return (
                   <article
                     key={req.id}
@@ -360,6 +532,11 @@ export function RequirementsPanel({
                           >
                             {requirementStatusLabel[req.status]}
                           </span>
+                          {hasPrompts ? (
+                            <span className="rounded-md bg-[var(--accent)]/15 px-1.5 py-0.5 text-[10px] font-medium text-[var(--accent)] ring-1 ring-[var(--accent)]/30">
+                              Spec·Test·MCP·A2A
+                            </span>
+                          ) : null}
                         </div>
                         <h3 className="text-base font-medium leading-snug text-white">
                           {req.title}
@@ -440,11 +617,11 @@ export function RequirementsPanel({
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       <button
                         type="button"
-                        onClick={() => openEdit(req)}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] px-3 py-2.5 text-xs font-medium text-white transition hover:border-[var(--accent)]/50 hover:bg-white/5"
+                        onClick={() => setPromptsReqId(req.id)}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-3 py-2.5 text-xs font-medium text-white transition hover:bg-[var(--accent)]/20"
                       >
-                        <Pencil className="h-3.5 w-3.5 text-[var(--accent)]" />
-                        Editar
+                        <Sparkles className="h-3.5 w-3.5 text-[var(--accent)]" />
+                        Prompts
                       </button>
                       <button
                         type="button"
@@ -580,6 +757,14 @@ export function RequirementsPanel({
                       />
                     </label>
                   </div>
+
+                  <p className="shrink-0 rounded-2xl border border-[var(--line)] bg-black/20 px-4 py-3 text-xs text-[var(--muted)] sm:text-sm">
+                    Ao salvar, este requisito gera/atualiza prompts de
+                    implementação <strong className="text-white/80">spec-based</strong>,{" "}
+                    <strong className="text-white/80">testes</strong>, payload{" "}
+                    <strong className="text-white/80">MCP</strong> e objetivo{" "}
+                    <strong className="text-white/80">A2A</strong>.
+                  </p>
                 </div>
               </div>
 
@@ -606,6 +791,14 @@ export function RequirementsPanel({
             document.body,
           )
         : null}
+
+      {promptsReq ? (
+        <PromptViewer
+          req={promptsReq}
+          onClose={() => setPromptsReqId(null)}
+          onRegenerate={() => regenerateRequirementPrompts(promptsReq.id)}
+        />
+      ) : null}
     </div>,
     document.body,
   );

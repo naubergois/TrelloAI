@@ -28,6 +28,10 @@ import { ASESI_BOARD_ID } from "./constants";
 import type { BoardSnapshot } from "./board-snapshot";
 import type { AiAction } from "./types";
 import {
+  buildRequirementPrompts,
+  withRequirementPrompts,
+} from "./requirement-prompts";
+import {
   DEFAULT_BACKGROUND_ID,
   DEFAULT_DESIGN_ID,
   ensureBoardAppearance,
@@ -141,6 +145,9 @@ interface BoardState {
   }) => string;
   updateRequirement: (requirementId: string, patch: Partial<Requirement>) => void;
   deleteRequirement: (requirementId: string) => void;
+  regenerateRequirementPrompts: (requirementId: string) => void;
+  regenerateBoardRequirementPrompts: (boardId: string) => number;
+  ensureBoardRequirementPrompts: (boardId: string) => number;
   createCalendarEvent: (input: {
     boardId: string;
     title: string;
@@ -748,19 +755,25 @@ export const useBoardStore = create<BoardState>()(
         const code =
           input.code?.trim() ||
           `REQ-${String(boardReqs.length + 1).padStart(2, "0")}`;
-        const requirement: Requirement = {
+        const boardTitle = get().boards[input.boardId]?.title;
+        const base = {
           id,
           boardId: input.boardId,
           code,
           title: input.title.trim() || "Novo requisito",
           description: input.description?.trim() || "",
-          status: input.status ?? "draft",
-          priority: input.priority ?? "medium",
+          status: input.status ?? ("draft" as RequirementStatus),
+          priority: input.priority ?? ("medium" as Requirement["priority"]),
           ownerId: input.ownerId ?? null,
           dueDate: input.dueDate ?? null,
           createdAt: now,
           updatedAt: now,
         };
+        const prompts = buildRequirementPrompts({
+          ...base,
+          boardTitle,
+        });
+        const requirement: Requirement = { ...base, ...prompts };
         set((state) => ({
           requirements: { ...(state.requirements || {}), [id]: requirement },
         }));
@@ -771,19 +784,118 @@ export const useBoardStore = create<BoardState>()(
         set((state) => {
           const current = state.requirements?.[requirementId];
           if (!current) return state;
+          const next: Requirement = {
+            ...current,
+            ...patch,
+            id: current.id,
+            boardId: current.boardId,
+            updatedAt: new Date().toISOString(),
+          };
+          const contentChanged =
+            patch.title !== undefined ||
+            patch.description !== undefined ||
+            patch.priority !== undefined ||
+            patch.status !== undefined ||
+            patch.code !== undefined;
+          const boardTitle = state.boards[next.boardId]?.title;
+          const withPrompts =
+            contentChanged || !next.specPrompt
+              ? {
+                  ...next,
+                  ...buildRequirementPrompts({
+                    code: next.code,
+                    title: next.title,
+                    description: next.description,
+                    priority: next.priority,
+                    status: next.status,
+                    boardTitle,
+                  }),
+                }
+              : next;
+          return {
+            requirements: {
+              ...state.requirements,
+              [requirementId]: withPrompts,
+            },
+          };
+        });
+      },
+
+      regenerateRequirementPrompts: (requirementId) => {
+        set((state) => {
+          const current = state.requirements?.[requirementId];
+          if (!current) return state;
+          const boardTitle = state.boards[current.boardId]?.title;
+          const prompts = buildRequirementPrompts({
+            code: current.code,
+            title: current.title,
+            description: current.description,
+            priority: current.priority,
+            status: current.status,
+            boardTitle,
+          });
           return {
             requirements: {
               ...state.requirements,
               [requirementId]: {
                 ...current,
-                ...patch,
-                id: current.id,
-                boardId: current.boardId,
+                ...prompts,
                 updatedAt: new Date().toISOString(),
               },
             },
           };
         });
+      },
+
+      regenerateBoardRequirementPrompts: (boardId) => {
+        let count = 0;
+        set((state) => {
+          const boardTitle = state.boards[boardId]?.title;
+          const next = { ...(state.requirements || {}) };
+          for (const [id, req] of Object.entries(next)) {
+            if (req.boardId !== boardId) continue;
+            next[id] = {
+              ...req,
+              ...buildRequirementPrompts({
+                code: req.code,
+                title: req.title,
+                description: req.description,
+                priority: req.priority,
+                status: req.status,
+                boardTitle,
+              }),
+              updatedAt: new Date().toISOString(),
+            };
+            count += 1;
+          }
+          return { requirements: next };
+        });
+        return count;
+      },
+
+      ensureBoardRequirementPrompts: (boardId) => {
+        let count = 0;
+        set((state) => {
+          const boardTitle = state.boards[boardId]?.title;
+          const next = { ...(state.requirements || {}) };
+          let changed = false;
+          for (const [id, req] of Object.entries(next)) {
+            if (req.boardId !== boardId) continue;
+            if (
+              req.specPrompt &&
+              req.testPrompt &&
+              req.mcpPayload &&
+              req.a2aObjective
+            ) {
+              continue;
+            }
+            next[id] = withRequirementPrompts(req, boardTitle);
+            count += 1;
+            changed = true;
+          }
+          return changed ? { requirements: next } : state;
+        });
+        return count;
       },
 
       deleteRequirement: (requirementId) => {
@@ -2084,6 +2196,12 @@ export const useBoardStore = create<BoardState>()(
 
         for (const [id, card] of Object.entries(state.cards || {})) {
           if (card) state.cards[id] = normalizeCard(card as Card);
+        }
+
+        for (const [id, req] of Object.entries(state.requirements || {})) {
+          if (!req) continue;
+          const boardTitle = state.boards[req.boardId]?.title;
+          state.requirements[id] = withRequirementPrompts(req, boardTitle);
         }
 
         for (const boardId of Object.keys(state.boards)) {
