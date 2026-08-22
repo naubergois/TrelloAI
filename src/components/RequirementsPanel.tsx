@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ClipboardList,
@@ -31,6 +31,8 @@ const STATUSES: RequirementStatus[] = [
 
 type StatusFilter = "all" | RequirementStatus;
 
+type EditorMode = "create" | "edit" | null;
+
 export function RequirementsPanel({
   boardId,
   onClose,
@@ -49,17 +51,21 @@ export function RequirementsPanel({
   const { toast } = useToast();
 
   const [mounted, setMounted] = useState(false);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
-  const [dueDate, setDueDate] = useState("");
-  const [ownerId, setOwnerId] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [query, setQuery] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editDescription, setEditDescription] = useState("");
   const [justCreated, setJustCreated] = useState<string | null>(null);
+
+  const [editorMode, setEditorMode] = useState<EditorMode>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftDescription, setDraftDescription] = useState("");
+  const [draftPriority, setDraftPriority] = useState<"low" | "medium" | "high">(
+    "medium",
+  );
+  const [draftStatus, setDraftStatus] = useState<RequirementStatus>("draft");
+  const [draftOwnerId, setDraftOwnerId] = useState("");
+  const [draftDueDate, setDraftDueDate] = useState("");
+  const titleRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -69,17 +75,22 @@ export function RequirementsPanel({
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (editingId) setEditingId(null);
-        else onClose();
-      }
+      if (e.key !== "Escape") return;
+      if (editorMode) closeEditor();
+      else onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = prev;
       window.removeEventListener("keydown", onKey);
     };
-  }, [onClose, editingId]);
+  }, [onClose, editorMode]);
+
+  useEffect(() => {
+    if (!editorMode) return;
+    const t = window.setTimeout(() => titleRef.current?.focus(), 40);
+    return () => window.clearTimeout(t);
+  }, [editorMode, editingId]);
 
   const boardMembers = useMemo(() => {
     if (!board) return [];
@@ -120,43 +131,75 @@ export function RequirementsPanel({
     });
   }, [list, statusFilter, query]);
 
+  const editingReq = editingId ? requirements?.[editingId] : null;
+
   const linkedCount = (requirementId: string) =>
     Object.values(cards).filter((c) => c.requirementId === requirementId).length;
 
-  const onCreate = (e: FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return;
-    const id = createRequirement({
-      boardId,
-      title,
-      description,
-      priority,
-      ownerId: ownerId || null,
-      dueDate: dueDate || null,
-    });
-    setTitle("");
-    setDescription("");
-    setDueDate("");
-    setOwnerId("");
-    setPriority("medium");
-    setJustCreated(id);
-    toast(`Requisito cadastrado`);
-    window.setTimeout(() => setJustCreated(null), 1800);
+  const resetDraft = () => {
+    setDraftTitle("");
+    setDraftDescription("");
+    setDraftPriority("medium");
+    setDraftStatus("draft");
+    setDraftOwnerId("");
+    setDraftDueDate("");
   };
 
-  const startEdit = (req: Requirement) => {
-    setEditingId(req.id);
-    setEditTitle(req.title);
-    setEditDescription(req.description);
-  };
-
-  const saveEdit = () => {
-    if (!editingId) return;
-    updateRequirement(editingId, {
-      title: editTitle.trim() || "Requisito",
-      description: editDescription,
-    });
+  const closeEditor = () => {
+    setEditorMode(null);
     setEditingId(null);
+    resetDraft();
+  };
+
+  const openCreate = () => {
+    resetDraft();
+    setEditingId(null);
+    setEditorMode("create");
+  };
+
+  const openEdit = (req: Requirement) => {
+    setEditingId(req.id);
+    setDraftTitle(req.title);
+    setDraftDescription(req.description);
+    setDraftPriority(req.priority);
+    setDraftStatus(req.status);
+    setDraftOwnerId(req.ownerId ?? "");
+    setDraftDueDate(req.dueDate ?? "");
+    setEditorMode("edit");
+  };
+
+  const saveEditor = () => {
+    if (!draftTitle.trim()) return;
+
+    if (editorMode === "create") {
+      const id = createRequirement({
+        boardId,
+        title: draftTitle.trim(),
+        description: draftDescription,
+        priority: draftPriority,
+        ownerId: draftOwnerId || null,
+        dueDate: draftDueDate || null,
+        status: draftStatus,
+      });
+      setJustCreated(id);
+      toast("Requisito cadastrado");
+      window.setTimeout(() => setJustCreated(null), 1800);
+      closeEditor();
+      return;
+    }
+
+    if (editorMode === "edit" && editingId) {
+      updateRequirement(editingId, {
+        title: draftTitle.trim() || "Requisito",
+        description: draftDescription,
+        priority: draftPriority,
+        status: draftStatus,
+        ownerId: draftOwnerId || null,
+        dueDate: draftDueDate || null,
+      });
+      toast("Requisito salvo");
+      closeEditor();
+    }
   };
 
   const createCardFromRequirement = (req: Requirement) => {
@@ -179,8 +222,13 @@ export function RequirementsPanel({
 
   const filters: { id: StatusFilter; label: string }[] = [
     { id: "all", label: "Todos" },
-    ...STATUSES.map((s) => ({ id: s as StatusFilter, label: requirementStatusLabel[s] })),
+    ...STATUSES.map((s) => ({
+      id: s as StatusFilter,
+      label: requirementStatusLabel[s],
+    })),
   ];
+
+  const editorOpen = editorMode !== null;
 
   return createPortal(
     <div
@@ -212,6 +260,14 @@ export function RequirementsPanel({
           </span>
           <button
             type="button"
+            onClick={openCreate}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-teal-950 transition hover:brightness-110"
+          >
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">Novo requisito</span>
+          </button>
+          <button
+            type="button"
             onClick={onClose}
             className="shrink-0 rounded-xl border border-[var(--line)] bg-black/20 p-2.5 text-[var(--muted)] transition hover:border-white/20 hover:text-white"
             aria-label="Fechar"
@@ -222,285 +278,334 @@ export function RequirementsPanel({
       </header>
 
       <div className="board-scroll relative z-10 min-h-0 flex-1 overflow-y-auto">
-        <div className="anim-sheet mx-auto grid w-full max-w-6xl gap-5 px-4 py-5 sm:gap-6 sm:px-6 sm:py-8 lg:grid-cols-[minmax(0,21rem)_minmax(0,1fr)] lg:px-10">
-          <form
-            onSubmit={onCreate}
-            className="h-fit space-y-3 rounded-3xl border border-[var(--line)] bg-[var(--panel-strong)] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.25)] sm:p-5 lg:sticky lg:top-4"
-          >
-            <div>
-              <p className="font-[family-name:var(--font-display)] text-lg text-white">
-                Novo requisito
-              </p>
-              <p className="mt-0.5 text-xs text-[var(--muted)]">
-                Código gerado automaticamente (REQ-01…)
-              </p>
-            </div>
-            <label className="block text-xs text-[var(--muted)]">
-              Título
+        <div className="anim-sheet mx-auto w-full max-w-7xl space-y-4 px-4 py-5 sm:px-6 sm:py-8 lg:px-10">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
               <input
-                className="mt-1.5 w-full rounded-2xl border border-[var(--line)] bg-[var(--ink)] px-4 py-3 text-sm text-white outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Ex.: Autenticação institucional"
-                required
-                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar por código, título…"
+                className="w-full rounded-2xl border border-[var(--line)] bg-black/25 py-2.5 pl-10 pr-3 text-sm text-white outline-none focus:border-[var(--accent)]"
               />
-            </label>
-            <label className="block text-xs text-[var(--muted)]">
-              Descrição
-              <textarea
-                className="mt-1.5 min-h-28 w-full resize-y rounded-2xl border border-[var(--line)] bg-[var(--ink)] px-4 py-3 text-sm leading-relaxed text-white outline-none transition focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/20"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Escopo, regra de negócio, critério de aceite…"
-              />
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block text-xs text-[var(--muted)]">
-                Prioridade
-                <select
-                  className="mt-1.5 w-full rounded-2xl border border-[var(--line)] bg-[var(--ink)] px-3 py-3 text-sm text-white outline-none focus:border-[var(--accent)]"
-                  value={priority}
-                  onChange={(e) =>
-                    setPriority(e.target.value as "low" | "medium" | "high")
-                  }
-                >
-                  <option value="high">Alta</option>
-                  <option value="medium">Média</option>
-                  <option value="low">Baixa</option>
-                </select>
-              </label>
-              <label className="block text-xs text-[var(--muted)]">
-                Prazo
-                <input
-                  type="date"
-                  className="mt-1.5 w-full rounded-2xl border border-[var(--line)] bg-[var(--ink)] px-3 py-3 text-sm text-white outline-none focus:border-[var(--accent)]"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                />
-              </label>
             </div>
-            <label className="block text-xs text-[var(--muted)]">
-              Responsável
-              <select
-                className="mt-1.5 w-full rounded-2xl border border-[var(--line)] bg-[var(--ink)] px-3 py-3 text-sm text-white outline-none focus:border-[var(--accent)]"
-                value={ownerId}
-                onChange={(e) => setOwnerId(e.target.value)}
-              >
-                <option value="">Sem responsável</option>
-                {boardMembers.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="submit"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[var(--accent)] px-4 py-3.5 text-sm font-semibold text-teal-950 transition hover:brightness-110 active:scale-[0.99]"
-            >
-              <Plus className="h-4 w-4" />
-              Cadastrar
-            </button>
-          </form>
-
-          <div className="min-w-0 space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="relative min-w-0 flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Buscar por código, título…"
-                  className="w-full rounded-2xl border border-[var(--line)] bg-black/25 py-2.5 pl-10 pr-3 text-sm text-white outline-none focus:border-[var(--accent)]"
-                />
-              </div>
-            </div>
-
-            <div className="board-scroll -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
-              {filters.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => setStatusFilter(f.id)}
-                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs transition ${
-                    statusFilter === f.id
-                      ? "bg-[var(--accent)] font-semibold text-teal-950"
-                      : "border border-[var(--line)] bg-black/20 text-[var(--muted)] hover:text-white"
-                  }`}
-                >
-                  {f.label}
-                  <span className="ml-1.5 opacity-70">{counts[f.id]}</span>
-                </button>
-              ))}
-            </div>
-
-            {filtered.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-[var(--line)] bg-black/15 px-6 py-16 text-center">
-                <ClipboardList className="mx-auto mb-3 h-9 w-9 text-[var(--muted)] opacity-70" />
-                <p className="text-sm text-white">
-                  {list.length === 0
-                    ? "Nenhum requisito ainda"
-                    : "Nada encontrado neste filtro"}
-                </p>
-                <p className="mt-1 text-xs text-[var(--muted)]">
-                  {list.length === 0
-                    ? "Use o formulário ao lado para cadastrar o primeiro."
-                    : "Ajuste a busca ou o status."}
-                </p>
-              </div>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {filtered.map((req, index) => {
-                  const owner = req.ownerId ? members[req.ownerId] : null;
-                  const isEditing = editingId === req.id;
-                  return (
-                    <article
-                      key={req.id}
-                      className={`flex flex-col rounded-3xl border bg-[var(--panel-strong)] p-4 transition ${
-                        justCreated === req.id
-                          ? "border-[var(--accent)] ring-2 ring-[var(--accent)]/30"
-                          : "border-[var(--line)] hover:border-[var(--accent)]/35"
-                      }`}
-                      style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
-                    >
-                      <div className="mb-2 flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                            <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--accent)]">
-                              {req.code}
-                            </span>
-                            <span
-                              className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ${requirementStatusStyles[req.status]}`}
-                            >
-                              {requirementStatusLabel[req.status]}
-                            </span>
-                          </div>
-                          {isEditing ? (
-                            <input
-                              className="w-full rounded-xl border border-[var(--accent)]/50 bg-[var(--ink)] px-2.5 py-1.5 text-sm text-white outline-none"
-                              value={editTitle}
-                              onChange={(e) => setEditTitle(e.target.value)}
-                              autoFocus
-                            />
-                          ) : (
-                            <h3 className="text-base font-medium leading-snug text-white">
-                              {req.title}
-                            </h3>
-                          )}
-                        </div>
-                        <div className="flex shrink-0 gap-0.5">
-                          <button
-                            type="button"
-                            className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-white/5 hover:text-white"
-                            onClick={() =>
-                              isEditing ? setEditingId(null) : startEdit(req)
-                            }
-                            aria-label={isEditing ? "Cancelar edição" : "Editar"}
-                          >
-                            {isEditing ? (
-                              <X className="h-3.5 w-3.5" />
-                            ) : (
-                              <Pencil className="h-3.5 w-3.5" />
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-white/5 hover:text-rose-300"
-                            onClick={() => {
-                              if (confirm(`Excluir ${req.code}?`)) {
-                                deleteRequirement(req.id);
-                              }
-                            }}
-                            aria-label="Excluir requisito"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {isEditing ? (
-                        <textarea
-                          className="mb-3 min-h-20 w-full rounded-xl border border-[var(--line)] bg-[var(--ink)] px-2.5 py-2 text-sm text-white outline-none focus:border-[var(--accent)]"
-                          value={editDescription}
-                          onChange={(e) => setEditDescription(e.target.value)}
-                        />
-                      ) : req.description ? (
-                        <p className="mb-3 line-clamp-4 flex-1 text-sm leading-relaxed text-[var(--muted)]">
-                          {req.description}
-                        </p>
-                      ) : (
-                        <div className="mb-3 flex-1" />
-                      )}
-
-                      {isEditing ? (
-                        <button
-                          type="button"
-                          onClick={saveEdit}
-                          className="mb-3 rounded-xl bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-teal-950"
-                        >
-                          Salvar alterações
-                        </button>
-                      ) : null}
-
-                      <div className="mb-3 flex flex-wrap gap-1.5">
-                        <span
-                          className={`rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 ${priorityStyles[req.priority]}`}
-                        >
-                          {priorityLabel[req.priority]}
-                        </span>
-                        <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-[var(--muted)] ring-1 ring-white/10">
-                          {linkedCount(req.id)} card(s)
-                        </span>
-                        {owner ? (
-                          <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-white/80 ring-1 ring-white/10">
-                            {owner.name.split(" ")[0]}
-                          </span>
-                        ) : null}
-                        {req.dueDate ? (
-                          <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-[var(--muted)] ring-1 ring-white/10">
-                            {req.dueDate.split("-").reverse().join("/")}
-                          </span>
-                        ) : null}
-                      </div>
-
-                      <label className="block text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">
-                        Status
-                        <select
-                          className="mt-1.5 w-full rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)]"
-                          value={req.status}
-                          onChange={(e) =>
-                            updateRequirement(req.id, {
-                              status: e.target.value as RequirementStatus,
-                            })
-                          }
-                        >
-                          {STATUSES.map((s) => (
-                            <option key={s} value={s}>
-                              {requirementStatusLabel[s]}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-
-                      {!isEditing ? (
-                        <button
-                          type="button"
-                          onClick={() => createCardFromRequirement(req)}
-                          className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] px-3 py-2.5 text-xs font-medium text-white transition hover:border-[var(--accent)]/50 hover:bg-white/5"
-                        >
-                          <LayoutList className="h-3.5 w-3.5 text-[var(--accent)]" />
-                          Criar card no board
-                        </button>
-                      ) : null}
-                    </article>
-                  );
-                })}
-              </div>
-            )}
           </div>
+
+          <div className="board-scroll -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+            {filters.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setStatusFilter(f.id)}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-xs transition ${
+                  statusFilter === f.id
+                    ? "bg-[var(--accent)] font-semibold text-teal-950"
+                    : "border border-[var(--line)] bg-black/20 text-[var(--muted)] hover:text-white"
+                }`}
+              >
+                {f.label}
+                <span className="ml-1.5 opacity-70">{counts[f.id]}</span>
+              </button>
+            ))}
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-[var(--line)] bg-black/15 px-6 py-20 text-center">
+              <ClipboardList className="mx-auto mb-3 h-10 w-10 text-[var(--muted)] opacity-70" />
+              <p className="text-base text-white">
+                {list.length === 0
+                  ? "Nenhum requisito ainda"
+                  : "Nada encontrado neste filtro"}
+              </p>
+              <p className="mt-1 text-sm text-[var(--muted)]">
+                {list.length === 0
+                  ? "Abra o editor em tela cheia para cadastrar o primeiro."
+                  : "Ajuste a busca ou o status."}
+              </p>
+              {list.length === 0 ? (
+                <button
+                  type="button"
+                  onClick={openCreate}
+                  className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-teal-950"
+                >
+                  <Plus className="h-4 w-4" />
+                  Novo requisito
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {filtered.map((req, index) => {
+                const owner = req.ownerId ? members[req.ownerId] : null;
+                return (
+                  <article
+                    key={req.id}
+                    className={`flex flex-col rounded-3xl border bg-[var(--panel-strong)] p-4 transition ${
+                      justCreated === req.id
+                        ? "border-[var(--accent)] ring-2 ring-[var(--accent)]/30"
+                        : "border-[var(--line)] hover:border-[var(--accent)]/35"
+                    }`}
+                    style={{
+                      animationDelay: `${Math.min(index, 8) * 40}ms`,
+                    }}
+                  >
+                    <div className="mb-2 flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--accent)]">
+                            {req.code}
+                          </span>
+                          <span
+                            className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ${requirementStatusStyles[req.status]}`}
+                          >
+                            {requirementStatusLabel[req.status]}
+                          </span>
+                        </div>
+                        <h3 className="text-base font-medium leading-snug text-white">
+                          {req.title}
+                        </h3>
+                      </div>
+                      <div className="flex shrink-0 gap-0.5">
+                        <button
+                          type="button"
+                          className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-white/5 hover:text-white"
+                          onClick={() => openEdit(req)}
+                          aria-label="Editar"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-white/5 hover:text-rose-300"
+                          onClick={() => {
+                            if (confirm(`Excluir ${req.code}?`)) {
+                              deleteRequirement(req.id);
+                            }
+                          }}
+                          aria-label="Excluir requisito"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {req.description ? (
+                      <p className="mb-3 line-clamp-4 flex-1 text-sm leading-relaxed text-[var(--muted)]">
+                        {req.description}
+                      </p>
+                    ) : (
+                      <div className="mb-3 flex-1" />
+                    )}
+
+                    <div className="mb-3 flex flex-wrap gap-1.5">
+                      <span
+                        className={`rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 ${priorityStyles[req.priority]}`}
+                      >
+                        {priorityLabel[req.priority]}
+                      </span>
+                      <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-[var(--muted)] ring-1 ring-white/10">
+                        {linkedCount(req.id)} card(s)
+                      </span>
+                      {owner ? (
+                        <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-white/80 ring-1 ring-white/10">
+                          {owner.name.split(" ")[0]}
+                        </span>
+                      ) : null}
+                      {req.dueDate ? (
+                        <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-[var(--muted)] ring-1 ring-white/10">
+                          {req.dueDate.split("-").reverse().join("/")}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <label className="block text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">
+                      Status
+                      <select
+                        className="mt-1.5 w-full rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)]"
+                        value={req.status}
+                        onChange={(e) =>
+                          updateRequirement(req.id, {
+                            status: e.target.value as RequirementStatus,
+                          })
+                        }
+                      >
+                        {STATUSES.map((s) => (
+                          <option key={s} value={s}>
+                            {requirementStatusLabel[s]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(req)}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] px-3 py-2.5 text-xs font-medium text-white transition hover:border-[var(--accent)]/50 hover:bg-white/5"
+                      >
+                        <Pencil className="h-3.5 w-3.5 text-[var(--accent)]" />
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => createCardFromRequirement(req)}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] px-3 py-2.5 text-xs font-medium text-white transition hover:border-[var(--accent)]/50 hover:bg-white/5"
+                      >
+                        <LayoutList className="h-3.5 w-3.5 text-[var(--accent)]" />
+                        Criar card
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
+
+      {editorOpen
+        ? createPortal(
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label={
+                editorMode === "create" ? "Novo requisito" : "Editar requisito"
+              }
+              className="fixed inset-0 z-[220] flex h-[100dvh] max-h-[100dvh] w-screen max-w-[100vw] flex-col bg-[var(--ink-2)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+            >
+              <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] bg-black/40 px-3 py-2.5 backdrop-blur-md sm:px-6 sm:py-4 md:px-8 lg:px-10">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+                    {editorMode === "edit" && editingReq
+                      ? editingReq.code
+                      : board?.title ?? "Board"}
+                  </p>
+                  <h3 className="truncate font-[family-name:var(--font-display)] text-lg tracking-tight text-white sm:text-2xl md:text-3xl">
+                    {editorMode === "create"
+                      ? "Novo requisito"
+                      : "Editar requisito"}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  className="shrink-0 rounded-xl border border-[var(--line)] p-2.5 text-[var(--muted)] hover:bg-white/5 hover:text-white touch-manipulation"
+                  onClick={closeEditor}
+                  aria-label="Fechar editor"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </header>
+
+              <div className="board-scroll flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">
+                <div className="flex min-h-full w-full flex-1 flex-col gap-4 px-3 py-4 sm:gap-5 sm:px-6 sm:py-6 md:px-8 lg:px-10 lg:py-8">
+                  <label className="block shrink-0 text-xs text-[var(--muted)] sm:text-sm">
+                    Título
+                    <input
+                      ref={titleRef}
+                      className="mt-1.5 w-full rounded-2xl border border-[var(--line)] bg-[var(--ink)] px-3.5 py-3 text-base text-white outline-none focus:border-[var(--accent)] sm:px-5 sm:py-4 sm:text-xl md:text-2xl"
+                      value={draftTitle}
+                      onChange={(e) => setDraftTitle(e.target.value)}
+                      placeholder="Ex.: Autenticação institucional"
+                    />
+                  </label>
+
+                  <label className="flex min-h-0 flex-1 flex-col text-xs text-[var(--muted)] sm:text-sm">
+                    Descrição / escopo
+                    <textarea
+                      className="mt-1.5 min-h-[42dvh] w-full flex-1 resize-y rounded-2xl border border-[var(--line)] bg-[var(--ink)] px-3.5 py-3 text-sm leading-relaxed text-white outline-none focus:border-[var(--accent)] sm:min-h-[48dvh] sm:px-5 sm:py-4 sm:text-base md:min-h-[52dvh] md:text-lg md:leading-8"
+                      value={draftDescription}
+                      onChange={(e) => setDraftDescription(e.target.value)}
+                      placeholder="Escopo, regra de negócio, critérios de aceite, dependências…"
+                    />
+                  </label>
+
+                  <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <label className="block text-xs text-[var(--muted)] sm:text-sm">
+                      Status
+                      <select
+                        className="mt-1.5 w-full rounded-2xl border border-[var(--line)] bg-[var(--ink)] px-3 py-3 text-sm text-white outline-none focus:border-[var(--accent)] sm:px-4 sm:text-base"
+                        value={draftStatus}
+                        onChange={(e) =>
+                          setDraftStatus(e.target.value as RequirementStatus)
+                        }
+                      >
+                        {STATUSES.map((s) => (
+                          <option key={s} value={s}>
+                            {requirementStatusLabel[s]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="block text-xs text-[var(--muted)] sm:text-sm">
+                      Prioridade
+                      <select
+                        className="mt-1.5 w-full rounded-2xl border border-[var(--line)] bg-[var(--ink)] px-3 py-3 text-sm text-white outline-none focus:border-[var(--accent)] sm:px-4 sm:text-base"
+                        value={draftPriority}
+                        onChange={(e) =>
+                          setDraftPriority(
+                            e.target.value as "low" | "medium" | "high",
+                          )
+                        }
+                      >
+                        <option value="high">Alta</option>
+                        <option value="medium">Média</option>
+                        <option value="low">Baixa</option>
+                      </select>
+                    </label>
+
+                    <label className="block text-xs text-[var(--muted)] sm:text-sm">
+                      Responsável
+                      <select
+                        className="mt-1.5 w-full rounded-2xl border border-[var(--line)] bg-[var(--ink)] px-3 py-3 text-sm text-white outline-none focus:border-[var(--accent)] sm:px-4 sm:text-base"
+                        value={draftOwnerId}
+                        onChange={(e) => setDraftOwnerId(e.target.value)}
+                      >
+                        <option value="">Sem responsável</option>
+                        {boardMembers.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="block text-xs text-[var(--muted)] sm:text-sm">
+                      Prazo
+                      <input
+                        type="date"
+                        className="mt-1.5 w-full rounded-2xl border border-[var(--line)] bg-[var(--ink)] px-3 py-3 text-sm text-white outline-none focus:border-[var(--accent)] sm:px-4 sm:text-base"
+                        value={draftDueDate}
+                        onChange={(e) => setDraftDueDate(e.target.value)}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <footer className="flex shrink-0 border-t border-[var(--line)] bg-black/40 px-3 py-2.5 backdrop-blur-md sm:px-6 sm:py-4 md:px-8 lg:px-10">
+                <div className="flex w-full gap-2 sm:gap-3">
+                  <button
+                    type="button"
+                    className="min-h-12 flex-1 touch-manipulation rounded-xl border border-[var(--line)] px-3 py-3 text-sm text-[var(--muted)] hover:text-white sm:rounded-2xl sm:text-base"
+                    onClick={closeEditor}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="min-h-12 flex-[1.4] touch-manipulation rounded-xl bg-[var(--accent)] px-3 py-3 text-sm font-semibold text-teal-950 disabled:opacity-50 sm:flex-[1.6] sm:rounded-2xl sm:text-base"
+                    onClick={saveEditor}
+                    disabled={!draftTitle.trim()}
+                  >
+                    {editorMode === "create" ? "Cadastrar" : "Salvar"}
+                  </button>
+                </div>
+              </footer>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>,
     document.body,
   );
