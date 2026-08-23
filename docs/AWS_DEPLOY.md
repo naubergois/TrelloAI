@@ -8,7 +8,7 @@ Produção via **Docker + Amazon ECR Public + AWS App Runner** (`us-east-1`).
 - Health: https://64ribmgvda.us-east-1.awsapprunner.com/api/health
 - Bypass local (sem Google): https://64ribmgvda.us-east-1.awsapprunner.com/?local=1
 
-Imagem: `public.ecr.aws/z7l7j8h4/trelloai:v16` (e `:latest`).
+Imagem: `public.ecr.aws/z7l7j8h4/trelloai:v17` (e `:latest`).
 
 ## Pré-requisitos
 
