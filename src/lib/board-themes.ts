@@ -1,4 +1,5 @@
 import type { Board } from "./types";
+import { ensureBoardHierarchy } from "./board-hierarchy";
 
 export type BoardBackgroundId =
   | "trello"
@@ -247,13 +248,13 @@ export function getDesign(id?: string | null): BoardDesign {
 }
 
 export function ensureBoardAppearance(board: Board): Board {
-  return {
+  return ensureBoardHierarchy({
     ...board,
     memberIds: board.memberIds ?? [],
     teamId: board.teamId ?? null,
     backgroundId: (board.backgroundId as BoardBackgroundId) || DEFAULT_BACKGROUND_ID,
     designId: (board.designId as BoardDesignId) || DEFAULT_DESIGN_ID,
-  };
+  });
 }
 
 export function boardThemeStyle(board: Pick<Board, "backgroundId" | "designId">) {

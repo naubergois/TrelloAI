@@ -28,6 +28,8 @@ export interface Card {
   acceptanceCriteria: string;
   /** Checklist simples */
   checklist: ChecklistItem[];
+  comments: CardComment[];
+  archived: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -36,6 +38,13 @@ export interface ChecklistItem {
   id: string;
   text: string;
   done: boolean;
+}
+
+export interface CardComment {
+  id: string;
+  authorId: string | null;
+  body: string;
+  createdAt: string;
 }
 
 export type RequirementStatus = "draft" | "approved" | "in_progress" | "done" | "rejected";
@@ -96,6 +105,10 @@ export interface Board {
   memberIds: string[];
   /** Equipe atribuída a este kanban (opcional) */
   teamId: string | null;
+  /** Nível na hierarquia: organização → unidade → time → projeto */
+  level: BoardLevel;
+  /** Board pai na hierarquia (null para organização) */
+  parentBoardId: string | null;
   /** Fundo visual do board */
   backgroundId: string;
   /** Estilo de listas/cards */
@@ -103,6 +116,8 @@ export interface Board {
   createdAt: string;
   updatedAt: string;
 }
+
+export type BoardLevel = "organization" | "unit" | "team" | "project";
 
 export type TeamRole = "owner" | "member";
 
@@ -187,7 +202,7 @@ export interface KanbanActivity {
   memberId: string;
   /** Dia do calendário YYYY-MM-DD (local) */
   date: string;
-  kind: "card_create" | "card_update" | "card_move" | "card_delete" | "standup_reply";
+  kind: "card_create" | "card_update" | "card_move" | "card_delete" | "card_archive" | "card_comment" | "standup_reply";
   cardId?: string;
   note?: string;
   createdAt: string;
@@ -206,6 +221,8 @@ export interface VirtualManager {
   name: string;
   persona: string;
   enabled: boolean;
+  /** Inicia daily automaticamente no horário (opt-in) */
+  autoStartDaily: boolean;
   /** Horário local HH:mm para a daily automática */
   dailyTime: string;
   lastStandupDate: string | null;

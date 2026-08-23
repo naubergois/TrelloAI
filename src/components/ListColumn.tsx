@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useBoardStore } from "@/lib/store";
 import { SortableCard } from "@/components/SortableCard";
 import {
@@ -22,6 +22,7 @@ export function ListColumn({
   const cards = useBoardStore((s) => s.cards);
   const addCard = useBoardStore((s) => s.addCard);
   const renameList = useBoardStore((s) => s.renameList);
+  const deleteList = useBoardStore((s) => s.deleteList);
   const [title, setTitle] = useState("");
 
   const { setNodeRef, isOver } = useDroppable({ id: listId });
@@ -61,6 +62,22 @@ export function ListColumn({
             ? `/${list.cardIds.length}`
             : ""}
         </span>
+        <button
+          type="button"
+          title="Excluir lista"
+          className="rounded-md p-1 text-white/60 hover:bg-white/15 hover:text-white"
+          onClick={() => {
+            if (
+              confirm(
+                `Excluir a lista "${list.title}" e todos os cards? Esta ação não pode ser desfeita.`,
+              )
+            ) {
+              deleteList(listId);
+            }
+          }}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
       </header>
 
       <div

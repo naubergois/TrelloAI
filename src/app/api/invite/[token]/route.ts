@@ -13,7 +13,7 @@ export async function GET(
   }
 
   const validity = isInviteValid(invite);
-  const snapshot = getSharedBoard(invite.boardId);
+  const snapshot = await getSharedBoard(invite.boardId);
 
   return NextResponse.json({
     token: invite.token,

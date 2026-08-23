@@ -58,6 +58,12 @@ body {
   overscroll-behavior: none;
 }
 
+@media (max-width: 768px) {
+  body {
+    background-attachment: scroll;
+  }
+}
+
 /* Board canvas: Trello-style lists + white cards */
 .board-theme {
   --board-list-bg: rgba(255, 255, 255, 0.14);

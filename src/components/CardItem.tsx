@@ -36,6 +36,8 @@ export function CardItem({
 }) {
   const updateCard = useBoardStore((s) => s.updateCard);
   const deleteCard = useBoardStore((s) => s.deleteCard);
+  const archiveCard = useBoardStore((s) => s.archiveCard);
+  const addCardComment = useBoardStore((s) => s.addCardComment);
   const moveCard = useBoardStore((s) => s.moveCard);
   const boards = useBoardStore((s) => s.boards);
   const lists = useBoardStore((s) => s.lists);
@@ -65,6 +67,7 @@ export function CardItem({
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState<LabelColor>("teal");
   const [newCheckText, setNewCheckText] = useState("");
+  const [newComment, setNewComment] = useState("");
   const titleRef = useRef<HTMLInputElement | null>(null);
 
   const boardId = lists[card.listId]?.boardId;
@@ -380,6 +383,61 @@ export function CardItem({
 
                   <div className="rounded-2xl border border-[var(--line)] bg-black/15 p-4 md:col-span-2">
                     <p className="mb-2 text-xs font-medium text-[var(--muted)] sm:text-sm">
+                      Comentários
+                    </p>
+                    <ul className="mb-3 space-y-2">
+                      {card.comments.map((c) => {
+                        const author = c.authorId ? members[c.authorId] : null;
+                        return (
+                          <li
+                            key={c.id}
+                            className="rounded-xl border border-[var(--line)] bg-black/20 px-3 py-2"
+                          >
+                            <p className="text-[10px] text-[var(--muted)]">
+                              {author?.name ?? "Membro"} ·{" "}
+                              {new Date(c.createdAt).toLocaleString("pt-BR")}
+                            </p>
+                            <p className="mt-1 text-sm text-white">{c.body}</p>
+                          </li>
+                        );
+                      })}
+                      {card.comments.length === 0 ? (
+                        <p className="text-xs text-[var(--muted)]">Sem comentários.</p>
+                      ) : null}
+                    </ul>
+                    <div className="flex gap-2">
+                      <input
+                        className="min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)]"
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.target.value)}
+                        placeholder="Escrever comentário…"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            const t = newComment.trim();
+                            if (!t) return;
+                            addCardComment(card.id, t);
+                            setNewComment("");
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const t = newComment.trim();
+                          if (!t) return;
+                          addCardComment(card.id, t);
+                          setNewComment("");
+                        }}
+                        className="rounded-xl border border-[var(--line)] px-3 py-2.5 text-sm text-white hover:bg-white/5"
+                      >
+                        Enviar
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-[var(--line)] bg-black/15 p-4 md:col-span-2">
+                    <p className="mb-2 text-xs font-medium text-[var(--muted)] sm:text-sm">
                       Checklist
                     </p>
                     <ul className="mb-3 space-y-2">
@@ -451,6 +509,17 @@ export function CardItem({
 
             <footer className="flex shrink-0 border-t border-[var(--line)] bg-black/25 px-4 py-3 backdrop-blur-md sm:px-6 sm:py-4 lg:px-10">
               <div className="mx-auto flex w-full max-w-5xl gap-2">
+                <button
+                  type="button"
+                  className="rounded-xl border border-[var(--line)] px-3 py-3.5 text-sm text-[var(--muted)] hover:text-white"
+                  onClick={() => {
+                    archiveCard(card.id);
+                    setOpen(false);
+                    toast("Card arquivado");
+                  }}
+                >
+                  Arquivar
+                </button>
                 <button
                   type="button"
                   className="flex-1 rounded-xl border border-[var(--line)] px-3 py-3.5 text-sm text-[var(--muted)] hover:text-white"

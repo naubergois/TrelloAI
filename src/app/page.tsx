@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth, isGoogleAuthConfigured } from "@/auth";
 import { AppProviders } from "@/components/AppProviders";
 import { BoardsHome } from "@/components/BoardsHome";
+import { allowLocalBypass } from "@/lib/api-security";
 
 export default async function Home({
   searchParams,
@@ -11,7 +12,7 @@ export default async function Home({
   const googleConfigured = isGoogleAuthConfigured();
   const session = await auth();
   const params = await searchParams;
-  const allowLocal = params.local === "1";
+  const allowLocal = allowLocalBypass() && params.local === "1";
 
   if (!session?.user && !allowLocal) {
     redirect("/login");

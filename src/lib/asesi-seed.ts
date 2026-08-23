@@ -40,7 +40,7 @@ export function createAsesiBoardSeed(owner?: {
   const reqPiloto = nanoid();
 
   const cards: Record<string, Card> = {};
-  const seedCards: Omit<Card, "id" | "createdAt" | "updatedAt">[] = [
+  const seedCards: Omit<Card, "id" | "createdAt" | "updatedAt" | "comments" | "archived">[] = [
     {
       listId: ASESI_LIST_IDS.backlog,
       title: "Mapear processos críticos da ASESI",
@@ -115,7 +115,14 @@ export function createAsesiBoardSeed(owner?: {
 
   for (const seed of seedCards) {
     const id = nanoid();
-    cards[id] = { ...seed, id, createdAt: now, updatedAt: now };
+    cards[id] = {
+      ...seed,
+      comments: [],
+      archived: false,
+      id,
+      createdAt: now,
+      updatedAt: now,
+    };
     cardIdsByList[seed.listId].push(id);
   }
 
@@ -169,6 +176,8 @@ export function createAsesiBoardSeed(owner?: {
     ],
     memberIds: [ownerId],
     teamId: ASESI_TEAM_ID,
+    level: "organization",
+    parentBoardId: null,
     backgroundId: "trello",
     designId: "soft",
     createdAt: now,
@@ -181,6 +190,7 @@ export function createAsesiBoardSeed(owner?: {
     persona:
       "Gestora virtual da ASESI: conduz dailies, cria e move cards, atribui responsáveis, remove bloqueios e mantém o projeto alinhado à CGE.",
     enabled: true,
+    autoStartDaily: false,
     dailyTime: "09:00",
     lastStandupDate: null,
     createdAt: now,

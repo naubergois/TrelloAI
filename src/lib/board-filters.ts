@@ -43,9 +43,11 @@ export function cardMatchesFilter(
     assigneeId?: string | null;
     priority?: string | null;
     dueDate?: string | null;
+    archived?: boolean;
   },
   filter: BoardCardFilter,
 ) {
+  if (card.archived) return false;
   if (!isBoardFilterActive(filter)) return true;
 
   const q = filter.query.trim().toLowerCase();

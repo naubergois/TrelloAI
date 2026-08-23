@@ -12,8 +12,11 @@ export type BoardInvite = {
   inviteeEmail: string | null;
   createdAt: string;
   expiresAt: string;
+  /** @deprecated single-use — use acceptedEmails */
   usedAt: string | null;
   usedByEmail: string | null;
+  /** emails that accepted via this link (team invites are reusable) */
+  acceptedEmails: string[];
 };
 
 type InviteStore = { invites: BoardInvite[] };
@@ -31,7 +34,13 @@ function readStore(): InviteStore {
   if (!existsSync(file)) return { invites: [] };
   try {
     const parsed = JSON.parse(readFileSync(file, "utf8")) as InviteStore;
-    return { invites: Array.isArray(parsed.invites) ? parsed.invites : [] };
+    return {
+      invites: (Array.isArray(parsed.invites) ? parsed.invites : []).map((inv) => ({
+        ...inv,
+        acceptedEmails:
+          inv.acceptedEmails ?? (inv.usedByEmail ? [inv.usedByEmail] : []),
+      })),
+    };
   } catch {
     return { invites: [] };
   }
@@ -69,6 +78,7 @@ export function createInvite(input: {
     expiresAt: expires.toISOString(),
     usedAt: null,
     usedByEmail: null,
+    acceptedEmails: [],
   };
 
   const store = readStore();
@@ -83,20 +93,39 @@ export function getInvite(token: string): BoardInvite | null {
   return readStore().invites.find((i) => i.token === token) ?? null;
 }
 
-export function isInviteValid(invite: BoardInvite): { ok: true } | { ok: false; error: string } {
-  if (invite.usedAt) return { ok: false, error: "Este convite já foi utilizado." };
+export function isInviteValid(
+  invite: BoardInvite,
+  forEmail?: string,
+): { ok: true } | { ok: false; error: string } {
   if (new Date(invite.expiresAt).getTime() < Date.now()) {
     return { ok: false, error: "Este convite expirou." };
+  }
+  const email = forEmail?.trim().toLowerCase();
+  if (invite.inviteeEmail && email && invite.inviteeEmail !== email) {
+    return { ok: false, error: "Este convite é exclusivo para outro e-mail." };
+  }
+  // Single-email locked invites: one acceptance only
+  if (invite.inviteeEmail && invite.acceptedEmails?.length > 0) {
+    if (!email || !invite.acceptedEmails.includes(email)) {
+      return { ok: false, error: "Este convite já foi utilizado." };
+    }
   }
   return { ok: true };
 }
 
-export function markInviteUsed(token: string, usedByEmail: string) {
+export function recordInviteAcceptance(token: string, usedByEmail: string) {
   const store = readStore();
   const invite = store.invites.find((i) => i.token === token);
   if (!invite) return null;
-  invite.usedAt = new Date().toISOString();
-  invite.usedByEmail = usedByEmail.trim().toLowerCase();
+  const email = usedByEmail.trim().toLowerCase();
+  if (!invite.acceptedEmails) invite.acceptedEmails = [];
+  if (!invite.acceptedEmails.includes(email)) {
+    invite.acceptedEmails.push(email);
+  }
+  if (!invite.usedAt) {
+    invite.usedAt = new Date().toISOString();
+    invite.usedByEmail = email;
+  }
   writeStore(store);
   return invite;
 }

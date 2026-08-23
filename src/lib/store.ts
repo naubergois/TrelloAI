@@ -21,6 +21,7 @@ import type {
   TeamMember,
   TeamRole,
   VirtualManager,
+  BoardLevel,
 } from "./types";
 import { buildMeetingRoomSlug, createSampleWorkspace, defaultManagerQuestions } from "./sample-data";
 import { createAsesiBoardSeed } from "./asesi-seed";
@@ -39,6 +40,10 @@ import {
   type BoardDesignId,
 } from "./board-themes";
 import {
+  isValidParentLevel,
+  normalizeBoardLevel,
+} from "./board-hierarchy";
+import {
   buildDayUpdateReport,
   calendarDayKey,
   dayReportMessage,
@@ -53,6 +58,8 @@ function normalizeCard(card: Card): Card {
     requirementId: card.requirementId ?? null,
     acceptanceCriteria: card.acceptanceCriteria ?? "",
     checklist: Array.isArray(card.checklist) ? card.checklist : [],
+    comments: Array.isArray(card.comments) ? card.comments : [],
+    archived: card.archived ?? false,
     labels: Array.isArray(card.labels) ? card.labels : [],
     dueDate: card.dueDate ?? null,
     priority: card.priority ?? null,
@@ -84,11 +91,15 @@ interface BoardState {
       backgroundId?: BoardBackgroundId;
       designId?: BoardDesignId;
       teamId?: string | null;
+      level?: BoardLevel;
+      parentBoardId?: string | null;
     },
   ) => string;
   setActiveBoard: (boardId: string) => void;
   renameBoard: (boardId: string, title: string) => void;
   updateBoardDescription: (boardId: string, description: string) => void;
+  assignBoardParent: (boardId: string, parentBoardId: string | null) => void;
+  setBoardLevel: (boardId: string, level: BoardLevel) => void;
   updateBoardAppearance: (
     boardId: string,
     appearance: { backgroundId?: BoardBackgroundId; designId?: BoardDesignId },
@@ -114,6 +125,7 @@ interface BoardState {
   addExistingMemberToTeam: (teamId: string, memberId: string) => void;
   addList: (boardId: string, title: string) => string;
   renameList: (listId: string, title: string) => void;
+  deleteList: (listId: string) => void;
   addCard: (
     listId: string,
     title: string,
@@ -128,11 +140,16 @@ interface BoardState {
         | "requirementId"
         | "acceptanceCriteria"
         | "checklist"
+        | "comments"
+        | "archived"
       >
     >,
   ) => string;
   updateCard: (cardId: string, patch: Partial<Card>) => void;
   deleteCard: (cardId: string) => void;
+  archiveCard: (cardId: string) => void;
+  restoreCard: (cardId: string, listId?: string) => void;
+  addCardComment: (cardId: string, body: string) => void;
   createRequirement: (input: {
     boardId: string;
     title: string;
@@ -289,6 +306,16 @@ export const useBoardStore = create<BoardState>()(
               ? [currentUserId]
               : [];
 
+        const level = normalizeBoardLevel(appearance?.level ?? "project");
+        let parentBoardId = appearance?.parentBoardId ?? null;
+        if (parentBoardId) {
+          const parent = get().boards[parentBoardId];
+          if (!parent || !isValidParentLevel(parent.level, level)) {
+            parentBoardId = null;
+          }
+        }
+        if (level === "organization") parentBoardId = null;
+
         for (const listTitle of listDefs) {
           const listId = nanoid();
           listIds.push(listId);
@@ -307,6 +334,8 @@ export const useBoardStore = create<BoardState>()(
           listIds,
           memberIds,
           teamId: team ? team.id : null,
+          level,
+          parentBoardId,
           backgroundId: appearance?.backgroundId ?? DEFAULT_BACKGROUND_ID,
           designId: appearance?.designId ?? DEFAULT_DESIGN_ID,
           createdAt: now,
@@ -319,6 +348,7 @@ export const useBoardStore = create<BoardState>()(
           persona:
             "Gestor(a) virtual: reúne o time diariamente, pergunta o andamento e atualiza o kanban.",
           enabled: true,
+          autoStartDaily: false,
           dailyTime: "09:30",
           lastStandupDate: null,
           createdAt: now,
@@ -364,6 +394,66 @@ export const useBoardStore = create<BoardState>()(
                 ...ensureBoardMembers(board),
                 description,
                 updatedAt: new Date().toISOString(),
+              },
+            },
+          };
+        }),
+
+      assignBoardParent: (boardId, parentBoardId) =>
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+          if (board.level === "organization") return state;
+          const now = new Date().toISOString();
+          let nextParent: string | null = parentBoardId;
+          if (nextParent) {
+            const parent = state.boards[nextParent];
+            if (!parent || !isValidParentLevel(parent.level, board.level)) {
+              return state;
+            }
+            // evita ciclo
+            let cursor: Board | undefined = parent;
+            while (cursor) {
+              if (cursor.id === boardId) return state;
+              cursor = cursor.parentBoardId
+                ? state.boards[cursor.parentBoardId]
+                : undefined;
+            }
+          }
+          return {
+            boards: {
+              ...state.boards,
+              [boardId]: {
+                ...ensureBoardMembers(board),
+                parentBoardId: nextParent,
+                updatedAt: now,
+              },
+            },
+          };
+        }),
+
+      setBoardLevel: (boardId, level) =>
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+          const normalized = normalizeBoardLevel(level);
+          const now = new Date().toISOString();
+          let parentBoardId = board.parentBoardId;
+          if (normalized === "organization") parentBoardId = null;
+          if (parentBoardId) {
+            const parent = state.boards[parentBoardId];
+            if (!parent || !isValidParentLevel(parent.level, normalized)) {
+              parentBoardId = null;
+            }
+          }
+          return {
+            boards: {
+              ...state.boards,
+              [boardId]: {
+                ...ensureBoardMembers(board),
+                level: normalized,
+                parentBoardId,
+                updatedAt: now,
               },
             },
           };
@@ -555,6 +645,17 @@ export const useBoardStore = create<BoardState>()(
           if (!board) return state;
 
           const boards = { ...state.boards };
+          const grandparent = board.parentBoardId;
+          const now = new Date().toISOString();
+          for (const [id, child] of Object.entries(boards)) {
+            if (child.parentBoardId === boardId) {
+              boards[id] = {
+                ...ensureBoardMembers(child),
+                parentBoardId: grandparent,
+                updatedAt: now,
+              };
+            }
+          }
           delete boards[boardId];
 
           const lists = { ...state.lists };
@@ -649,6 +750,35 @@ export const useBoardStore = create<BoardState>()(
           };
         }),
 
+      deleteList: (listId) => {
+        set((state) => {
+          const list = state.lists[listId];
+          if (!list) return state;
+          const board = state.boards[list.boardId];
+          if (!board) return state;
+
+          const cards = { ...state.cards };
+          for (const cardId of list.cardIds) {
+            delete cards[cardId];
+          }
+          const lists = { ...state.lists };
+          delete lists[listId];
+
+          return {
+            cards,
+            lists,
+            boards: {
+              ...state.boards,
+              [board.id]: {
+                ...board,
+                listIds: board.listIds.filter((id) => id !== listId),
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          };
+        });
+      },
+
       addCard: (listId, title, extras = {}) => {
         const cardId = nanoid();
         const now = new Date().toISOString();
@@ -669,6 +799,8 @@ export const useBoardStore = create<BoardState>()(
             requirementId: extras.requirementId ?? null,
             acceptanceCriteria: extras.acceptanceCriteria ?? "",
             checklist: extras.checklist ?? [],
+            comments: extras.comments ?? [],
+            archived: extras.archived ?? false,
             createdAt: now,
             updatedAt: now,
           };
@@ -743,6 +875,114 @@ export const useBoardStore = create<BoardState>()(
         });
         if (boardId) {
           get().recordActivity({ boardId, kind: "card_delete", cardId });
+        }
+      },
+
+      archiveCard: (cardId) => {
+        let boardId: string | null = null;
+        set((state) => {
+          const card = state.cards[cardId];
+          if (!card || card.archived) return state;
+          const list = state.lists[card.listId];
+          boardId = list?.boardId ?? null;
+          return {
+            cards: {
+              ...state.cards,
+              [cardId]: {
+                ...card,
+                archived: true,
+                updatedAt: new Date().toISOString(),
+              },
+            },
+            lists: list
+              ? {
+                  ...state.lists,
+                  [list.id]: {
+                    ...list,
+                    cardIds: list.cardIds.filter((id) => id !== cardId),
+                  },
+                }
+              : state.lists,
+          };
+        });
+        if (boardId) {
+          get().recordActivity({ boardId, kind: "card_archive", cardId });
+        }
+      },
+
+      restoreCard: (cardId, targetListId) => {
+        let boardId: string | null = null;
+        set((state) => {
+          const card = state.cards[cardId];
+          if (!card) return state;
+          const board = state.boards[state.lists[card.listId]?.boardId ?? ""];
+          if (!board) return state;
+          boardId = board.id;
+          const listId = targetListId || board.listIds[0];
+          const list = state.lists[listId];
+          if (!list) return state;
+          const cards = {
+            ...state.cards,
+            [cardId]: {
+              ...card,
+              archived: false,
+              listId,
+              updatedAt: new Date().toISOString(),
+            },
+          };
+          const lists = { ...state.lists };
+          for (const lid of board.listIds) {
+            const l = lists[lid];
+            if (!l) continue;
+            lists[lid] = {
+              ...l,
+              cardIds: l.cardIds.filter((id) => id !== cardId),
+            };
+          }
+          lists[listId] = {
+            ...list,
+            cardIds: [...lists[listId].cardIds, cardId],
+          };
+          return { cards, lists };
+        });
+        if (boardId) {
+          get().recordActivity({ boardId, kind: "card_update", cardId, note: "restaurado" });
+        }
+      },
+
+      addCardComment: (cardId, body) => {
+        const text = body.trim();
+        if (!text) return;
+        const commentId = nanoid();
+        const now = new Date().toISOString();
+        let boardId: string | null = null;
+        set((state) => {
+          const card = state.cards[cardId];
+          if (!card) return state;
+          const list = state.lists[card.listId];
+          boardId = list?.boardId ?? null;
+          const authorId = state.currentUserId;
+          return {
+            cards: {
+              ...state.cards,
+              [cardId]: {
+                ...card,
+                comments: [
+                  ...card.comments,
+                  { id: commentId, authorId, body: text, createdAt: now },
+                ],
+                updatedAt: now,
+              },
+            },
+          };
+        });
+        if (boardId) {
+          get().recordActivity({
+            boardId,
+            kind: "card_comment",
+            cardId,
+            note: text.slice(0, 80),
+          });
         }
       },
 
@@ -1307,6 +1547,7 @@ export const useBoardStore = create<BoardState>()(
               persona:
                 "Gestor(a) virtual: reúne o time diariamente, pergunta o andamento e atualiza o kanban.",
               enabled: true,
+              autoStartDaily: false,
               dailyTime: "09:30",
               lastStandupDate: null,
               createdAt: now,
@@ -2204,6 +2445,13 @@ export const useBoardStore = create<BoardState>()(
           state.requirements[id] = withRequirementPrompts(req, boardTitle);
         }
 
+        for (const boardId of Object.keys(state.managers)) {
+          const m = state.managers[boardId];
+          if (m && m.autoStartDaily === undefined) {
+            state.managers[boardId] = { ...m, autoStartDaily: false };
+          }
+        }
+
         for (const boardId of Object.keys(state.boards)) {
           if (!state.managers[boardId]) {
             const now = new Date().toISOString();
@@ -2213,6 +2461,7 @@ export const useBoardStore = create<BoardState>()(
               persona:
                 "Gestor(a) virtual: reúne o time diariamente, pergunta o andamento e atualiza o kanban.",
               enabled: true,
+              autoStartDaily: false,
               dailyTime: "09:30",
               lastStandupDate: null,
               createdAt: now,

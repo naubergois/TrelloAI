@@ -69,7 +69,7 @@ export function createSampleWorkspace() {
   };
 
   const cards: Record<string, Card> = {};
-  const seedCards: Omit<Card, "id" | "createdAt" | "updatedAt">[] = [
+  const seedCards: Omit<Card, "id" | "createdAt" | "updatedAt" | "comments" | "archived">[] = [
     {
       listId: todoId,
       title: "Definir visão do produto",
@@ -131,7 +131,14 @@ export function createSampleWorkspace() {
 
   for (const seed of seedCards) {
     const id = nanoid();
-    cards[id] = { ...seed, id, createdAt: now, updatedAt: now };
+    cards[id] = {
+      ...seed,
+      comments: [],
+      archived: false,
+      id,
+      createdAt: now,
+      updatedAt: now,
+    };
     cardIdsByList[seed.listId].push(id);
   }
 
@@ -174,6 +181,8 @@ export function createSampleWorkspace() {
     listIds: [todoId, doingId, doneId],
     memberIds: [youId, anaId, leoId],
     teamId,
+    level: "project",
+    parentBoardId: null,
     backgroundId: "trello",
     designId: "classic",
     createdAt: now,
@@ -203,6 +212,7 @@ export function createSampleWorkspace() {
       persona:
         "Gestor(a) virtual pragmático(a): pergunta o status de cada projeto, remove bloqueios e mantém o board atualizado.",
       enabled: true,
+      autoStartDaily: false,
       dailyTime: "09:30",
       lastStandupDate: null,
       createdAt: now,

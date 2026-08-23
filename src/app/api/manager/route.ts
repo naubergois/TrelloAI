@@ -8,10 +8,21 @@ import {
   type ManagerContext,
   type StandupTurnInput,
 } from "@/lib/manager";
+import { checkRateLimit, requireSession, assertBodySize } from "@/lib/api-security";
 
 export async function POST(request: Request) {
+  const { session, error } = await requireSession();
+  if (error) return error;
+
+  const raw = await request.text();
+  const sizeCheck = assertBodySize(raw, 800_000);
+  if (!sizeCheck.ok) return sizeCheck.response;
+
+  const rate = checkRateLimit(`manager:${session!.user!.email}`, 25, 60_000);
+  if (!rate.ok) return rate.response;
+
   try {
-    const body = (await request.json()) as {
+    const body = JSON.parse(raw) as {
       context?: ManagerContext;
       mode?: "daily" | "chat" | "standup";
       message?: string;
@@ -29,12 +40,12 @@ export async function POST(request: Request) {
         try {
           const result = await deepSeekStandupTurn(body.standup, apiKey);
           return NextResponse.json(result);
-        } catch (error) {
+        } catch (err) {
           const fallback = localStandupTurn(body.standup);
           return NextResponse.json({
             ...fallback,
             message: `${fallback.message}\n\n(Nota: DeepSeek falhou — usei o gestor local. ${
-              error instanceof Error ? error.message : ""
+              err instanceof Error ? err.message : ""
             })`,
           });
         }
@@ -58,12 +69,12 @@ export async function POST(request: Request) {
             userMessage,
           });
           return NextResponse.json(result);
-        } catch (error) {
+        } catch (err) {
           const fallback = localManagerChat(userMessage, body.context);
           return NextResponse.json({
             ...fallback,
             message: `${fallback.message}\n\n(Nota: DeepSeek falhou — usei o gestor local. ${
-              error instanceof Error ? error.message : ""
+              err instanceof Error ? err.message : ""
             })`,
           });
         }
@@ -75,12 +86,12 @@ export async function POST(request: Request) {
       try {
         const result = await deepSeekManagerProcess(body.context, apiKey, { mode: "daily" });
         return NextResponse.json(result);
-      } catch (error) {
+      } catch (err) {
         const fallback = localManagerProcess(body.context);
         return NextResponse.json({
           ...fallback,
           message: `${fallback.message}\n\n(Nota: DeepSeek falhou — usei o gestor local. ${
-            error instanceof Error ? error.message : ""
+            err instanceof Error ? err.message : ""
           })`,
         });
       }

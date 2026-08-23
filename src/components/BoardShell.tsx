@@ -8,6 +8,7 @@ import {
   LayoutGrid,
   Palette,
   Pencil,
+  History,
   RotateCcw,
   Sparkles,
   UserPlus,
@@ -17,6 +18,7 @@ import {
 import { useBoardStore } from "@/lib/store";
 import { boardThemeStyle } from "@/lib/board-themes";
 import { BoardCanvas } from "@/components/BoardCanvas";
+import { ConsolidatedBoardCanvas } from "@/components/ConsolidatedBoardCanvas";
 import { AiPanel } from "@/components/AiPanel";
 import { MeetingsPanel } from "@/components/MeetingsPanel";
 import { MeetingRoom } from "@/components/MeetingRoom";
@@ -26,7 +28,15 @@ import { BoardAppearanceDrawer } from "@/components/BoardAppearanceDrawer";
 import { InvitePanel } from "@/components/InvitePanel";
 import { RequirementsPanel } from "@/components/RequirementsPanel";
 import { TeamCalendarPanel } from "@/components/TeamCalendarPanel";
+import { ActivityPanel } from "@/components/ActivityPanel";
 import { BoardFilterBar } from "@/components/BoardFilterBar";
+import {
+  BOARD_LEVEL_LABELS,
+  BOARD_LEVEL_STYLES,
+  getBoardAncestors,
+  getChildBoards,
+  getDescendantBoardIds,
+} from "@/lib/board-hierarchy";
 import {
   EMPTY_BOARD_FILTER,
   cardMatchesFilter,
@@ -43,6 +53,7 @@ type SidePanel =
   | "invite"
   | "requirements"
   | "calendar"
+  | "activity"
   | null;
 
 export function BoardShell({
@@ -95,6 +106,19 @@ export function BoardShell({
 
   const board = boards[boardId] ?? null;
   const assignedTeam = board?.teamId ? teams[board.teamId] : null;
+  const ancestors = useMemo(
+    () => (board ? getBoardAncestors(board.id, boards) : []),
+    [board, boards],
+  );
+  const childBoards = useMemo(
+    () => (board ? getChildBoards(board.id, boards) : []),
+    [board, boards],
+  );
+  const descendantIds = useMemo(
+    () => (board ? getDescendantBoardIds(board.id, boards) : []),
+    [board, boards],
+  );
+  const [canvasView, setCanvasView] = useState<"local" | "all">("all");
 
   const boardMembers = useMemo(() => {
     if (!board) return [];
@@ -103,17 +127,28 @@ export function BoardShell({
 
   const { matchCount, totalCount } = useMemo(() => {
     if (!board) return { matchCount: 0, totalCount: 0 };
-    const boardCards = board.listIds.flatMap((listId) =>
+    const localCards = board.listIds.flatMap((listId) =>
       (lists[listId]?.cardIds ?? [])
         .map((id) => cards[id])
         .filter(Boolean),
     );
+    const descendantCards = descendantIds.flatMap((bid) => {
+      const b = boards[bid];
+      if (!b) return [];
+      return b.listIds.flatMap((listId) =>
+        (lists[listId]?.cardIds ?? [])
+          .map((id) => cards[id])
+          .filter(Boolean)
+          .filter((c) => !c.archived),
+      );
+    });
+    const pool =
+      canvasView === "all" ? [...localCards, ...descendantCards] : localCards;
     return {
-      totalCount: boardCards.length,
-      matchCount: boardCards.filter((c) => cardMatchesFilter(c, cardFilter))
-        .length,
+      totalCount: pool.length,
+      matchCount: pool.filter((c) => cardMatchesFilter(c, cardFilter)).length,
     };
-  }, [board, lists, cards, cardFilter]);
+  }, [board, lists, cards, cardFilter, descendantIds, boards, canvasView]);
 
   const reqCount = useMemo(
     () =>
@@ -333,6 +368,19 @@ export function BoardShell({
 
             <button
               type="button"
+              onClick={() => toggle("activity")}
+              title="Atividade"
+              className={`rounded-xl border p-1.5 transition sm:p-2 ${
+                panel === "activity"
+                  ? "border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent)]"
+                  : "border-[var(--line)] text-[var(--muted)] hover:text-white"
+              }`}
+            >
+              <History className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
               onClick={resetDemo}
               title="Resetar demo"
               className="rounded-xl border border-[var(--line)] p-1.5 text-[var(--muted)] transition hover:text-white sm:p-2"
@@ -386,6 +434,32 @@ export function BoardShell({
                     <p className="truncate font-[family-name:var(--font-display)] text-xl text-white sm:text-2xl">
                       {board.title}
                     </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${BOARD_LEVEL_STYLES[board.level]}`}
+                      >
+                        {BOARD_LEVEL_LABELS[board.level]}
+                      </span>
+                      {ancestors.map((a) => (
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/board/${a.id}`);
+                          }}
+                          className="truncate text-[11px] text-white/70 hover:text-white hover:underline"
+                        >
+                          {a.title}
+                        </button>
+                      ))}
+                      {childBoards.length > 0 ? (
+                        <span className="text-[11px] text-white/55">
+                          · {childBoards.length} filho(s) · {descendantIds.length}{" "}
+                          descendente(s)
+                        </span>
+                      ) : null}
+                    </div>
                     <p className="mt-0.5 hidden truncate text-xs text-[var(--muted)] sm:block">
                       {board.description || "Clique para editar nome e descrição"}
                       {managers[board.id] ? ` · ${managers[board.id].name}` : ""}
@@ -441,8 +515,51 @@ export function BoardShell({
               matchCount={matchCount}
               totalCount={totalCount}
             />
-            <div className="min-h-0 flex-1 overflow-hidden">
-              <BoardCanvas boardId={board.id} filter={cardFilter} />
+            {descendantIds.length > 0 ? (
+              <div className="mb-2 flex shrink-0 gap-1 rounded-xl border border-white/15 bg-black/15 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setCanvasView("all")}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                    canvasView === "all"
+                      ? "bg-white text-[#0079bf]"
+                      : "text-white/70 hover:text-white"
+                  }`}
+                >
+                  Local + inferiores
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCanvasView("local")}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                    canvasView === "local"
+                      ? "bg-white text-[#0079bf]"
+                      : "text-white/70 hover:text-white"
+                  }`}
+                >
+                  Só este board
+                </button>
+              </div>
+            ) : null}
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div
+                className={
+                  canvasView === "all" && descendantIds.length > 0
+                    ? "min-h-0 max-h-[45%] shrink-0 overflow-hidden"
+                    : "min-h-0 flex-1 overflow-hidden"
+                }
+              >
+                <BoardCanvas boardId={board.id} filter={cardFilter} />
+              </div>
+              {canvasView === "all" && descendantIds.length > 0 ? (
+                <div className="min-h-0 flex-1 overflow-hidden">
+                  <ConsolidatedBoardCanvas
+                    boardId={board.id}
+                    filter={cardFilter}
+                    onOpenBoard={(id) => router.push(`/board/${id}`)}
+                  />
+                </div>
+              ) : null}
             </div>
           </div>
         </main>
@@ -476,6 +593,9 @@ export function BoardShell({
                 <aside className="anim-rise panel-glass flex h-full min-h-0 w-full flex-col overflow-hidden rounded-t-3xl p-4 sm:rounded-3xl">
                   <InvitePanel boardId={board.id} onClose={() => setPanel(null)} />
                 </aside>
+              ) : null}
+              {panel === "activity" ? (
+                <ActivityPanel boardId={board.id} onClose={() => setPanel(null)} />
               ) : null}
             </div>
           </>

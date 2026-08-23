@@ -7,6 +7,7 @@ import {
   saveSharedBoard,
   type BoardSnapshot,
 } from "@/lib/shared-boards";
+import { assertBodySize } from "@/lib/api-security";
 
 export async function GET(
   _request: Request,
@@ -17,12 +18,11 @@ export async function GET(
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
   const { boardId } = await context.params;
-  const snapshot = getSharedBoard(boardId);
+  const snapshot = await getSharedBoard(boardId);
   if (!snapshot) {
     return NextResponse.json({ error: "Board compartilhado não encontrado." }, { status: 404 });
   }
-  if (!emailHasBoardAccess(session.user.email, boardId)) {
-    // allow owner email that created invites via membership add on create
+  if (!(await emailHasBoardAccess(session.user.email, boardId))) {
     return NextResponse.json({ error: "Sem acesso a este board." }, { status: 403 });
   }
   return NextResponse.json({ snapshot });
@@ -37,9 +37,13 @@ export async function PUT(
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
   const { boardId } = await context.params;
+  const raw = await request.text();
+  const sizeCheck = assertBodySize(raw);
+  if (!sizeCheck.ok) return sizeCheck.response;
+
   let body: { snapshot?: BoardSnapshot };
   try {
-    body = (await request.json()) as typeof body;
+    body = JSON.parse(raw) as typeof body;
   } catch {
     return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
   }
@@ -47,7 +51,7 @@ export async function PUT(
     return NextResponse.json({ error: "Snapshot inválido." }, { status: 400 });
   }
 
-  saveSharedBoard(body.snapshot);
-  addMembership(session.user.email, boardId);
+  await saveSharedBoard(body.snapshot);
+  await addMembership(session.user.email, boardId);
   return NextResponse.json({ ok: true, updatedAt: body.snapshot.updatedAt });
 }

@@ -12,7 +12,9 @@ export async function GET(
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
   const { boardId } = await context.params;
-  const invites = listInvitesForBoard(boardId).filter((i) => !i.usedAt);
+  const invites = listInvitesForBoard(boardId).filter(
+    (i) => new Date(i.expiresAt).getTime() > Date.now(),
+  );
   return NextResponse.json({
     invites: invites.map((i) => ({
       token: i.token,
@@ -46,8 +48,8 @@ export async function POST(
     return NextResponse.json({ error: "Snapshot do board obrigatório." }, { status: 400 });
   }
 
-  saveSharedBoard(body.snapshot);
-  addMembership(session.user.email, boardId);
+  await saveSharedBoard(body.snapshot);
+  await addMembership(session.user.email, boardId);
 
   const invite = createInvite({
     boardId,

@@ -73,6 +73,16 @@ export const teamEventKindDot = {
   other: "bg-[var(--muted)]",
 } as const;
 
+export const activityKindLabel = {
+  card_create: "criou card",
+  card_update: "atualizou card",
+  card_move: "moveu card",
+  card_delete: "excluiu card",
+  card_archive: "arquivou card",
+  card_comment: "comentou",
+  standup_reply: "respondeu daily",
+} as const;
+
 export const LABEL_COLOR_OPTIONS: { id: import("./types").LabelColor; name: string }[] = [
   { id: "teal", name: "Azul" },
   { id: "lime", name: "Verde" },

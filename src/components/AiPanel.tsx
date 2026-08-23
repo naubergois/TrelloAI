@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, useEffect, type FormEvent } from "react";
 import { Loader2, Sparkles, X } from "lucide-react";
 import { nanoid } from "nanoid";
 import type { AiMessage, AiAction } from "@/lib/types";
@@ -13,6 +13,10 @@ const QUICK = [
   "Quebre em tarefas: onboarding de times no board",
 ];
 
+function chatKey(boardId: string) {
+  return `trelloai-ai-chat-${boardId}`;
+}
+
 export function AiPanel({
   boardId,
   onClose,
@@ -23,20 +27,48 @@ export function AiPanel({
   const board = useBoardStore((s) => s.boards[boardId]);
   const lists = useBoardStore((s) => s.lists);
   const cards = useBoardStore((s) => s.cards);
-  const addCardsBulk = useBoardStore((s) => s.addCardsBulk);
-  const applyPriorityUpdates = useBoardStore((s) => s.applyPriorityUpdates);
+  const members = useBoardStore((s) => s.members);
+  const requirements = useBoardStore((s) => s.requirements);
+  const applyManagerActions = useBoardStore((s) => s.applyManagerActions);
 
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
-  const [messages, setMessages] = useState<AiMessage[]>([
-    {
-      id: "welcome",
-      role: "assistant",
-      content:
-        "Olá — sou o assistente do board. Peça para gerar cards a partir de um briefing ou sugerir prioridades. Uso DeepSeek quando DEEPSEEK_API_KEY estiver configurada; senão, o motor local.",
-      createdAt: new Date().toISOString(),
-    },
-  ]);
+  const [messages, setMessages] = useState<AiMessage[]>(() => {
+    if (typeof window === "undefined") {
+      return [
+        {
+          id: "welcome",
+          role: "assistant",
+          content:
+            "Olá — sou o assistente do board. Peça cards, prioridades, listas ou atribuições.",
+          createdAt: new Date().toISOString(),
+        },
+      ];
+    }
+    try {
+      const raw = localStorage.getItem(chatKey(boardId));
+      if (raw) return JSON.parse(raw) as AiMessage[];
+    } catch {
+      /* ignore */
+    }
+    return [
+      {
+        id: "welcome",
+        role: "assistant",
+        content:
+          "Olá — sou o assistente do board. Peça cards, prioridades, listas ou atribuições.",
+        createdAt: new Date().toISOString(),
+      },
+    ];
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(chatKey(boardId), JSON.stringify(messages.slice(-40)));
+    } catch {
+      /* ignore quota */
+    }
+  }, [messages, boardId]);
 
   const context = useMemo(() => {
     if (!board) return { boardTitle: "Board", lists: [] };
@@ -51,20 +83,29 @@ export function AiPanel({
           cards: list.cardIds
             .map((cid) => cards[cid])
             .filter(Boolean)
-            .map((c) => ({ id: c.id, title: c.title, priority: c.priority })),
+            .filter((c) => !c.archived)
+            .map((c) => ({
+              id: c.id,
+              title: c.title,
+              description: c.description,
+              priority: c.priority,
+              assigneeId: c.assigneeId,
+              dueDate: c.dueDate,
+            })),
         })),
     };
   }, [board, lists, cards]);
 
+  const reqSummary = useMemo(() => {
+    return Object.values(requirements || {})
+      .filter((r) => r.boardId === boardId)
+      .slice(0, 12)
+      .map((r) => `${r.code}: ${r.title} (${r.status})`);
+  }, [requirements, boardId]);
+
   const applyAction = (action: AiAction) => {
-    if (action.type === "create_cards") {
-      const listId = action.listId || board?.listIds[0];
-      if (!listId) return;
-      addCardsBulk(listId, action.cards);
-    }
-    if (action.type === "suggest_priorities") {
-      applyPriorityUpdates(action.updates);
-    }
+    if (action.type === "none") return;
+    applyManagerActions([action], boardId);
   };
 
   const send = async (text: string) => {
@@ -81,11 +122,17 @@ export function AiPanel({
     setPrompt("");
     setLoading(true);
 
+    const enrichedPrompt =
+      reqSummary.length > 0
+        ? `${trimmed}\n\nRequisitos do board:\n${reqSummary.join("\n")}`
+        : trimmed;
+
     try {
       const res = await fetch("/api/ai", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: trimmed, context }),
+        body: JSON.stringify({ prompt: enrichedPrompt, context }),
       });
       const data = (await res.json()) as AiResponse & { error?: string };
       if (!res.ok) throw new Error(data.error || "Falha na IA");
@@ -96,7 +143,7 @@ export function AiPanel({
         {
           id: nanoid(),
           role: "assistant",
-          content: `${data.message}\n\n_provider: ${data.provider}_`,
+          content: data.message,
           createdAt: new Date().toISOString(),
         },
       ]);
@@ -120,60 +167,56 @@ export function AiPanel({
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
-    void send(prompt);
+    send(prompt);
   };
 
-  if (!board) return null;
-
   return (
-    <aside className="anim-rise flex h-full min-h-0 w-full flex-col overflow-hidden rounded-t-3xl border border-[var(--line)] bg-[var(--panel-strong)] sm:rounded-2xl">
-      <header className="flex shrink-0 items-center justify-between border-b border-[var(--line)] px-4 py-3">
+    <aside className="anim-rise panel-glass flex h-full min-h-0 w-full flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl">
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] px-4 py-3">
         <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-[var(--accent)]" />
-          <div>
-            <p className="text-sm font-semibold text-white">Assistente</p>
-            <p className="text-xs text-[var(--muted)]">Gera cards e prioridades</p>
-          </div>
+          <Sparkles className="h-5 w-5 text-[var(--accent)]" />
+          <h2 className="font-[family-name:var(--font-display)] text-lg text-white">
+            Assistente IA
+          </h2>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-white/5 hover:text-white"
-          aria-label="Fechar painel"
+          className="rounded-lg border border-[var(--line)] p-2 text-[var(--muted)] hover:text-white"
         >
           <X className="h-4 w-4" />
         </button>
       </header>
 
       <div className="board-scroll min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-        {messages.map((msg) => (
+        {messages.map((m) => (
           <div
-            key={msg.id}
-            className={`rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${
-              msg.role === "user"
-                ? "ml-6 bg-[var(--accent)]/15 text-teal-50"
-                : "mr-4 bg-white/5 text-[var(--text)]"
+            key={m.id}
+            className={`chat-bubble rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+              m.role === "user"
+                ? "ml-6 bg-[var(--accent)]/20 text-white"
+                : "mr-6 bg-black/25 text-[var(--text)]"
             }`}
           >
-            {msg.content}
+            {m.content}
           </div>
         ))}
         {loading ? (
-          <div className="inline-flex items-center gap-2 text-xs text-[var(--muted)]">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
+            <Loader2 className="h-4 w-4 animate-spin" />
             Pensando…
           </div>
         ) : null}
       </div>
 
-      <div className="space-y-2 border-t border-[var(--line)] p-3">
+      <div className="shrink-0 space-y-2 border-t border-[var(--line)] p-3">
         <div className="flex flex-wrap gap-1.5">
           {QUICK.map((q) => (
             <button
               key={q}
               type="button"
-              onClick={() => void send(q)}
-              className="rounded-full border border-[var(--line)] px-2.5 py-1 text-[11px] text-[var(--muted)] transition hover:border-[var(--accent)]/50 hover:text-white"
+              onClick={() => send(q)}
+              className="rounded-lg border border-[var(--line)] px-2 py-1 text-[11px] text-[var(--muted)] hover:text-white"
             >
               {q}
             </button>
@@ -183,13 +226,13 @@ export function AiPanel({
           <input
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Peça à IA…"
-            className="w-full rounded-lg border border-[var(--line)] bg-[var(--ink)] px-3 py-2 text-sm outline-none placeholder:text-[var(--muted)] focus:border-[var(--accent)]"
+            placeholder="Peça ao assistente…"
+            className="min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2 text-sm text-white outline-none focus:border-[var(--accent)]"
           />
           <button
             type="submit"
             disabled={loading}
-            className="rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--accent-on)] disabled:opacity-60"
+            className="rounded-xl bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-[var(--accent-on)] disabled:opacity-50"
           >
             Enviar
           </button>

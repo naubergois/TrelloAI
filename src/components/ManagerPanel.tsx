@@ -123,7 +123,7 @@ export function ManagerPanel({
   }, [board, members]);
 
   useEffect(() => {
-    if (!manager?.enabled || !board) return;
+    if (!manager?.enabled || !manager.autoStartDaily || !board) return;
     const today = calendarDayKey();
     if (manager.lastStandupDate === today) return;
     if (!timeReached(manager.dailyTime)) return;
@@ -843,11 +843,21 @@ export function ManagerPanel({
             />
           </label>
           <div className="flex items-center justify-between rounded-xl border border-[var(--line)] bg-[var(--ink)]/50 px-3 py-3">
-            <span className="text-sm text-white">Daily automática</span>
+            <span className="text-sm text-white">Maya ativa</span>
             <input
               type="checkbox"
               checked={manager.enabled}
               onChange={(e) => updateManager(boardId, { enabled: e.target.checked })}
+            />
+          </div>
+          <div className="flex items-center justify-between rounded-xl border border-[var(--line)] bg-[var(--ink)]/50 px-3 py-3">
+            <span className="text-sm text-white">Iniciar daily automaticamente</span>
+            <input
+              type="checkbox"
+              checked={manager.autoStartDaily}
+              onChange={(e) =>
+                updateManager(boardId, { autoStartDaily: e.target.checked })
+              }
             />
           </div>
           <label className="block text-xs text-[var(--muted)]">

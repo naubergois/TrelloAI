@@ -30,6 +30,13 @@ import {
   type BoardBackgroundId,
   type BoardDesignId,
 } from "@/lib/board-themes";
+import {
+  BOARD_LEVEL_LABELS,
+  BOARD_LEVEL_STYLES,
+  BOARD_LEVELS,
+  parentLevelFor,
+} from "@/lib/board-hierarchy";
+import type { BoardLevel } from "@/lib/types";
 
 type HomeTab = "boards" | "teams";
 
@@ -47,6 +54,8 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
   const renameBoard = useBoardStore((s) => s.renameBoard);
   const updateBoardDescription = useBoardStore((s) => s.updateBoardDescription);
   const assignTeamToBoard = useBoardStore((s) => s.assignTeamToBoard);
+  const assignBoardParent = useBoardStore((s) => s.assignBoardParent);
+  const setBoardLevel = useBoardStore((s) => s.setBoardLevel);
   const createTeam = useBoardStore((s) => s.createTeam);
   const deleteBoard = useBoardStore((s) => s.deleteBoard);
   const ensureAsesiBoard = useBoardStore((s) => s.ensureAsesiBoard);
@@ -77,6 +86,8 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
   const [bgId, setBgId] = useState<BoardBackgroundId>(DEFAULT_BACKGROUND_ID);
   const [designId, setDesignId] = useState<BoardDesignId>(DEFAULT_DESIGN_ID);
   const [teamId, setTeamId] = useState<string>("");
+  const [boardLevel, setBoardLevelState] = useState<BoardLevel>("project");
+  const [parentBoardId, setParentBoardId] = useState<string>("");
   const [newTeamName, setNewTeamName] = useState("");
   const [customizeId, setCustomizeId] = useState<string | null>(null);
   const [inviteBoardId, setInviteBoardId] = useState<string | null>(null);
@@ -89,13 +100,24 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
     if (!q) return boardList;
     return boardList.filter((b) => {
       const teamName = b.teamId ? teams[b.teamId]?.name ?? "" : "";
+      const parentTitle = b.parentBoardId
+        ? boards[b.parentBoardId]?.title ?? ""
+        : "";
       return (
         b.title.toLowerCase().includes(q) ||
         (b.description || "").toLowerCase().includes(q) ||
-        teamName.toLowerCase().includes(q)
+        teamName.toLowerCase().includes(q) ||
+        parentTitle.toLowerCase().includes(q) ||
+        BOARD_LEVEL_LABELS[b.level].toLowerCase().includes(q)
       );
     });
-  }, [boardList, boardQuery, teams]);
+  }, [boardList, boardQuery, teams, boards]);
+
+  const parentBoardOptions = useMemo(() => {
+    const parentLevel = parentLevelFor(boardLevel);
+    if (!parentLevel) return [];
+    return boardList.filter((b) => b.level === parentLevel);
+  }, [boardList, boardLevel]);
 
   const openBoard = (boardId: string) => {
     setActiveBoard(boardId);
@@ -116,10 +138,14 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
       backgroundId: bgId,
       designId,
       teamId: linkedTeamId,
+      level: boardLevel,
+      parentBoardId: parentBoardId || null,
     });
     setTitle("");
     setDescription("");
     setTeamId("");
+    setBoardLevelState("project");
+    setParentBoardId("");
     setNewTeamName("");
     setCreating(false);
     openBoard(id);
@@ -279,6 +305,11 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
                   >
                     <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/10 to-transparent" />
                     <div className="relative z-[1]">
+                      <span
+                        className={`mb-2 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${BOARD_LEVEL_STYLES[board.level]}`}
+                      >
+                        {BOARD_LEVEL_LABELS[board.level]}
+                      </span>
                       <h2 className="font-[family-name:var(--font-display)] text-lg leading-snug text-white drop-shadow-sm">
                         {board.title}
                       </h2>
@@ -288,6 +319,9 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
                         </p>
                       ) : null}
                       <p className="mt-2 text-[11px] text-white/75">
+                        {board.parentBoardId
+                          ? `↑ ${boards[board.parentBoardId]?.title ?? "Superior"} · `
+                          : ""}
                         {team ? `${team.name} · ` : ""}
                         {listCount} listas · {cardCount} cards · {memberCount} membros
                       </p>
@@ -393,6 +427,43 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
               </label>
 
               <label className="block text-xs text-[var(--muted)]">
+                Nível hierárquico
+                <select
+                  value={boardLevel}
+                  onChange={(e) => {
+                    const next = e.target.value as BoardLevel;
+                    setBoardLevelState(next);
+                    setParentBoardId("");
+                  }}
+                  className="mt-1 w-full rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)]"
+                >
+                  {BOARD_LEVELS.map((lvl) => (
+                    <option key={lvl} value={lvl}>
+                      {BOARD_LEVEL_LABELS[lvl]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {parentBoardOptions.length > 0 ? (
+                <label className="block text-xs text-[var(--muted)]">
+                  Board superior
+                  <select
+                    value={parentBoardId}
+                    onChange={(e) => setParentBoardId(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)]"
+                  >
+                    <option value="">Sem vínculo (opcional)</option>
+                    {parentBoardOptions.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+
+              <label className="block text-xs text-[var(--muted)]">
                 Equipe do kanban
                 <select
                   value={teamId}
@@ -493,6 +564,52 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
                   className="mt-1 w-full rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)]"
                 />
               </label>
+
+              <label className="block text-xs text-[var(--muted)]">
+                Nível hierárquico
+                <select
+                  value={customizeBoard.level}
+                  onChange={(e) =>
+                    setBoardLevel(customizeBoard.id, e.target.value as BoardLevel)
+                  }
+                  className="mt-1 w-full rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)]"
+                >
+                  {BOARD_LEVELS.map((lvl) => (
+                    <option key={lvl} value={lvl}>
+                      {BOARD_LEVEL_LABELS[lvl]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {parentLevelFor(customizeBoard.level) ? (
+                <label className="block text-xs text-[var(--muted)]">
+                  Board superior
+                  <select
+                    value={customizeBoard.parentBoardId ?? ""}
+                    onChange={(e) =>
+                      assignBoardParent(
+                        customizeBoard.id,
+                        e.target.value ? e.target.value : null,
+                      )
+                    }
+                    className="mt-1 w-full rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)]"
+                  >
+                    <option value="">Sem superior</option>
+                    {boardList
+                      .filter(
+                        (b) =>
+                          b.level === parentLevelFor(customizeBoard.level) &&
+                          b.id !== customizeBoard.id,
+                      )
+                      .map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.title}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              ) : null}
 
               <label className="block text-xs text-[var(--muted)]">
                 Equipe atribuída
