@@ -18,6 +18,7 @@ import {
 import { useBoardStore } from "@/lib/store";
 import { ASESI_BOARD_ID } from "@/lib/constants";
 import { AuthButton } from "@/components/AuthButton";
+import { BrandMark } from "@/components/BrandMark";
 import { TeamsManager } from "@/components/TeamsManager";
 import { InvitePanel } from "@/components/InvitePanel";
 import {
@@ -156,10 +157,8 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
       <header className="app-bar shrink-0 border-b backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:h-16 sm:px-6">
           <div className="min-w-0 flex-1">
-            <p className="font-[family-name:var(--font-display)] text-xl tracking-tight text-white sm:text-2xl">
-              Trello<span className="text-[var(--accent)]">AI</span>
-            </p>
-            <p className="truncate text-xs text-[var(--muted)]">
+            <BrandMark size="sm" subtitle="Ceará · Terra da Luz" />
+            <p className="mt-0.5 truncate text-xs text-[var(--muted)]">
               {me ? `Olá, ${me.name.split(" ")[0]}` : "Seus boards"}
             </p>
           </div>
@@ -183,7 +182,7 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
             </h1>
             <p className="mt-1 text-sm text-[var(--muted)]">
               {tab === "boards"
-                ? "Kanban com Maya, convites da equipe e validação ASESI."
+                ? "Kanban da Terra da Luz, com Maya, convites e o board ASESI."
                 : "Crie equipes e vincule-as a cada board."}
             </p>
           </div>

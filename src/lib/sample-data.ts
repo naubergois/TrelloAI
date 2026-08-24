@@ -25,7 +25,7 @@ function slugify(input: string) {
 }
 
 export function buildMeetingRoomSlug(boardTitle: string, meetingId: string) {
-  return `TrelloAI-${slugify(boardTitle)}-${meetingId}`;
+  return `Jangada-${slugify(boardTitle)}-${meetingId}`;
 }
 
 export function createSampleWorkspace() {
@@ -45,7 +45,7 @@ export function createSampleWorkspace() {
     [youId]: {
       id: youId,
       name: "Você",
-      email: "voce@trelloai.local",
+      email: "voce@jangada.local",
       role: "owner",
       color: "teal",
       createdAt: now,
@@ -73,7 +73,7 @@ export function createSampleWorkspace() {
     {
       listId: todoId,
       title: "Definir visão do produto",
-      description: "Uma frase clara sobre o que o TrelloAI resolve.",
+      description: "Uma frase clara sobre o que o Jangada resolve.",
       labels: [{ id: nanoid(), name: "produto", color: "teal" }],
       dueDate: null,
       priority: "high",
@@ -167,7 +167,7 @@ export function createSampleWorkspace() {
   const team: Team = {
     id: teamId,
     name: "Equipe produto",
-    description: "Time demo do TrelloAI",
+    description: "Time demo do Jangada",
     memberIds: [youId, anaId, leoId],
     color: "teal",
     createdAt: now,
@@ -176,14 +176,14 @@ export function createSampleWorkspace() {
 
   const board: Board = {
     id: boardId,
-    title: "TrelloAI — MVP",
+    title: "Jangada — ASESI",
     description: "Kanban com gestor virtual diário, IA e reuniões da equipe.",
     listIds: [todoId, doingId, doneId],
     memberIds: [youId, anaId, leoId],
     teamId,
     level: "project",
     parentBoardId: null,
-    backgroundId: "trello",
+    backgroundId: "ceara",
     designId: "classic",
     createdAt: now,
     updatedAt: now,
@@ -254,7 +254,7 @@ export function createSampleWorkspace() {
   };
 
   for (const [id, req] of Object.entries(requirements)) {
-    requirements[id] = withRequirementPrompts(req, "TrelloAI — MVP");
+    requirements[id] = withRequirementPrompts(req, "Jangada — ASESI");
   }
 
   // link first card to REQ-01 after creation loop — patch below

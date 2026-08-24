@@ -7,7 +7,7 @@ export async function GET(
   context: { params: Promise<{ token: string }> },
 ) {
   const { token } = await context.params;
-  const invite = getInvite(token);
+  const invite = await getInvite(token);
   if (!invite) {
     return NextResponse.json({ error: "Convite não encontrado." }, { status: 404 });
   }

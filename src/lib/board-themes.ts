@@ -2,6 +2,10 @@ import type { Board } from "./types";
 import { ensureBoardHierarchy } from "./board-hierarchy";
 
 export type BoardBackgroundId =
+  | "ceara"
+  | "terra-da-luz"
+  | "litoral"
+  | "iracema"
   | "trello"
   | "trello-sage"
   | "trello-gold"
@@ -56,9 +60,44 @@ const BOARD_SURFACE_VARS = {
 
 export const BOARD_BACKGROUNDS: BoardBackground[] = [
   {
+    id: "ceara",
+    name: "Ceará",
+    description: "Verde e ouro da bandeira do Estado",
+    preview:
+      "radial-gradient(180px 120px at 80% 10%, rgba(255,209,0,0.55), transparent 55%), linear-gradient(160deg,#04662e,#00863b 50%,#0b3d22)",
+    surface:
+      "radial-gradient(900px 480px at 88% 0%, rgba(255,209,0,0.28), transparent 55%), radial-gradient(800px 420px at 12% -8%, rgba(255,255,255,0.12), transparent 55%), linear-gradient(165deg,#04662e 0%,#00863b 46%,#0b3d22 100%)",
+  },
+  {
+    id: "terra-da-luz",
+    name: "Terra da Luz",
+    description: "Sol do Mucuripe sobre o sertão",
+    preview:
+      "radial-gradient(160px 110px at 70% 15%, rgba(255,209,0,0.7), transparent 50%), linear-gradient(155deg,#6b4c2f,#eb5f0a 48%,#04662e)",
+    surface:
+      "radial-gradient(700px 400px at 85% -5%, rgba(255,209,0,0.35), transparent 50%), linear-gradient(160deg,#3d2a18 0%,#6b4c2f 38%,#8a4a16 70%,#04662e 100%)",
+  },
+  {
+    id: "litoral",
+    name: "Litoral",
+    description: "Jangada no mar de Fortaleza",
+    preview:
+      "linear-gradient(180deg,#1a6b8a 0%,#0e8a6a 45%,#c9a24a 78%,#00863b 100%)",
+    surface:
+      "radial-gradient(900px 420px at 20% 0%, rgba(255,255,255,0.16), transparent 50%), linear-gradient(180deg,#0c4a62 0%,#127a8a 40%,#c9a24a 78%,#04662e 100%)",
+  },
+  {
+    id: "iracema",
+    name: "Iracema",
+    description: "Laranja do Governo do Ceará",
+    preview: "linear-gradient(155deg,#8a3208,#eb5f0a 50%,#04662e)",
+    surface:
+      "radial-gradient(800px 420px at 90% 0%, rgba(255,209,0,0.2), transparent 55%), linear-gradient(165deg,#5a2208 0%,#eb5f0a 48%,#04662e 100%)",
+  },
+  {
     id: "trello",
-    name: "Trello azul",
-    description: "Azul clássico do Trello",
+    name: "Azul clássico",
+    description: "Azul profundo",
     preview: "linear-gradient(160deg,#026aa7,#0079bf 55%,#055a8c)",
     surface:
       "radial-gradient(900px 480px at 12% -8%, rgba(255,255,255,0.14), transparent 55%), radial-gradient(700px 420px at 88% 0%, rgba(0,121,191,0.35), transparent 50%), linear-gradient(165deg,#026aa7 0%,#0079bf 42%,#055a8c 100%)",
@@ -230,7 +269,7 @@ export const BOARD_DESIGNS: BoardDesign[] = [
   },
 ];
 
-export const DEFAULT_BACKGROUND_ID: BoardBackgroundId = "trello";
+export const DEFAULT_BACKGROUND_ID: BoardBackgroundId = "ceara";
 export const DEFAULT_DESIGN_ID: BoardDesignId = "classic";
 
 export function getBackground(id?: string | null): BoardBackground {

@@ -119,7 +119,7 @@ export async function deepSeekRespond(
     "",
   );
 
-  const system = `You are TrelloAI, an assistant inside a kanban board named "${context.boardTitle}".
+  const system = `You are Jangada, an assistant inside a kanban board named "${context.boardTitle}".
 Reply in Portuguese (Brazil). Be concise.
 You MUST return ONLY valid JSON with this shape:
 {
@@ -187,7 +187,7 @@ export async function openAiRespond(
   context: AiRequestContext,
   apiKey: string,
 ): Promise<AiResponse> {
-  const system = `You are TrelloAI, an assistant inside a kanban board named "${context.boardTitle}".
+  const system = `You are Jangada, an assistant inside a kanban board named "${context.boardTitle}".
 Reply in Portuguese (Brazil). Be concise.
 You MUST return ONLY valid JSON with this shape:
 {

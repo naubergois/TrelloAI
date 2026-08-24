@@ -1,6 +1,7 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "fs";
 import path from "path";
+import { isPgConfigured, pgFindUserByEmail, pgInsertUser } from "@/lib/storage/pg";
 
 export type StoredUser = {
   id: string;
@@ -44,8 +45,11 @@ function hashPassword(password: string, salt: string) {
   return scryptSync(password, salt, 64).toString("hex");
 }
 
-export function findUserByEmail(email: string): StoredUser | undefined {
+export async function findUserByEmail(email: string): Promise<StoredUser | undefined> {
   const normalized = normalizeEmail(email);
+  if (isPgConfigured()) {
+    return pgFindUserByEmail(normalized);
+  }
   return readUsers().find((u) => u.email === normalized);
 }
 
@@ -57,11 +61,11 @@ export function verifyPassword(user: StoredUser, password: string): boolean {
   return timingSafeEqual(a, b);
 }
 
-export function createUser(input: {
+export async function createUser(input: {
   email: string;
   name: string;
   password: string;
-}): { ok: true; user: Omit<StoredUser, "passwordHash" | "salt"> } | { ok: false; error: string } {
+}): Promise<{ ok: true; user: Omit<StoredUser, "passwordHash" | "salt"> } | { ok: false; error: string }> {
   const email = normalizeEmail(input.email);
   const name = input.name.trim();
   const password = input.password;
@@ -75,7 +79,7 @@ export function createUser(input: {
   if (password.length < 8) {
     return { ok: false, error: "A senha deve ter pelo menos 8 caracteres." };
   }
-  if (findUserByEmail(email)) {
+  if (await findUserByEmail(email)) {
     return { ok: false, error: "Já existe uma conta com este e-mail." };
   }
 
@@ -91,6 +95,19 @@ export function createUser(input: {
     salt,
     createdAt: new Date().toISOString(),
   };
+
+  if (isPgConfigured()) {
+    try {
+      await pgInsertUser(user);
+    } catch (err) {
+      const code = err && typeof err === "object" && "code" in err ? String(err.code) : "";
+      if (code === "23505") {
+        return { ok: false, error: "Já existe uma conta com este e-mail." };
+      }
+      throw err;
+    }
+    return { ok: true, user: { id: user.id, email: user.email, name: user.name, createdAt: user.createdAt } };
+  }
 
   const users = readUsers();
   users.push(user);

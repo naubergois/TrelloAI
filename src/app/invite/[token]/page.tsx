@@ -1,4 +1,5 @@
 import { InviteClient } from "@/components/InviteClient";
+import { BrandMark } from "@/components/BrandMark";
 
 export default async function InvitePage({
   params,
@@ -14,9 +15,7 @@ export default async function InvitePage({
         <div className="absolute -right-10 bottom-0 h-80 w-80 rounded-full bg-sky-400/10 blur-3xl" />
       </div>
       <section className="anim-rise relative w-full max-w-md rounded-3xl border border-[var(--line)] bg-[var(--panel-strong)] p-8 shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-        <p className="font-[family-name:var(--font-display)] text-2xl tracking-tight text-white">
-          Trello<span className="text-[var(--accent)]">AI</span>
-        </p>
+        <BrandMark size="md" subtitle="Convite · Ceará" />
         <div className="mt-6">
           <InviteClient token={token} />
         </div>

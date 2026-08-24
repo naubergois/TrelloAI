@@ -1,4 +1,5 @@
 import {
+  isPgConfigured,
   pgAddMembership,
   pgEmailHasAccess,
   pgGetBoard,
@@ -44,7 +45,7 @@ function writeStore(store: SharedStore) {
 }
 
 export async function getSharedBoard(boardId: string): Promise<BoardSnapshot | null> {
-  if (process.env.DATABASE_URL) {
+  if (isPgConfigured()) {
     const pg = await pgGetBoard(boardId);
     if (pg) return pg;
   }
@@ -62,7 +63,7 @@ export async function saveSharedBoard(snapshot: BoardSnapshot) {
     updatedAt: new Date().toISOString(),
   };
 
-  if (process.env.DATABASE_URL) {
+  if (isPgConfigured()) {
     await pgSaveBoard(next);
   }
 
@@ -72,7 +73,7 @@ export async function saveSharedBoard(snapshot: BoardSnapshot) {
 }
 
 export async function listBoardsForEmail(email: string): Promise<BoardSnapshot[]> {
-  if (process.env.DATABASE_URL) {
+  if (isPgConfigured()) {
     const pgBoards = await pgListBoardsForEmail(email);
     if (pgBoards.length > 0) return pgBoards;
   }
@@ -82,7 +83,7 @@ export async function listBoardsForEmail(email: string): Promise<BoardSnapshot[]
 }
 
 export async function addMembership(email: string, boardId: string) {
-  if (process.env.DATABASE_URL) {
+  if (isPgConfigured()) {
     await pgAddMembership(email, boardId);
   }
   const store = readStore();
@@ -94,7 +95,7 @@ export async function addMembership(email: string, boardId: string) {
 }
 
 export async function emailHasBoardAccess(email: string, boardId: string) {
-  if (process.env.DATABASE_URL) {
+  if (isPgConfigured()) {
     const ok = await pgEmailHasAccess(email, boardId);
     if (ok) return true;
   }

@@ -20,7 +20,7 @@ const providers: NextAuthConfig["providers"] = [
       const password = typeof credentials?.password === "string" ? credentials.password : "";
       if (!email || !password) return null;
 
-      const user = findUserByEmail(email);
+      const user = await findUserByEmail(email);
       if (!user || !verifyPassword(user, password)) return null;
 
       return {

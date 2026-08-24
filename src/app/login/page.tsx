@@ -1,5 +1,6 @@
 import { auth, isGoogleAuthConfigured } from "@/auth";
 import { AuthActions } from "@/components/LoginActions";
+import { BrandMark } from "@/components/BrandMark";
 import { CredentialsAuthForm } from "@/components/CredentialsAuthForm";
 import { redirect } from "next/navigation";
 
@@ -26,14 +27,12 @@ export default async function LoginPage({
       </div>
 
       <section className="anim-rise relative w-full max-w-md rounded-3xl border border-[var(--line)] bg-[var(--panel-strong)] p-8 shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-        <p className="font-[family-name:var(--font-display)] text-3xl tracking-tight text-white">
-          Trello<span className="text-[var(--accent)]">AI</span>
-        </p>
-        <h1 className="mt-3 font-[family-name:var(--font-display)] text-xl text-white">
+        <BrandMark size="lg" subtitle="Governo do Ceará · Terra da Luz" />
+        <h1 className="mt-5 font-[family-name:var(--font-display)] text-xl text-white">
           Entrar ou criar conta
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
-          Cadastre-se com e-mail e senha para usar o board. O Google é opcional.
+          Kanban da gestão cearense. Cadastre-se com e-mail e senha. O Google é opcional.
         </p>
 
         {params.error ? (

@@ -1,31 +1,41 @@
 @import "tailwindcss";
 
 :root {
-  --trello-blue: #0079bf;
-  --trello-blue-dark: #026aa7;
-  --trello-navy: #172b4d;
-  --trello-gray: #5e6c84;
-  --trello-green: #61bd4f;
-  --trello-yellow: #f2d600;
-  --trello-orange: #ff9f1a;
-  --trello-red: #eb5a46;
+  /* Identidade visual Governo do Ceará 2023–2026 + bandeira */
+  --ce-green: #00863b;
+  --ce-green-dark: #04662e;
+  --ce-gold: #ffd100;
+  --ce-orange: #eb5f0a;
+  --ce-brown: #6b4c2f;
+  --ce-slate: #485156;
+  --ce-sand: #f4e6c3;
+  --ce-navy: #14301f;
+
+  --trello-blue: var(--ce-green);
+  --trello-blue-dark: var(--ce-green-dark);
+  --trello-navy: var(--ce-navy);
+  --trello-gray: #7a8b7e;
+  --trello-green: #3db54a;
+  --trello-yellow: var(--ce-gold);
+  --trello-orange: var(--ce-orange);
+  --trello-red: #c4451c;
   --trello-purple: #c377e0;
 
-  --ink: #091e42;
-  --ink-2: #0c2744;
-  --panel: rgba(9, 30, 66, 0.55);
-  --panel-strong: rgba(9, 30, 66, 0.88);
+  --ink: #0e2416;
+  --ink-2: #16351f;
+  --panel: rgba(8, 36, 18, 0.58);
+  --panel-strong: rgba(8, 32, 16, 0.9);
   --line: rgba(255, 255, 255, 0.18);
-  --text: #f4f5f7;
-  --muted: rgba(255, 255, 255, 0.72);
-  --accent: var(--trello-blue);
-  --accent-hover: var(--trello-blue-dark);
-  --accent-on: #ffffff;
-  --accent-2: var(--trello-yellow);
-  --glow: rgba(0, 121, 191, 0.28);
-  --background: var(--trello-blue-dark);
+  --text: #f7f4ea;
+  --muted: rgba(244, 230, 195, 0.78);
+  --accent: var(--ce-gold);
+  --accent-hover: #ffe566;
+  --accent-on: #14301f;
+  --accent-2: var(--ce-orange);
+  --glow: rgba(255, 209, 0, 0.28);
+  --background: var(--ce-green-dark);
   --foreground: var(--text);
-  --app-bar: var(--trello-blue-dark);
+  --app-bar: #04662e;
 }
 
 @theme inline {
@@ -50,9 +60,10 @@ body {
   color: var(--text);
   font-family: var(--font-body), system-ui, sans-serif;
   background:
-    radial-gradient(900px 480px at 12% -8%, rgba(255, 255, 255, 0.14), transparent 55%),
-    radial-gradient(700px 420px at 88% 0%, rgba(0, 121, 191, 0.35), transparent 50%),
-    linear-gradient(165deg, #026aa7 0%, #0079bf 42%, #055a8c 100%);
+    radial-gradient(420px 280px at 88% 8%, rgba(255, 209, 0, 0.28), transparent 58%),
+    radial-gradient(900px 520px at 8% -10%, rgba(255, 255, 255, 0.12), transparent 55%),
+    radial-gradient(700px 480px at 70% 110%, rgba(235, 95, 10, 0.18), transparent 50%),
+    linear-gradient(165deg, #04662e 0%, #00863b 46%, #0b3d22 100%);
   background-attachment: fixed;
   min-height: 100%;
   overscroll-behavior: none;
@@ -158,7 +169,7 @@ body {
 }
 
 ::selection {
-  background: rgba(0, 121, 191, 0.35);
+  background: rgba(255, 209, 0, 0.38);
 }
 
 .board-scroll::-webkit-scrollbar {
@@ -274,15 +285,15 @@ body {
 
 .maya-avatar {
   background:
-    radial-gradient(circle at 30% 25%, #7ec8f2, transparent 45%),
-    linear-gradient(145deg, #0079bf 0%, #026aa7 100%);
+    radial-gradient(circle at 30% 25%, #ffe566, transparent 45%),
+    linear-gradient(145deg, #00863b 0%, #04662e 100%);
 }
 
 .panel-glass {
   background: linear-gradient(
     165deg,
-    rgba(8, 30, 56, 0.96) 0%,
-    rgba(4, 20, 40, 0.98) 100%
+    rgba(8, 42, 20, 0.96) 0%,
+    rgba(6, 28, 14, 0.98) 100%
   );
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.1),

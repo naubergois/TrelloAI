@@ -342,7 +342,7 @@ export function localManagerChat(
 
   return {
     message:
-      "Posso gerir o projeto. Exemplos:\n• \"Crie cards para o plano de validação ASESI\"\n• \"Atribua Validar TrelloAI para Ana\"\n• \"Crie a lista Bloqueios\"\n• \"Mova X para concluído\"",
+      "Posso gerir o projeto. Exemplos:\n• \"Crie cards para o plano de validação ASESI\"\n• \"Atribua Validar Jangada para Ana\"\n• \"Crie a lista Bloqueios\"\n• \"Mova X para concluído\"",
     action: { type: "none" },
     provider: "local",
   };

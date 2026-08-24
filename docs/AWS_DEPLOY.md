@@ -43,7 +43,9 @@ Google OAuth é opcional. Se aparecer “Acesso bloqueado / solicitação invál
 
 `https://SEU_DOMINIO/api/auth/callback/google`
 
-Contas locais ficam em `USERS_DATA_DIR` (padrão `./data`; no App Runner `/tmp/trelloai-data`). Em redeploy da instância o arquivo pode ser perdido — para persistência definitiva use um banco depois.
+Contas locais ficam em `USERS_DATA_DIR` (padrão `./data`; no container `/tmp/jangada-data`) **somente se o Postgres não estiver configurado**. Com `PG_*` ou `DATABASE_URL`, usuários, convites e boards vão para o schema `trelloai` no banco `h_asesi` (ver [ASESI_DATABASE.md](ASESI_DATABASE.md)).
+
+O App Runner na internet pública não alcança `192.168.3.26` sem VPN. Para persistência ASESI, rode o serviço na rede interna ou publique as variáveis `PG_*` só quando houver caminho de rede.
 
 ## Board ASESI e convites
 

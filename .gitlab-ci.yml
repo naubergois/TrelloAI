@@ -1,0 +1,56 @@
+# ==============================================================
+# Jangada — GitLab CI/CD Pipeline
+# ==============================================================
+# Build da imagem Docker (Next.js standalone) e deploy via Docker Swarm
+# Padrão: portal ASESI (g_asesi/asesi)
+# ==============================================================
+
+stages:
+  - build-and-deploy-homol
+  - build-and-deploy-prod
+
+variables:
+  GIT_STRATEGY: clone
+  NEXUS_REGISTRY: nexus.cge.ce.gov.br
+  NEXUS_REGISTRY_USER: $NEXUS_REGISTRY_USER
+  NEXUS_REGISTRY_PASSWORD: $NEXUS_REGISTRY_PASSWORD
+  SSH_HOST_HMG: $SSH_HOST_HMG
+  SSH_USER_HMG: $SSH_USER_HMG
+  SSH_HOST_PRD: $SSH_HOST_PRD
+  SSH_USER_PRD: $SSH_USER_PRD
+
+# ==============================================================
+# Build e Deploy — HOMOLOGAÇÃO
+# ==============================================================
+build_and_deploy_homol:
+  stage: build-and-deploy-homol
+  script:
+    - docker build -t jangada:homol .
+    - echo $NEXUS_REGISTRY_PASSWORD | docker login -u $NEXUS_REGISTRY_USER --password-stdin $NEXUS_REGISTRY
+    - docker tag jangada:homol $NEXUS_REGISTRY/jangada:homol
+    - docker push $NEXUS_REGISTRY/jangada:homol
+    - echo "Build jangada:homol concluído com sucesso"
+    - scp "docker-compose.homol.yml" $SSH_USER_HMG@$SSH_HOST_HMG:/tmp
+    - ssh $SSH_USER_HMG@$SSH_HOST_HMG "set -a; [ -f /opt/jangada/.env.homolog ] && . /opt/jangada/.env.homolog; set +a; cd /tmp && docker stack deploy -c docker-compose.homol.yml homolog-jangada --with-registry-auth"
+    - ssh $SSH_USER_HMG@$SSH_HOST_HMG "rm -f /tmp/docker-compose.homol.yml"
+    - echo "Deploy homolog-jangada concluído com sucesso"
+  only:
+    - homol
+
+# ==============================================================
+# Build e Deploy — PRODUÇÃO
+# ==============================================================
+build_and_deploy_prod:
+  stage: build-and-deploy-prod
+  script:
+    - docker build -t jangada:prod .
+    - echo $NEXUS_REGISTRY_PASSWORD | docker login -u $NEXUS_REGISTRY_USER --password-stdin $NEXUS_REGISTRY
+    - docker tag jangada:prod $NEXUS_REGISTRY/jangada:prod
+    - docker push $NEXUS_REGISTRY/jangada:prod
+    - echo "Build jangada:prod concluído com sucesso"
+    - scp "docker-compose.prod.yml" $SSH_USER_PRD@$SSH_HOST_PRD:/tmp
+    - ssh $SSH_USER_PRD@$SSH_HOST_PRD "set -a; [ -f /opt/jangada/.env.prod ] && . /opt/jangada/.env.prod; set +a; cd /tmp && docker stack deploy -c docker-compose.prod.yml jangada --with-registry-auth"
+    - ssh $SSH_USER_PRD@$SSH_HOST_PRD "rm -f /tmp/docker-compose.prod.yml"
+    - echo "Deploy jangada concluído com sucesso"
+  only:
+    - production

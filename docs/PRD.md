@@ -1,8 +1,8 @@
-# PRD — TrelloAI (MVP v0.1)
+# PRD — Jangada (MVP)
 
 ## Visão
 
-TrelloAI é um kanban moderno com assistente de IA para criar cards, quebrar trabalho e sugerir prioridades sem sair do board.
+Jangada é o kanban da ASESI/CGE, com identidade do Ceará e assistente de IA (Maya) para criar cards, quebrar trabalho e sugerir prioridades sem sair do board.
 
 ## Problema
 

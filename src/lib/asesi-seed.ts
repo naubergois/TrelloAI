@@ -9,6 +9,7 @@ import type {
   TeamMember,
   VirtualManager,
 } from "./types";
+import type { BoardSnapshot } from "./board-snapshot";
 import { ASESI_BOARD_ID, ASESI_LIST_IDS, ASESI_TEAM_ID } from "./constants";
 import { calendarDayKey, shiftCalendarDay } from "./calendar-report";
 import { withRequirementPrompts } from "./requirement-prompts";
@@ -70,7 +71,7 @@ export function createAsesiBoardSeed(owner?: {
     },
     {
       listId: ASESI_LIST_IDS.doing,
-      title: "Validar TrelloAI com a equipe",
+      title: "Validar o Jangada com a equipe",
       description: "Convites, cadastro e uso diário do gestor virtual Maya.",
       labels: [{ id: nanoid(), name: "validação", color: "amber" }],
       dueDate: null,
@@ -228,7 +229,7 @@ export function createAsesiBoardSeed(owner?: {
       id: reqPiloto,
       boardId: ASESI_BOARD_ID,
       code: "ASESI-R03",
-      title: "Piloto TrelloAI + Maya",
+      title: "Piloto Jangada + Maya",
       description: "Validação do kanban com convites, dailies e uso pela equipe.",
       status: "in_progress",
       priority: "high",
@@ -284,5 +285,25 @@ export function createAsesiBoardSeed(owner?: {
     requirements,
     calendarEvents,
     ownerId,
+  };
+}
+
+export function createAsesiBoardSnapshot(
+  owner?: Parameters<typeof createAsesiBoardSeed>[0],
+): BoardSnapshot {
+  const seed = createAsesiBoardSeed(owner);
+  return {
+    board: seed.board,
+    lists: seed.lists,
+    cards: seed.cards,
+    members: seed.members,
+    teams: { [seed.team.id]: seed.team },
+    meetings: {},
+    managers: { [seed.board.id]: seed.manager },
+    standups: {},
+    activities: {},
+    requirements: seed.requirements,
+    calendarEvents: seed.calendarEvents,
+    updatedAt: new Date().toISOString(),
   };
 }

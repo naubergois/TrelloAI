@@ -23,6 +23,7 @@ import { AiPanel } from "@/components/AiPanel";
 import { MeetingsPanel } from "@/components/MeetingsPanel";
 import { MeetingRoom } from "@/components/MeetingRoom";
 import { AuthButton } from "@/components/AuthButton";
+import { BrandMark } from "@/components/BrandMark";
 import { ManagerPanel } from "@/components/ManagerPanel";
 import { BoardAppearanceDrawer } from "@/components/BoardAppearanceDrawer";
 import { InvitePanel } from "@/components/InvitePanel";
@@ -218,12 +219,7 @@ export function BoardShell({
           >
             <Home className="hidden h-4 w-4 text-[var(--accent)] sm:block" />
             <div className="min-w-0">
-              <p className="font-[family-name:var(--font-display)] text-lg leading-tight tracking-tight text-white sm:text-xl">
-                Trello<span className="text-[var(--accent)]">AI</span>
-              </p>
-              <p className="hidden truncate text-[11px] text-[var(--muted)] md:block">
-                Meus boards
-              </p>
+            <BrandMark size="sm" subtitle="Meus boards" />
             </div>
           </Link>
 

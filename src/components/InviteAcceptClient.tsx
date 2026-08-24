@@ -116,7 +116,7 @@ export function InviteAcceptClient({ token }: { token: string }) {
       <section className="relative w-full max-w-md rounded-3xl border border-[var(--line)] bg-[var(--panel-strong)] p-8 shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
         <p className="inline-flex items-center gap-2 text-[var(--accent)]">
           <Sparkles className="h-4 w-4" />
-          <span className="text-xs font-semibold uppercase tracking-wide">Convite TrelloAI</span>
+          <span className="text-xs font-semibold uppercase tracking-wide">Convite Jangada</span>
         </p>
         <h1 className="mt-3 font-[family-name:var(--font-display)] text-2xl text-white">
           {meta.boardTitle}

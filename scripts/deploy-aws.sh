@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy TrelloAI to AWS App Runner (ECR + Docker).
+# Deploy Jangada to AWS App Runner (ECR + Docker). Legacy image name: trelloai.
 set -euo pipefail
 
 # Avoid broken local proxy from IDE sandboxes
@@ -90,6 +90,14 @@ RUNTIME_ENV=$(jq -n \
   --arg model "${OPENAI_MODEL:-gpt-4o-mini}" \
   --arg deepseek "${DEEPSEEK_API_KEY:-}" \
   --arg deepseek_model "${DEEPSEEK_MODEL:-deepseek-chat}" \
+  --arg pghost "${PG_HOST:-}" \
+  --arg pgport "${PG_PORT:-5432}" \
+  --arg pgdb "${PG_DATABASE:-h_asesi}" \
+  --arg pguser "${PG_USER:-}" \
+  --arg pgpass "${PG_PASSWORD:-}" \
+  --arg pgschema "${PG_SCHEMA:-trelloai}" \
+  --arg pgssl "${PG_SSL:-0}" \
+  --arg dburl "${DATABASE_URL:-}" \
   '[
     {Name:"NODE_ENV", Value:$node},
     {Name:"AUTH_SECRET", Value:$secret},
@@ -99,7 +107,15 @@ RUNTIME_ENV=$(jq -n \
     {Name:"OPENAI_API_KEY", Value:$oai},
     {Name:"OPENAI_MODEL", Value:$model},
     {Name:"DEEPSEEK_API_KEY", Value:$deepseek},
-    {Name:"DEEPSEEK_MODEL", Value:$deepseek_model}
+    {Name:"DEEPSEEK_MODEL", Value:$deepseek_model},
+    {Name:"PG_HOST", Value:$pghost},
+    {Name:"PG_PORT", Value:$pgport},
+    {Name:"PG_DATABASE", Value:$pgdb},
+    {Name:"PG_USER", Value:$pguser},
+    {Name:"PG_PASSWORD", Value:$pgpass},
+    {Name:"PG_SCHEMA", Value:$pgschema},
+    {Name:"PG_SSL", Value:$pgssl},
+    {Name:"DATABASE_URL", Value:$dburl}
   ]')
 
 SOURCE_CONFIG=$(jq -n \

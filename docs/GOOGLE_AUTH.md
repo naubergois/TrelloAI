@@ -2,7 +2,7 @@
 
 ## Erro “404. That’s an error” no Google
 
-Isso **não** é bug do TrelloAI. O Google rejeita o `redirect_uri` porque ele não está
+Isso **não** é bug do Jangada. O Google rejeita o `redirect_uri` porque ele não está
 cadastrado no OAuth Client.
 
 1. Abra [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials)
@@ -14,7 +14,7 @@ cadastrado no OAuth Client.
 5. Salve e aguarde 1–2 minutos
 6. Tente de novo em http://localhost:3000/login
 
-## Credenciais no TrelloAI
+## Credenciais no Jangada
 
 No `.env.local`:
 

@@ -13,7 +13,7 @@ export async function POST(
   }
 
   const { token } = await context.params;
-  const invite = getInvite(token);
+  const invite = await getInvite(token);
   if (!invite) {
     return NextResponse.json({ error: "Convite não encontrado." }, { status: 404 });
   }
@@ -33,7 +33,7 @@ export async function POST(
   }
 
   await addMembership(email, invite.boardId);
-  recordInviteAcceptance(token, email);
+  await recordInviteAcceptance(token, email);
 
   return NextResponse.json({
     boardId: invite.boardId,

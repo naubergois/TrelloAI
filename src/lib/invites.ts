@@ -1,6 +1,13 @@
 import { createHash, randomBytes } from "crypto";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "fs";
 import path from "path";
+import {
+  isPgConfigured,
+  pgGetInvite,
+  pgInsertInvite,
+  pgListInvitesForBoard,
+  pgRecordInviteAcceptance,
+} from "@/lib/storage/pg";
 
 export type BoardInvite = {
   token: string;
@@ -51,14 +58,14 @@ function writeStore(store: InviteStore) {
   writeFileSync(storePath(), JSON.stringify(store, null, 2), "utf8");
 }
 
-export function createInvite(input: {
+export async function createInvite(input: {
   boardId: string;
   boardTitle: string;
   createdByEmail: string;
   createdByName: string;
   inviteeEmail?: string | null;
   daysValid?: number;
-}): BoardInvite {
+}): Promise<BoardInvite> {
   const token = createHash("sha256")
     .update(`${randomBytes(24).toString("hex")}:${Date.now()}`)
     .digest("hex")
@@ -81,6 +88,11 @@ export function createInvite(input: {
     acceptedEmails: [],
   };
 
+  if (isPgConfigured()) {
+    await pgInsertInvite(invite);
+    return invite;
+  }
+
   const store = readStore();
   store.invites.unshift(invite);
   // keep last 500
@@ -89,7 +101,10 @@ export function createInvite(input: {
   return invite;
 }
 
-export function getInvite(token: string): BoardInvite | null {
+export async function getInvite(token: string): Promise<BoardInvite | null> {
+  if (isPgConfigured()) {
+    return pgGetInvite(token);
+  }
   return readStore().invites.find((i) => i.token === token) ?? null;
 }
 
@@ -113,7 +128,10 @@ export function isInviteValid(
   return { ok: true };
 }
 
-export function recordInviteAcceptance(token: string, usedByEmail: string) {
+export async function recordInviteAcceptance(token: string, usedByEmail: string) {
+  if (isPgConfigured()) {
+    return pgRecordInviteAcceptance(token, usedByEmail);
+  }
   const store = readStore();
   const invite = store.invites.find((i) => i.token === token);
   if (!invite) return null;
@@ -130,6 +148,9 @@ export function recordInviteAcceptance(token: string, usedByEmail: string) {
   return invite;
 }
 
-export function listInvitesForBoard(boardId: string): BoardInvite[] {
+export async function listInvitesForBoard(boardId: string): Promise<BoardInvite[]> {
+  if (isPgConfigured()) {
+    return pgListInvitesForBoard(boardId);
+  }
   return readStore().invites.filter((i) => i.boardId === boardId);
 }

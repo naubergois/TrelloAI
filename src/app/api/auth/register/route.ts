@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
   }
 
-  const result = createUser({
+  const result = await createUser({
     email: body.email ?? "",
     name: body.name ?? "",
     password: body.password ?? "",

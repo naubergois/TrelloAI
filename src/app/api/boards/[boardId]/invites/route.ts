@@ -12,7 +12,7 @@ export async function GET(
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
   const { boardId } = await context.params;
-  const invites = listInvitesForBoard(boardId).filter(
+  const invites = (await listInvitesForBoard(boardId)).filter(
     (i) => new Date(i.expiresAt).getTime() > Date.now(),
   );
   return NextResponse.json({
@@ -51,7 +51,7 @@ export async function POST(
   await saveSharedBoard(body.snapshot);
   await addMembership(session.user.email, boardId);
 
-  const invite = createInvite({
+  const invite = await createInvite({
     boardId,
     boardTitle: body.boardTitle || body.snapshot.board.title,
     createdByEmail: session.user.email,

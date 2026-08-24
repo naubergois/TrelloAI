@@ -17,9 +17,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
-ENV USERS_DATA_DIR=/tmp/trelloai-data
+ENV USERS_DATA_DIR=/tmp/jangada-data
 
-RUN addgroup --system --gid 1001 nodejs \
+RUN apk add --no-cache wget \
+  && addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
@@ -30,5 +31,7 @@ RUN chmod +x ./start.sh
 
 USER nextjs
 EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1:3000/api/health || exit 1
 # Must invoke via /bin/sh: node image entrypoint rewrites bare ./start.sh to `node ./start.sh`.
 CMD ["/bin/sh", "./start.sh"]

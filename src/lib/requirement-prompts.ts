@@ -38,7 +38,7 @@ function scopeBlock(input: RequirementPromptInput) {
 /** Prompt for spec-based / SDD implementation (Cursor, Kiro, agents). */
 export function buildSpecPrompt(input: RequirementPromptInput): string {
   const feature = featureName(input);
-  const product = input.productName || input.boardTitle || "TrelloAI";
+  const product = input.productName || input.boardTitle || "Jangada";
   return `# Spec-based development — ${input.code}
 
 ## Product
@@ -121,7 +121,7 @@ Feature: ${input.code} — ${feature}
 /** Structured MCP tool handoff (software planning + A2A-friendly hints). */
 export function buildMcpPayload(input: RequirementPromptInput): string {
   const feature = featureName(input);
-  const product = input.productName || input.boardTitle || "TrelloAI";
+  const product = input.productName || input.boardTitle || "Jangada";
   const payload = {
     requirement: {
       code: input.code,
