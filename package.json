@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:ensure": "node scripts/ensure-asesi-db.mjs"
+    "db:ensure": "node scripts/ensure-asesi-db.mjs",
+    "mcp": "node scripts/jangada-mcp.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.750.0",

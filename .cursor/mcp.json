@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "jangada": {
+      "command": "node",
+      "args": ["scripts/jangada-mcp.mjs"],
+      "env": {}
+    }
+  }
+}

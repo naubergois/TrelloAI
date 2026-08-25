@@ -75,6 +75,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 | `npm run test` | Vitest |
 | `npm run typecheck` | TypeScript |
 | `npm run db:ensure` | Cria schema `trelloai` e tabelas no `h_asesi` |
+| `npm run mcp` | Servidor MCP stdio (Cursor e Kiro) |
 
 ## Homologação
 
@@ -84,3 +85,14 @@ Secrets (Postgres, Auth, DeepSeek/LiteLLM, admin) vêm do AWS Secrets Manager. O
 - `.gitlab-ci.yml` — build Nexus + `docker stack deploy` nas branches `homol` e `production`
 - Variáveis de controle: `AWS_SECRET_NAME=asesi/jangada/homol` e `AWS_REGION=sa-east-1`
 - Campos já definidos em `process.env` (ex.: `.env.local`) **não** são sobrescritos pelo cofre
+
+## MCP (Cursor e Kiro)
+
+O mesmo servidor stdio grava no Postgres ASESI (ou em `data/shared-boards.json` sem `PG_*`). Cursor e Kiro apontam para `scripts/jangada-mcp.mjs`:
+
+- Cursor: `.cursor/mcp.json`
+- Kiro: `.kiro/settings/mcp.json`
+
+Reinicie o MCP nas duas IDEs depois do `npm install`. Tools principais: `jangada_listar_boards`, `jangada_ver_board`, `jangada_criar_card`, `jangada_criar_cards`, `jangada_mover_card`. Board padrão: `asesi`.
+
+Opcional no `.env.local`: `MCP_ACTOR_EMAIL` (default `admin@cge.ce.gov.br`) — e-mail associado às alterações.
