@@ -1,27 +1,30 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import type { NextAuthConfig } from "next-auth";
-import { findUserByEmail, verifyPassword } from "@/lib/users";
+import { ensureDefaultAdmin, findUserByLogin, verifyPassword } from "@/lib/users";
+import type { UserRole } from "@/lib/users";
 
 const providers: NextAuthConfig["providers"] = [
   Credentials({
     name: "credentials",
     credentials: {
-      email: { label: "E-mail", type: "email" },
+      email: { label: "Usuário", type: "text" },
       password: { label: "Senha", type: "password" },
     },
     async authorize(credentials) {
-      const email = typeof credentials?.email === "string" ? credentials.email : "";
+      const login = typeof credentials?.email === "string" ? credentials.email : "";
       const password = typeof credentials?.password === "string" ? credentials.password : "";
-      if (!email || !password) return null;
+      if (!login || !password) return null;
 
-      const user = await findUserByEmail(email);
+      await ensureDefaultAdmin();
+      const user = await findUserByLogin(login);
       if (!user || !verifyPassword(user, password)) return null;
 
       return {
         id: user.id,
         email: user.email,
         name: user.name,
+        role: user.role,
       };
     },
   }),
@@ -41,6 +44,8 @@ export const authConfig = {
         token.sub = user.id;
         if (user.email) token.email = user.email;
         if (user.name) token.name = user.name;
+        const role = "role" in user ? (user.role as UserRole) : undefined;
+        if (role) token.role = role;
       }
       return token;
     },
@@ -49,6 +54,7 @@ export const authConfig = {
         if (typeof token.sub === "string") session.user.id = token.sub;
         if (typeof token.email === "string") session.user.email = token.email;
         if (typeof token.name === "string") session.user.name = token.name;
+        session.user.role = token.role === "admin" ? "admin" : "user";
       }
       return session;
     },

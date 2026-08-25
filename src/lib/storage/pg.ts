@@ -80,8 +80,15 @@ function ddl(schema: string) {
       name TEXT NOT NULL,
       password_hash TEXT NOT NULL,
       salt TEXT NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      role TEXT NOT NULL DEFAULT 'user',
+      username TEXT
     );
+
+    ALTER TABLE ${s}.users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
+    ALTER TABLE ${s}.users ADD COLUMN IF NOT EXISTS username TEXT;
+    UPDATE ${s}.users SET username = split_part(email, '@', 1) WHERE username IS NULL OR btrim(username) = '';
+    CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_idx ON ${s}.users (lower(username));
 
     CREATE TABLE IF NOT EXISTS ${s}.invites (
       token TEXT PRIMARY KEY,
@@ -217,39 +224,96 @@ export async function pgEmailHasAccess(email: string, boardId: string) {
   return (res.rowCount ?? 0) > 0;
 }
 
-export async function pgFindUserByEmail(email: string): Promise<StoredUser | undefined> {
-  const p = await getPool();
-  if (!p) return undefined;
-  const res = await p.query<{
-    id: string;
-    email: string;
-    name: string;
-    password_hash: string;
-    salt: string;
-    created_at: Date | string;
-  }>("SELECT id, email, name, password_hash, salt, created_at FROM users WHERE email = $1", [
-    email.trim().toLowerCase(),
-  ]);
-  const row = res.rows[0];
-  if (!row) return undefined;
+type UserRow = {
+  id: string;
+  email: string;
+  name: string;
+  password_hash: string;
+  salt: string;
+  created_at: Date | string;
+  role?: string | null;
+  username?: string | null;
+};
+
+function mapUser(row: UserRow): StoredUser {
+  const email = row.email;
+  const username = (row.username || email.split("@")[0] || email).trim().toLowerCase();
   return {
     id: row.id,
-    email: row.email,
+    email,
     name: row.name,
     passwordHash: row.password_hash,
     salt: row.salt,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+    role: row.role === "admin" ? "admin" : "user",
+    username,
   };
+}
+
+const USER_SELECT = "id, email, name, password_hash, salt, created_at, role, username";
+
+export async function pgFindUserByEmail(email: string): Promise<StoredUser | undefined> {
+  const p = await getPool();
+  if (!p) return undefined;
+  const res = await p.query<UserRow>(`SELECT ${USER_SELECT} FROM users WHERE lower(email) = $1`, [
+    email.trim().toLowerCase(),
+  ]);
+  const row = res.rows[0];
+  return row ? mapUser(row) : undefined;
+}
+
+export async function pgFindUserByLogin(login: string): Promise<StoredUser | undefined> {
+  const p = await getPool();
+  if (!p) return undefined;
+  const key = login.trim().toLowerCase();
+  if (!key) return undefined;
+  const res = await p.query<UserRow>(
+    `SELECT ${USER_SELECT}
+     FROM users
+     WHERE lower(email) = $1
+        OR lower(coalesce(username, '')) = $1
+        OR split_part(lower(email), '@', 1) = $1
+     LIMIT 1`,
+    [key],
+  );
+  const row = res.rows[0];
+  return row ? mapUser(row) : undefined;
+}
+
+export async function pgListUsers(): Promise<StoredUser[]> {
+  const p = await getPool();
+  if (!p) return [];
+  const res = await p.query<UserRow>(`SELECT ${USER_SELECT} FROM users ORDER BY created_at ASC`);
+  return res.rows.map(mapUser);
 }
 
 export async function pgInsertUser(user: StoredUser) {
   const p = await getPool();
   if (!p) return false;
   await p.query(
-    `INSERT INTO users (id, email, name, password_hash, salt, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6::timestamptz)`,
-    [user.id, user.email, user.name, user.passwordHash, user.salt, user.createdAt],
+    `INSERT INTO users (id, email, name, password_hash, salt, created_at, role, username)
+     VALUES ($1, $2, $3, $4, $5, $6::timestamptz, $7, $8)`,
+    [
+      user.id,
+      user.email,
+      user.name,
+      user.passwordHash,
+      user.salt,
+      user.createdAt,
+      user.role,
+      user.username,
+    ],
   );
+  return true;
+}
+
+export async function pgEnsureUsername(email: string, username: string) {
+  const p = await getPool();
+  if (!p) return false;
+  await p.query(`UPDATE users SET username = $2 WHERE lower(email) = $1 AND (username IS NULL OR btrim(username) = '')`, [
+    email.trim().toLowerCase(),
+    username.trim().toLowerCase(),
+  ]);
   return true;
 }
 

@@ -10,7 +10,7 @@ O Jangada é um quadro Kanban colaborativo para a gestão pública cearense. Cad
 
 Fluxo típico:
 
-1. Entrar em `/login` com e-mail e senha.
+1. Entrar em `/login` com o admin padrão (`admin` / `Jangada@Admin`) ou uma conta cadastrada por ele.
 2. Na home, abrir um board existente, criar um novo ou aceitar um convite.
 3. Arrastar cards entre listas, editar detalhes e atribuir pessoas da equipe.
 4. Usar a **Maya** para daily, criar/mover cards e sugerir prioridades (DeepSeek ou LiteLLM CGE).
@@ -21,11 +21,12 @@ A persistência oficial é o PostgreSQL da ASESI (`h_asesi`, schema `trelloai`),
 ## Stack
 
 - Next.js 16 (App Router) + TypeScript + Tailwind CSS 4
-- Auth.js (`next-auth`) — credenciais (e-mail + senha)
+- Auth.js (`next-auth`) — usuário e senha (admin cadastra os demais)
 - Zustand no cliente (estado do board aberto)
 - PostgreSQL (`pg`) — boards, membros, usuários e convites
 - `@dnd-kit` — drag-and-drop
 - Maya: DeepSeek / LiteLLM CGE (`DEEPSEEK_*`); motor local se a chave não estiver definida
+- AWS Secrets Manager (`AWS_SECRET_NAME`) — injeta env vars na inicialização, sem sobrescrever `.env.local`
 - Jitsi Meet (salas via iframe)
 
 ## Identidade e banco
@@ -36,11 +37,12 @@ A persistência oficial é o PostgreSQL da ASESI (`h_asesi`, schema `trelloai`),
 | Schema PostgreSQL | `trelloai` (nome técnico legado; **não** misturar com `farol`) |
 | Banco | `h_asesi` em `192.168.3.26:5432` |
 | Health | `GET /api/health` → `{ service: "jangada", database: … }` |
-| Homologação | porta local **5558**, stack Swarm `homolog-jangada`, host `homolog-jangada.cge.local` |
+| Homologação | stack Swarm `homolog-jangada`, host `homolog-jangada.cge.local` |
+| Cofre | secret `asesi/jangada/homol` (região `sa-east-1`) |
 
 ## Como rodar localmente
 
-Na rede CGE (ou VPN) para alcançar o Postgres:
+Na rede CGE (ou VPN) para alcançar o Postgres. Localmente use `.env.local` (não precisa do cofre AWS).
 
 ```powershell
 npm install
@@ -50,7 +52,12 @@ npm run db:ensure
 npm run dev
 ```
 
-Abra [http://localhost:3000](http://localhost:3000).
+Abra [http://localhost:3000](http://localhost:3000). Login inicial:
+
+- **Usuário:** `admin`
+- **Senha:** `Jangada@Admin`
+
+O administrador cadastra os demais em `/admin/usuarios`.
 
 `AUTH_SECRET` pode ser gerado com:
 
@@ -71,17 +78,9 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 ## Homologação
 
-Pacote no padrão das demais apps ASESI (portal + Cacimba):
+Secrets (Postgres, Auth, DeepSeek/LiteLLM, admin) vêm do AWS Secrets Manager. O compose só passa as credenciais do cofre:
 
-- [docs/HOMOLOGACAO.md](docs/HOMOLOGACAO.md) — smoke, Swarm/Traefik, checklist de infra e template CGE Atende
 - `docker-compose.homol.yml` — deploy Swarm (branch `homol`, CI)
-- `docker-compose.homol.local.yml` — smoke local na porta 5558
-- `docker/env.homolog.example` — modelo de secrets (nunca versionar `.env.homolog`)
 - `.gitlab-ci.yml` — build Nexus + `docker stack deploy` nas branches `homol` e `production`
-
-## Docs
-
-- [docs/HOMOLOGACAO.md](docs/HOMOLOGACAO.md)
-- [docs/ASESI_DATABASE.md](docs/ASESI_DATABASE.md)
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- [docs/PRD.md](docs/PRD.md)
+- Variáveis de controle: `AWS_SECRET_NAME=asesi/jangada/homol` e `AWS_REGION=sa-east-1`
+- Campos já definidos em `process.env` (ex.: `.env.local`) **não** são sobrescritos pelo cofre

@@ -4,8 +4,6 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
-type Mode = "login" | "register";
-
 export function CredentialsAuthForm({
   callbackUrl = "/",
   defaultEmail = "",
@@ -16,9 +14,7 @@ export function CredentialsAuthForm({
   inviteHint?: boolean;
 }) {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>(inviteHint ? "register" : "login");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState(defaultEmail);
+  const [login, setLogin] = useState(defaultEmail);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -29,32 +25,15 @@ export function CredentialsAuthForm({
     setLoading(true);
 
     try {
-      if (mode === "register") {
-        const res = await fetch("/api/auth/register", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, email, password }),
-        });
-        const data = (await res.json()) as { error?: string };
-        if (!res.ok) {
-          setError(data.error || "Não foi possível criar a conta.");
-          return;
-        }
-      }
-
       const result = await signIn("credentials", {
-        email,
+        email: login,
         password,
         redirect: false,
         callbackUrl,
       });
 
       if (result?.error) {
-        setError(
-          mode === "register"
-            ? "Conta criada, mas o login falhou. Tente entrar de novo."
-            : "E-mail ou senha incorretos.",
-        );
+        setError("Usuário ou senha incorretos.");
         return;
       }
 
@@ -71,61 +50,23 @@ export function CredentialsAuthForm({
     <div className="space-y-4">
       {inviteHint ? (
         <p className="rounded-xl border border-[var(--accent)]/25 bg-[var(--accent)]/10 px-3 py-2 text-xs text-[var(--accent)]">
-          Após criar a conta ou entrar, você volta a esta página para aceitar o convite do board.
+          Entre com o usuário cadastrado pelo administrador para aceitar o convite.
         </p>
       ) : null}
-      <div className="flex rounded-xl border border-[var(--line)] p-1 text-sm">
-        <button
-          type="button"
-          onClick={() => {
-            setMode("login");
-            setError(null);
-          }}
-          className={`flex-1 rounded-lg px-3 py-2 transition ${
-            mode === "login" ? "bg-white/10 text-white" : "text-[var(--muted)] hover:text-white"
-          }`}
-        >
-          Entrar
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setMode("register");
-            setError(null);
-          }}
-          className={`flex-1 rounded-lg px-3 py-2 transition ${
-            mode === "register" ? "bg-white/10 text-white" : "text-[var(--muted)] hover:text-white"
-          }`}
-        >
-          Criar conta
-        </button>
-      </div>
 
       <form onSubmit={onSubmit} className="space-y-3">
-        {mode === "register" ? (
-          <label className="block space-y-1.5 text-sm">
-            <span className="text-[var(--muted)]">Nome</span>
-            <input
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              autoComplete="name"
-              className="w-full rounded-xl border border-[var(--line)] bg-black/20 px-3 py-2.5 text-white outline-none ring-[var(--accent)] focus:ring-1"
-              placeholder="Seu nome"
-            />
-          </label>
-        ) : null}
-
         <label className="block space-y-1.5 text-sm">
-          <span className="text-[var(--muted)]">E-mail</span>
+          <span className="text-[var(--muted)]">Usuário</span>
           <input
             required
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
+            type="text"
+            value={login}
+            onChange={(e) => setLogin(e.target.value)}
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false}
             className="w-full rounded-xl border border-[var(--line)] bg-black/20 px-3 py-2.5 text-white outline-none ring-[var(--accent)] focus:ring-1"
-            placeholder="voce@empresa.com"
+            placeholder="admin"
           />
         </label>
 
@@ -136,10 +77,10 @@ export function CredentialsAuthForm({
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            autoComplete={mode === "register" ? "new-password" : "current-password"}
+            autoComplete="current-password"
             minLength={8}
             className="w-full rounded-xl border border-[var(--line)] bg-black/20 px-3 py-2.5 text-white outline-none ring-[var(--accent)] focus:ring-1"
-            placeholder={mode === "register" ? "Mínimo 8 caracteres" : "••••••••"}
+            placeholder="••••••••"
           />
         </label>
 
@@ -154,7 +95,7 @@ export function CredentialsAuthForm({
           disabled={loading}
           className="flex w-full items-center justify-center rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-slate-950 transition hover:brightness-110 disabled:opacity-60"
         >
-          {loading ? "Aguarde…" : mode === "register" ? "Criar conta e entrar" : "Entrar"}
+          {loading ? "Aguarde…" : "Entrar"}
         </button>
       </form>
     </div>

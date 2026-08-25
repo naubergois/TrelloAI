@@ -1,3 +1,4 @@
+import { deepSeekChatCompletions } from "./deepseek";
 import type { AiAction, Card } from "./types";
 
 export interface AiRequestContext {
@@ -113,12 +114,6 @@ export async function deepSeekRespond(
   context: AiRequestContext,
   apiKey: string,
 ): Promise<AiResponse> {
-  const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
-  const baseUrl = (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com").replace(
-    /\/$/,
-    "",
-  );
-
   const system = `You are Jangada, an assistant inside a kanban board named "${context.boardTitle}".
 Reply in Portuguese (Brazil). Be concise.
 You MUST return ONLY valid JSON with this shape:
@@ -138,38 +133,14 @@ Rules:
 - Only use cardIds that exist in context for priority updates.
 - Max 8 cards per create_cards.`;
 
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.4,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: prompt },
-      ],
-    }),
+  const cleaned = await deepSeekChatCompletions({
+    apiKey,
+    temperature: 0.4,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: prompt },
+    ],
   });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`DeepSeek error ${res.status}: ${text.slice(0, 200)}`);
-  }
-
-  const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error("Empty DeepSeek response");
-
-  const cleaned = content
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "");
   const parsed = JSON.parse(cleaned) as {
     message?: string;
     action?: AiAction;

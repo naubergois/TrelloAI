@@ -157,7 +157,7 @@ export function InviteAcceptClient({ token }: { token: string }) {
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-[var(--accent-on)] transition hover:brightness-110"
               >
                 <LogIn className="h-4 w-4" />
-                Criar conta ou entrar
+                Entrar
               </Link>
               {meta.inviteeEmail ? (
                 <p className="text-center text-[11px] text-[var(--muted)]">

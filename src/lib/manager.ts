@@ -1,5 +1,6 @@
 import type { AiAction, Card, StandupCheckIn } from "./types";
 import type { AiRequestContext, AiResponse } from "./ai";
+import { deepSeekChatCompletions } from "./deepseek";
 
 export interface ManagerContext extends AiRequestContext {
   managerName: string;
@@ -183,11 +184,6 @@ export async function deepSeekManagerProcess(
   opts?: { mode?: "daily" | "chat"; userMessage?: string },
 ): Promise<ManagerAiResponse> {
   const mode = opts?.mode || "daily";
-  const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
-  const baseUrl = (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com").replace(
-    /\/$/,
-    "",
-  );
 
   const system = `Você é ${context.managerName}, gestor(a) virtual do kanban "${context.boardTitle}".
 Fala português (Brasil). Você GERENCIA o projeto de verdade: cria listas/cards, move, prioriza, atribui responsáveis e define prazos.
@@ -217,35 +213,14 @@ ${JSON.stringify(context, null, 2)}`;
       ? opts?.userMessage || "Ajude a organizar o projeto."
       : "Processe a daily: aplique ações concretas no board com base nos check-ins.";
 
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.3,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: userContent },
-      ],
-    }),
+  const cleaned = await deepSeekChatCompletions({
+    apiKey,
+    temperature: 0.3,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: userContent },
+    ],
   });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`DeepSeek error ${res.status}: ${text.slice(0, 200)}`);
-  }
-
-  const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error("Empty DeepSeek response");
-
-  const cleaned = content.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "");
   const parsed = JSON.parse(cleaned) as {
     message?: string;
     action?: AiAction;
@@ -398,8 +373,6 @@ export async function deepSeekStandupTurn(
   input: StandupTurnInput,
   apiKey: string,
 ): Promise<StandupTurnResult> {
-  const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
-  const baseUrl = (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com").replace(/\/$/, "");
   const currentQ = input.questions[input.questionIndex] || input.questions[0];
   const nextQ =
     input.questionIndex + 1 < input.questions.length
@@ -429,38 +402,14 @@ Regras:
 - Próxima pergunta (se houver): "${nextQ || ""}"
 - Máx ~3 frases em message.`;
 
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.5,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: input.userReply },
-      ],
-    }),
+  const cleaned = await deepSeekChatCompletions({
+    apiKey,
+    temperature: 0.5,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: input.userReply },
+    ],
   });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`DeepSeek error ${res.status}: ${text.slice(0, 200)}`);
-  }
-
-  const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error("Empty DeepSeek response");
-
-  const cleaned = content
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "");
   const parsed = JSON.parse(cleaned) as {
     message?: string;
     extract?: StandupTurnResult["extract"];

@@ -167,7 +167,7 @@ export function InviteClient({ token }: { token: string }) {
       {info.valid && status !== "authenticated" ? (
         <div className="space-y-3">
           <p className="text-sm text-[var(--muted)]">
-            Crie uma conta ou entre para aceitar o convite automaticamente.
+            Entre com a conta cadastrada pelo administrador para aceitar o convite.
           </p>
           <CredentialsAuthForm
             callbackUrl={`/invite/${token}`}
