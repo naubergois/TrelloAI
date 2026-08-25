@@ -10,7 +10,7 @@ O Jangada é um quadro Kanban colaborativo para a gestão pública cearense. Cad
 
 Fluxo típico:
 
-1. Entrar em `/login` com e-mail e senha (Google OAuth é opcional).
+1. Entrar em `/login` com e-mail e senha.
 2. Na home, abrir um board existente, criar um novo ou aceitar um convite.
 3. Arrastar cards entre listas, editar detalhes e atribuir pessoas da equipe.
 4. Usar a **Maya** para daily, criar/mover cards e sugerir prioridades (DeepSeek ou LiteLLM CGE).
@@ -21,7 +21,7 @@ A persistência oficial é o PostgreSQL da ASESI (`h_asesi`, schema `trelloai`),
 ## Stack
 
 - Next.js 16 (App Router) + TypeScript + Tailwind CSS 4
-- Auth.js (`next-auth`) — credenciais e Google opcional
+- Auth.js (`next-auth`) — credenciais (e-mail + senha)
 - Zustand no cliente (estado do board aberto)
 - PostgreSQL (`pg`) — boards, membros, usuários e convites
 - `@dnd-kit` — drag-and-drop
@@ -84,5 +84,4 @@ Pacote no padrão das demais apps ASESI (portal + Cacimba):
 - [docs/HOMOLOGACAO.md](docs/HOMOLOGACAO.md)
 - [docs/ASESI_DATABASE.md](docs/ASESI_DATABASE.md)
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- [docs/GOOGLE_AUTH.md](docs/GOOGLE_AUTH.md)
 - [docs/PRD.md](docs/PRD.md)

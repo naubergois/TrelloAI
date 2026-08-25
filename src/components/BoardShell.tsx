@@ -59,10 +59,8 @@ type SidePanel =
 
 export function BoardShell({
   boardId,
-  googleConfigured = false,
 }: {
   boardId: string;
-  googleConfigured?: boolean;
 }) {
   const router = useRouter();
   const boards = useBoardStore((s) => s.boards);
@@ -240,7 +238,7 @@ export function BoardShell({
               </select>
             </div>
 
-            <AuthButton googleConfigured={googleConfigured} />
+            <AuthButton />
 
             <button
               type="button"

@@ -128,7 +128,6 @@ export interface TeamMember {
   role: TeamRole;
   color: LabelColor;
   image?: string | null;
-  googleId?: string | null;
   createdAt: string;
 }
 

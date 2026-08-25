@@ -193,7 +193,7 @@ interface BoardState {
     updates: { cardId: string; priority: NonNullable<Card["priority"]> }[],
   ) => void;
   setCurrentUserName: (name: string) => void;
-  syncGoogleUser: (profile: {
+  syncAuthUser: (profile: {
     name: string;
     email: string;
     image?: string | null;
@@ -1290,10 +1290,10 @@ export const useBoardStore = create<BoardState>()(
           };
         }),
 
-      syncGoogleUser: (profile) =>
+      syncAuthUser: (profile) =>
         set((state) => {
           const email = profile.email.trim().toLowerCase();
-          const name = profile.name.trim() || "Usuário Google";
+          const name = profile.name.trim() || "Usuário";
           const image = profile.image ?? null;
           const now = new Date().toISOString();
 

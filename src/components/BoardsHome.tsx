@@ -41,7 +41,7 @@ import type { BoardLevel } from "@/lib/types";
 
 type HomeTab = "boards" | "teams";
 
-export function BoardsHome({ googleConfigured = false }: { googleConfigured?: boolean }) {
+export function BoardsHome() {
   const router = useRouter();
   const boards = useBoardStore((s) => s.boards);
   const teams = useBoardStore((s) => s.teams);
@@ -162,7 +162,7 @@ export function BoardsHome({ googleConfigured = false }: { googleConfigured?: bo
               {me ? `Olá, ${me.name.split(" ")[0]}` : "Seus boards"}
             </p>
           </div>
-          <AuthButton googleConfigured={googleConfigured} />
+          <AuthButton />
           <button
             type="button"
             onClick={() => setCreating(true)}

@@ -1,84 +1,38 @@
-# ==============================================================
-# Jangada — Docker Compose (HOMOLOGAÇÃO / Swarm)
-# ==============================================================
-# Uso: docker stack deploy -c docker-compose.homol.yml homolog-jangada --with-registry-auth
-# URL: http://homolog-jangada.cge.local
-# Secrets: source /opt/jangada/.env.homolog no manager antes do deploy
-# ==============================================================
+version: "3.8"
 
 services:
   jangada:
     image: nexus.cge.ce.gov.br/jangada:homol
-    container_name: homolog-jangada
-    restart: unless-stopped
     environment:
-      TZ: America/Fortaleza
       NODE_ENV: production
       PORT: "3000"
+      TZ: America/Fortaleza
+      AWS_SECRET_NAME: asesi/jangada/homol
+      AWS_REGION: sa-east-1
+      AWS_ACCESS_KEY_ID: ${SM_AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${SM_AWS_SECRET_ACCESS_KEY}
       ALLOW_LOCAL_BYPASS: "0"
-      AUTH_SECRET: ${AUTH_SECRET}
-      AUTH_URL: ${AUTH_URL:-http://homolog-jangada.cge.local}
-      AUTH_GOOGLE_ID: ${AUTH_GOOGLE_ID:-}
-      AUTH_GOOGLE_SECRET: ${AUTH_GOOGLE_SECRET:-}
-      PG_HOST: ${PG_HOST:-192.168.3.26}
-      PG_PORT: ${PG_PORT:-5432}
-      PG_DATABASE: ${PG_DATABASE:-h_asesi}
-      PG_USER: ${PG_USER:-postgres}
-      PG_PASSWORD: ${PG_PASSWORD}
-      PG_SCHEMA: ${PG_SCHEMA:-trelloai}
-      PG_SSL: ${PG_SSL:-0}
-      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
-      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://litellm.cge.ce.gov.br}
-      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek.v3.2}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      USERS_DATA_DIR: /tmp/jangada-data
-      BUILD_SHA: ${BUILD_SHA:-unknown}
-    networks:
-      - proxy
     deploy:
       replicas: 1
       restart_policy:
         condition: on-failure
         delay: 5s
         max_attempts: 3
-      update_config:
-        parallelism: 1
-        delay: 10s
-        order: stop-first
-        failure_action: rollback
-      rollback_config:
-        parallelism: 1
-        delay: 5s
       resources:
         limits:
-          cpus: "1.00"
-          memory: 768M
-        reservations:
-          cpus: "0.25"
-          memory: 256M
-      placement:
-        constraints:
-          - "node.role==worker"
+          cpus: "1"
+          memory: 512M
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.homolog-jangada.rule=Host(`homolog-jangada.cge.local`)"
-        - "traefik.http.routers.homolog-jangada.entrypoints=web"
-        - "traefik.http.routers.homolog-jangada.priority=1"
-        - "traefik.http.services.homolog-jangada.loadbalancer.server.port=3000"
-        - "traefik.docker.network=proxy"
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 40s
-    logging:
-      driver: loki
-      options:
-        loki-url: "http://srv58-col:3100/loki/api/v1/push"
-        loki-retries: "5"
-        loki-batch-size: "400"
+        - "traefik.http.routers.jangada-homol.rule=Host(`homolog-jangada.cge.local`)"
+        - "traefik.http.routers.jangada-homol.entrypoints=web"
+        - "traefik.http.services.jangada-homol.loadbalancer.server.port=3000"
+    networks:
+      - proxy
+      - homol
 
 networks:
   proxy:
+    external: true
+  homol:
     external: true

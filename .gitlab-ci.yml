@@ -2,7 +2,6 @@
 # Jangada — GitLab CI/CD Pipeline
 # ==============================================================
 # Build da imagem Docker (Next.js standalone) e deploy via Docker Swarm
-# Padrão: portal ASESI (g_asesi/asesi)
 # ==============================================================
 
 stages:
@@ -30,8 +29,10 @@ build_and_deploy_homol:
     - docker tag jangada:homol $NEXUS_REGISTRY/jangada:homol
     - docker push $NEXUS_REGISTRY/jangada:homol
     - echo "Build jangada:homol concluído com sucesso"
+    - sed -i "s/\${SM_AWS_ACCESS_KEY_ID}/$SM_AWS_ACCESS_KEY_ID/g" docker-compose.homol.yml
+    - sed -i "s/\${SM_AWS_SECRET_ACCESS_KEY}/$SM_AWS_SECRET_ACCESS_KEY/g" docker-compose.homol.yml
     - scp "docker-compose.homol.yml" $SSH_USER_HMG@$SSH_HOST_HMG:/tmp
-    - ssh $SSH_USER_HMG@$SSH_HOST_HMG "set -a; [ -f /opt/jangada/.env.homolog ] && . /opt/jangada/.env.homolog; set +a; cd /tmp && docker stack deploy -c docker-compose.homol.yml homolog-jangada --with-registry-auth"
+    - ssh $SSH_USER_HMG@$SSH_HOST_HMG "cd /tmp && docker stack deploy -c docker-compose.homol.yml homolog-jangada --with-registry-auth"
     - ssh $SSH_USER_HMG@$SSH_HOST_HMG "rm -f /tmp/docker-compose.homol.yml"
     - echo "Deploy homolog-jangada concluído com sucesso"
   only:
@@ -48,8 +49,10 @@ build_and_deploy_prod:
     - docker tag jangada:prod $NEXUS_REGISTRY/jangada:prod
     - docker push $NEXUS_REGISTRY/jangada:prod
     - echo "Build jangada:prod concluído com sucesso"
+    - sed -i "s/\${SM_AWS_ACCESS_KEY_ID}/$SM_AWS_ACCESS_KEY_ID/g" docker-compose.prod.yml
+    - sed -i "s/\${SM_AWS_SECRET_ACCESS_KEY}/$SM_AWS_SECRET_ACCESS_KEY/g" docker-compose.prod.yml
     - scp "docker-compose.prod.yml" $SSH_USER_PRD@$SSH_HOST_PRD:/tmp
-    - ssh $SSH_USER_PRD@$SSH_HOST_PRD "set -a; [ -f /opt/jangada/.env.prod ] && . /opt/jangada/.env.prod; set +a; cd /tmp && docker stack deploy -c docker-compose.prod.yml jangada --with-registry-auth"
+    - ssh $SSH_USER_PRD@$SSH_HOST_PRD "cd /tmp && docker stack deploy -c docker-compose.prod.yml jangada --with-registry-auth"
     - ssh $SSH_USER_PRD@$SSH_HOST_PRD "rm -f /tmp/docker-compose.prod.yml"
     - echo "Deploy jangada concluído com sucesso"
   only:

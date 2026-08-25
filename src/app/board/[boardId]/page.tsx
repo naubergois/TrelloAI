@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { auth, isGoogleAuthConfigured } from "@/auth";
+import { auth } from "@/auth";
 import { AppProviders } from "@/components/AppProviders";
 import { BoardShell } from "@/components/BoardShell";
 import { allowLocalBypass } from "@/lib/api-security";
@@ -11,7 +11,6 @@ export default async function BoardPage({
   params: Promise<{ boardId: string }>;
   searchParams: Promise<{ local?: string }>;
 }) {
-  const googleConfigured = isGoogleAuthConfigured();
   const session = await auth();
   const { boardId } = await params;
   const query = await searchParams;
@@ -23,7 +22,7 @@ export default async function BoardPage({
 
   return (
     <AppProviders>
-      <BoardShell boardId={boardId} googleConfigured={googleConfigured} />
+      <BoardShell boardId={boardId} />
     </AppProviders>
   );
 }
