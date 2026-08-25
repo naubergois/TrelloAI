@@ -1,9 +1,10 @@
 /**
  * Cliente OpenAI-compatível para DeepSeek nativo e LiteLLM CGE.
  *
- * O Bedrock (modelo `deepseek.v3.2` via LiteLLM) rejeita `temperature` e
- * `response_format`. Nesses casos omitimos os dois; o JSON continua pedido
- * no prompt de sistema.
+ * O proxy CGE mapeia `deepseek.v3.2` para Bedrock Invoke, que devolve 404
+ * (provider=None). O modelo que funciona hoje é `us.deepseek.r1-v1:0`
+ * (Converse / inference profile). Bedrock também rejeita `temperature` e
+ * `response_format` — omitimos os dois e pedimos JSON no prompt.
  */
 
 export type DeepSeekChatMessage = {
@@ -11,13 +12,21 @@ export type DeepSeekChatMessage = {
   content: string;
 };
 
+/** Aliases do LiteLLM CGE que caem no Bedrock Invoke quebrado. */
+export const BROKEN_LITELLM_DEEPSEEK_MODELS = new Set([
+  "deepseek.v3.2",
+  "bedrock/us-east-1/deepseek.v3.2",
+]);
+
+export const LITELLM_DEEPSEEK_FALLBACK_MODEL = "us.deepseek.r1-v1:0";
+
 export function getDeepSeekConfig() {
-  const model = process.env.DEEPSEEK_MODEL?.trim() || "deepseek-chat";
+  const requested = process.env.DEEPSEEK_MODEL?.trim() || "deepseek-chat";
   const baseUrl = (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com").replace(
     /\/$/,
     "",
   );
-  return { model, baseUrl };
+  return { model: resolveDeepSeekModel(baseUrl, requested), baseUrl, requested };
 }
 
 export function shouldDropBedrockParams(baseUrl: string, model: string): boolean {
@@ -27,9 +36,27 @@ export function shouldDropBedrockParams(baseUrl: string, model: string): boolean
   if (/litellm/i.test(baseUrl) || /bedrock/i.test(baseUrl) || /bedrock/i.test(model)) {
     return true;
   }
-  // Alias CGE / Bedrock: deepseek.v3.2 (o DeepSeek nativo usa deepseek-chat)
+  // Alias CGE / Bedrock: deepseek.v3.2, us.deepseek.r1-v1:0
   if (model.includes(".")) return true;
   return false;
+}
+
+export function resolveDeepSeekModel(baseUrl: string, model: string): string {
+  const flag = process.env.DEEPSEEK_DISABLE_MODEL_REMAP?.trim().toLowerCase();
+  if (flag === "1" || flag === "true") return model;
+  if (!shouldDropBedrockParams(baseUrl, model) && !/litellm/i.test(baseUrl)) {
+    return model;
+  }
+  if (!BROKEN_LITELLM_DEEPSEEK_MODELS.has(model)) return model;
+  return process.env.DEEPSEEK_FALLBACK_MODEL?.trim() || LITELLM_DEEPSEEK_FALLBACK_MODEL;
+}
+
+export function chatCompletionsUrl(baseUrl: string): string {
+  const base = baseUrl.replace(/\/$/, "");
+  if (/\/chat\/completions$/i.test(base)) return base;
+  if (/\/v1$/i.test(base)) return `${base}/chat/completions`;
+  if (/litellm/i.test(base)) return `${base}/v1/chat/completions`;
+  return `${base}/chat/completions`;
 }
 
 export function buildDeepSeekChatBody(opts: {
@@ -38,12 +65,15 @@ export function buildDeepSeekChatBody(opts: {
   messages: DeepSeekChatMessage[];
   temperature?: number;
 }): Record<string, unknown> {
+  const model = resolveDeepSeekModel(opts.baseUrl, opts.model);
   const body: Record<string, unknown> = {
-    model: opts.model,
+    model,
     messages: opts.messages,
   };
 
-  if (shouldDropBedrockParams(opts.baseUrl, opts.model)) {
+  if (shouldDropBedrockParams(opts.baseUrl, model)) {
+    // R1 gasta tokens em raciocínio; sem teto a resposta JSON pode vir vazia.
+    body.max_tokens = 4096;
     return body;
   }
 
@@ -62,13 +92,37 @@ export function stripJsonFence(content: string) {
     .trim();
 }
 
+export function extractJsonText(content: string) {
+  const stripped = stripJsonFence(content);
+  try {
+    JSON.parse(stripped);
+    return stripped;
+  } catch {
+    const start = stripped.indexOf("{");
+    const end = stripped.lastIndexOf("}");
+    if (start >= 0 && end > start) return stripped.slice(start, end + 1);
+    return stripped;
+  }
+}
+
+type ChatMessage = {
+  content?: string | null;
+  reasoning_content?: string | null;
+};
+
+export function messageText(message: ChatMessage | undefined): string {
+  const content = message?.content?.trim();
+  if (content) return content;
+  return message?.reasoning_content?.trim() || "";
+}
+
 export async function deepSeekChatCompletions(opts: {
   apiKey: string;
   messages: DeepSeekChatMessage[];
   temperature?: number;
 }): Promise<string> {
   const { model, baseUrl } = getDeepSeekConfig();
-  const res = await fetch(`${baseUrl}/chat/completions`, {
+  const res = await fetch(chatCompletionsUrl(baseUrl), {
     method: "POST",
     headers: {
       Authorization: `Bearer ${opts.apiKey}`,
@@ -90,9 +144,9 @@ export async function deepSeekChatCompletions(opts: {
   }
 
   const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
+    choices?: { message?: ChatMessage }[];
   };
-  const content = data.choices?.[0]?.message?.content;
+  const content = messageText(data.choices?.[0]?.message);
   if (!content) throw new Error("Empty DeepSeek response");
-  return stripJsonFence(content);
+  return extractJsonText(content);
 }
