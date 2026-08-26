@@ -41,8 +41,17 @@ export function compactBoard(snapshot) {
           id: card.id,
           title: card.title,
           priority: card.priority,
+          startDate: card.startDate || null,
           dueDate: card.dueDate,
           assigneeId: card.assigneeId,
+          attachments: (card.attachments || []).map((item) => ({
+            id: item.id,
+            name: item.name,
+            mimeType: item.mimeType,
+            size: item.size,
+            kind: item.kind || "file",
+            url: item.url || null,
+          })),
         })),
     }));
   const requirements = Object.values(snapshot.requirements || {}).map((req) => ({
@@ -117,13 +126,16 @@ export function applyCriarCard(snapshot, args) {
     description: String(args.description || ""),
     labels: Array.isArray(args.labels) ? args.labels : [],
     coverColor: args.cover_color || args.coverColor || null,
+    startDate: args.start_date || args.startDate || null,
     dueDate: args.due_date || args.dueDate || null,
+    dailyNotes: Array.isArray(args.daily_notes) ? args.daily_notes : [],
     priority: args.priority ? normalizePriority(args.priority) : "medium",
     assigneeId: args.assignee_id || args.assigneeId || null,
     requirementId: args.requirement_id || args.requirementId || null,
     acceptanceCriteria: String(args.acceptance_criteria || args.acceptanceCriteria || ""),
     checklist: Array.isArray(args.checklist) ? args.checklist : [],
     comments: [],
+    attachments: [],
     archived: false,
     createdAt: ts,
     updatedAt: ts,
@@ -157,6 +169,9 @@ export function applyAtualizarCard(snapshot, args) {
   if (args.due_date !== undefined || args.dueDate !== undefined) {
     card.dueDate = args.due_date ?? args.dueDate ?? null;
   }
+  if (args.start_date !== undefined || args.startDate !== undefined) {
+    card.startDate = args.start_date ?? args.startDate ?? null;
+  }
   if (args.assignee_id !== undefined || args.assigneeId !== undefined) {
     card.assigneeId = args.assignee_id ?? args.assigneeId ?? null;
   }
@@ -171,6 +186,41 @@ export function applyAtualizarCard(snapshot, args) {
   next.board.updatedAt = card.updatedAt;
   next.updatedAt = card.updatedAt;
   return { snapshot: next, card };
+}
+
+export function applyAnexarArquivo(snapshot, args) {
+  const cardId = args.card_id || args.cardId;
+  const next = clone(snapshot);
+  const card = next.cards?.[cardId];
+  if (!card) throw new Error("Card não encontrado.");
+  const attachment = args.attachment;
+  if (!attachment?.id || !attachment?.name) throw new Error("Anexo inválido.");
+  card.attachments = Array.isArray(card.attachments) ? card.attachments : [];
+  if (!card.attachments.some((item) => item.id === attachment.id)) {
+    card.attachments.push(attachment);
+  }
+  const ts = nowIso();
+  card.updatedAt = ts;
+  next.board.updatedAt = ts;
+  next.updatedAt = ts;
+  return { snapshot: next, cardId, attachment };
+}
+
+export function applyRemoverAnexo(snapshot, args) {
+  const cardId = args.card_id || args.cardId;
+  const attachmentId = args.attachment_id || args.attachmentId;
+  const next = clone(snapshot);
+  const card = next.cards?.[cardId];
+  if (!card) throw new Error("Card não encontrado.");
+  const current = Array.isArray(card.attachments) ? card.attachments : [];
+  const attachment = current.find((item) => item.id === attachmentId);
+  if (!attachment) throw new Error("Anexo não encontrado.");
+  card.attachments = current.filter((item) => item.id !== attachmentId);
+  const ts = nowIso();
+  card.updatedAt = ts;
+  next.board.updatedAt = ts;
+  next.updatedAt = ts;
+  return { snapshot: next, cardId, attachment };
 }
 
 export function applyMoverCard(snapshot, args) {
@@ -381,6 +431,132 @@ export function applyAtualizarResumo(snapshot, args) {
   return { snapshot: next, executiveSummary: next.board.executiveSummary };
 }
 
+const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
+const BLOCKED_ATTACHMENT_EXT = new Set(["exe", "bat", "cmd", "com", "scr", "pif", "msi", "dll"]);
+const MIME_BY_EXT = {
+  pdf: "application/pdf",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  txt: "text/plain",
+  md: "text/markdown",
+  csv: "text/csv",
+  json: "application/json",
+  zip: "application/zip",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+};
+
+function attachmentExt(name) {
+  const base = String(name || "").split(/[\\/]/).pop() || "";
+  const dot = base.lastIndexOf(".");
+  if (dot <= 0 || dot === base.length - 1) return "";
+  return base.slice(dot + 1).toLowerCase();
+}
+
+function sanitizeAttachmentName(name) {
+  const base = String(name || "")
+    .split(/[\\/]/)
+    .pop()
+    ?.replace(/[\u0000-\u001f<>:"|?*]/g, "_")
+    .replace(/\s+/g, " ")
+    .trim();
+  const cleaned = (base || "arquivo").slice(0, 180);
+  return cleaned === "." || cleaned === ".." ? "arquivo" : cleaned;
+}
+
+function guessAttachmentMime(name, fallback = "application/octet-stream") {
+  return MIME_BY_EXT[attachmentExt(name)] || fallback || "application/octet-stream";
+}
+
+function sanitizeAttachmentUrl(raw) {
+  const value = String(raw || "").trim();
+  if (!value) return null;
+  try {
+    const parsed = new URL(value);
+    if (!["http:", "https:"].includes(parsed.protocol.toLowerCase())) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+export function resolveAttachmentInput(args, root) {
+  const url = sanitizeAttachmentUrl(args.url);
+  const filePath = args.file_path || args.filePath;
+  const b64 = args.content_base64 || args.contentBase64;
+  const filenameHint = args.filename || args.name;
+
+  if (url && !filePath && !b64) {
+    const name = sanitizeAttachmentName(filenameHint || decodeURIComponent(url.split("/").pop() || "link"));
+    return {
+      kind: "link",
+      name,
+      mimeType: args.mime_type || args.mimeType || guessAttachmentMime(name, "text/uri-list"),
+      size: 0,
+      url,
+      bytes: null,
+    };
+  }
+
+  let bytes;
+  let name;
+  if (filePath) {
+    const raw = String(filePath).trim();
+    const resolved = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(root || process.cwd(), raw);
+    if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
+      throw new Error(`Arquivo não encontrado: ${raw}`);
+    }
+    const size = fs.statSync(resolved).size;
+    if (size > MAX_ATTACHMENT_BYTES) throw new Error("Arquivo maior que 15 MB.");
+    bytes = fs.readFileSync(resolved);
+    name = sanitizeAttachmentName(filenameHint || path.basename(resolved));
+  } else if (b64) {
+    const raw = String(b64).replace(/^data:[^;]+;base64,/, "");
+    bytes = Buffer.from(raw, "base64");
+    if (!bytes.length) throw new Error("content_base64 vazio.");
+    if (bytes.length > MAX_ATTACHMENT_BYTES) throw new Error("Arquivo maior que 15 MB.");
+    name = sanitizeAttachmentName(filenameHint || "arquivo");
+  } else {
+    throw new Error("Informe file_path, content_base64 ou url.");
+  }
+
+  if (BLOCKED_ATTACHMENT_EXT.has(attachmentExt(name))) {
+    throw new Error(`Tipo de arquivo não permitido: ${attachmentExt(name)}`);
+  }
+  return {
+    kind: "file",
+    name,
+    mimeType: args.mime_type || args.mimeType || guessAttachmentMime(name),
+    size: bytes.length,
+    url: null,
+    bytes,
+  };
+}
+
+const BLOBS_DDL = `
+  CREATE TABLE IF NOT EXISTS card_attachment_blobs (
+    id TEXT PRIMARY KEY,
+    board_id TEXT NOT NULL,
+    card_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    byte_size INTEGER NOT NULL,
+    data BYTEA NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+  CREATE INDEX IF NOT EXISTS card_attachment_blobs_card_idx
+    ON card_attachment_blobs (board_id, card_id);
+`;
+
+function diskBlobPath(root, boardId, cardId, attachmentId) {
+  const data = process.env.USERS_DATA_DIR || path.join(root, "data");
+  return path.join(data, "uploads", boardId, cardId, attachmentId);
+}
+
 export function listTools() {
   const boardId = { type: "string", description: "Id do board (default: asesi)" };
   const listId = { type: "string", description: "Id da lista" };
@@ -428,7 +604,8 @@ export function listTools() {
           title: { type: "string" },
           description: { type: "string" },
           priority: { type: "string", enum: ["low", "medium", "high"] },
-          due_date: { type: "string", description: "YYYY-MM-DD" },
+          due_date: { type: "string", description: "Fim / prazo YYYY-MM-DD" },
+          start_date: { type: "string", description: "Início YYYY-MM-DD" },
           assignee_id: { type: "string" },
           requirement_id: { type: "string" },
           cover_color: {
@@ -457,6 +634,7 @@ export function listTools() {
                 description: { type: "string" },
                 priority: { type: "string" },
                 due_date: { type: "string" },
+                start_date: { type: "string" },
               },
               required: ["title"],
             },
@@ -467,7 +645,7 @@ export function listTools() {
     },
     {
       name: "jangada_atualizar_card",
-      description: "Atualiza título, descrição, prioridade, prazo ou responsável de um card.",
+      description: "Atualiza título, descrição, prioridade, início, prazo ou responsável de um card.",
       inputSchema: {
         type: "object",
         properties: {
@@ -477,6 +655,7 @@ export function listTools() {
           description: { type: "string" },
           priority: { type: "string", enum: ["low", "medium", "high"] },
           due_date: { type: "string" },
+          start_date: { type: "string" },
           assignee_id: { type: "string" },
           cover_color: { type: "string" },
         },
@@ -584,6 +763,40 @@ export function listTools() {
         required: ["resumo"],
       },
     },
+    {
+      name: "jangada_anexar_arquivo",
+      description:
+        "Anexa um arquivo a um card. Prefira file_path (caminho local). Alternativas: content_base64+filename (máx. 15 MB) ou url (só o link, sem copiar).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          board_id: boardId,
+          card_id: { type: "string", description: "Id do card" },
+          file_path: { type: "string", description: "Caminho local do arquivo" },
+          filename: { type: "string", description: "Nome visível do anexo" },
+          mime_type: { type: "string" },
+          content_base64: {
+            type: "string",
+            description: "Conteúdo em base64. Prefira file_path para arquivos grandes.",
+          },
+          url: { type: "string", description: "Link https para anexar sem copiar o arquivo" },
+        },
+        required: ["card_id"],
+      },
+    },
+    {
+      name: "jangada_remover_anexo",
+      description: "Remove um anexo de um card.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          board_id: boardId,
+          card_id: { type: "string" },
+          attachment_id: { type: "string" },
+        },
+        required: ["card_id", "attachment_id"],
+      },
+    },
   ];
 }
 
@@ -607,6 +820,7 @@ export async function callTool(name, args, store) {
     if (!snapshot) return { status: "erro", erro: `Board ${boardId} não encontrado` };
 
     let result;
+    let blobToDelete = null;
     if (name === "jangada_criar_lista") result = applyCriarLista(snapshot, args);
     else if (name === "jangada_criar_card") result = applyCriarCard(snapshot, args);
     else if (name === "jangada_criar_cards") result = applyCriarCards(snapshot, args.cards);
@@ -618,10 +832,49 @@ export async function callTool(name, args, store) {
     else if (name === "jangada_atualizar_whatsapp") result = applyAtualizarWhatsApp(snapshot, args);
     else if (name === "jangada_remover_whatsapp") result = applyRemoverWhatsApp(snapshot, args);
     else if (name === "jangada_atualizar_resumo") result = applyAtualizarResumo(snapshot, args);
+    else if (name === "jangada_anexar_arquivo") {
+      const cardId = args.card_id || args.cardId;
+      if (!snapshot.cards?.[cardId]) throw new Error("Card não encontrado.");
+      const input = resolveAttachmentInput(args, store.root);
+      const id = nid();
+      const attachment = {
+        id,
+        name: input.name,
+        mimeType: input.mimeType,
+        size: input.size,
+        kind: input.kind,
+        url:
+          input.kind === "link"
+            ? input.url
+            : `/api/boards/${boardId}/cards/${cardId}/attachments/${id}`,
+        createdAt: nowIso(),
+      };
+      if (input.kind === "file" && input.bytes) {
+        await store.saveAttachmentBlob({
+          id,
+          boardId,
+          cardId,
+          name: input.name,
+          mimeType: input.mimeType,
+          bytes: input.bytes,
+        });
+      }
+      result = applyAnexarArquivo(snapshot, { card_id: cardId, attachment });
+    } else if (name === "jangada_remover_anexo") {
+      result = applyRemoverAnexo(snapshot, args);
+      if (result.attachment?.kind !== "link") blobToDelete = result.attachment;
+    }
     else return { status: "erro", erro: `Tool desconhecida: ${name}` };
 
     await store.saveBoard(result.snapshot);
     await store.touchActor(boardId);
+    if (blobToDelete) {
+      await store.deleteAttachmentBlob({
+        id: blobToDelete.id,
+        boardId,
+        cardId: result.cardId,
+      });
+    }
     const { snapshot: _ignored, ...rest } = result;
     return { status: "ok", board_id: boardId, ...rest, board: compactBoard(result.snapshot) };
   } catch (err) {
@@ -700,6 +953,7 @@ export function createPgStore(root) {
   return {
     kind: "postgres",
     actor,
+    root,
     async ping() {
       return withSchema(async (client) => {
         const row = await client.query("SELECT current_database() AS db, current_schema() AS schema");
@@ -753,6 +1007,32 @@ export function createPgStore(root) {
         );
       });
     },
+    async saveAttachmentBlob(opts) {
+      return withSchema(async (client) => {
+        await client.query(BLOBS_DDL);
+        await client.query(
+          `INSERT INTO card_attachment_blobs (id, board_id, card_id, name, mime_type, byte_size, data)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (id) DO UPDATE SET
+             board_id = EXCLUDED.board_id,
+             card_id = EXCLUDED.card_id,
+             name = EXCLUDED.name,
+             mime_type = EXCLUDED.mime_type,
+             byte_size = EXCLUDED.byte_size,
+             data = EXCLUDED.data`,
+          [opts.id, opts.boardId, opts.cardId, opts.name, opts.mimeType, opts.bytes.length, opts.bytes],
+        );
+      });
+    },
+    async deleteAttachmentBlob(opts) {
+      return withSchema(async (client) => {
+        await client.query(BLOBS_DDL);
+        await client.query(
+          "DELETE FROM card_attachment_blobs WHERE id = $1 AND board_id = $2 AND card_id = $3",
+          [opts.id, opts.boardId, opts.cardId],
+        );
+      });
+    },
     async close() {
       await pool.end();
     },
@@ -786,6 +1066,7 @@ export function createFileStore(root) {
   return {
     kind: "file",
     actor,
+    root,
     async ping() {
       return { ok: true, store: "file", file, actor, root };
     },
@@ -813,6 +1094,15 @@ export function createFileStore(root) {
       current.add(boardId);
       store.memberships[actor] = [...current];
       write(store);
+    },
+    async saveAttachmentBlob(opts) {
+      const filePath = diskBlobPath(root, opts.boardId, opts.cardId, opts.id);
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, opts.bytes);
+    },
+    async deleteAttachmentBlob(opts) {
+      const filePath = diskBlobPath(root, opts.boardId, opts.cardId, opts.id);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     },
     async close() {},
   };

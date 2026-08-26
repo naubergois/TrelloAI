@@ -1,7 +1,9 @@
 import type { Pool, PoolConfig } from "pg";
 import type { BoardSnapshot } from "@/lib/board-snapshot";
 import type { BoardInvite } from "@/lib/invites";
+import type { MayaDayLog } from "@/lib/types";
 import type { StoredUser } from "@/lib/users";
+import { mayaLogsRecord, normalizeMayaDayLog } from "@/lib/maya-chat";
 import { createOfficialHierarchySnapshots } from "@/lib/asesi-seed";
 import { isPgConfigured, readPgConfig } from "@/lib/storage/config";
 
@@ -118,6 +120,30 @@ function ddl(schema: string) {
       board_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS ${s}.card_attachment_blobs (
+      id TEXT PRIMARY KEY,
+      board_id TEXT NOT NULL,
+      card_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      byte_size INTEGER NOT NULL,
+      data BYTEA NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS card_attachment_blobs_card_idx
+      ON ${s}.card_attachment_blobs (board_id, card_id);
+
+    CREATE TABLE IF NOT EXISTS ${s}.maya_chats (
+      user_email TEXT NOT NULL,
+      board_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      messages JSONB NOT NULL DEFAULT '[]'::jsonb,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (user_email, board_id, date)
+    );
+    CREATE INDEX IF NOT EXISTS maya_chats_user_idx ON ${s}.maya_chats (user_email);
+    CREATE INDEX IF NOT EXISTS maya_chats_board_idx ON ${s}.maya_chats (board_id);
   `;
 }
 
@@ -251,6 +277,8 @@ export async function pgSaveBoard(snapshot: BoardSnapshot) {
 export async function pgDeleteBoard(boardId: string) {
   const p = await getPool();
   if (!p) return false;
+  await p.query("DELETE FROM card_attachment_blobs WHERE board_id = $1", [boardId]);
+  await p.query("DELETE FROM maya_chats WHERE board_id = $1", [boardId]);
   await p.query("DELETE FROM invites WHERE board_id = $1", [boardId]);
   await p.query("DELETE FROM board_memberships WHERE board_id = $1", [boardId]);
   await p.query("DELETE FROM board_snapshots WHERE board_id = $1", [boardId]);
@@ -470,6 +498,19 @@ export async function pgUpdateUser(user: StoredUser, previousEmail?: string) {
       [from, to],
     );
     await p.query(`DELETE FROM user_board_visibility WHERE lower(email) = $1`, [from]);
+    await p.query(
+      `UPDATE maya_chats AS src
+       SET user_email = $2
+       WHERE lower(src.user_email) = $1
+         AND NOT EXISTS (
+           SELECT 1 FROM maya_chats other
+           WHERE lower(other.user_email) = $2
+             AND other.board_id = src.board_id
+             AND other.date = src.date
+         )`,
+      [from, to],
+    );
+    await p.query(`DELETE FROM maya_chats WHERE lower(user_email) = $1`, [from]);
   }
   return true;
 }
@@ -602,6 +643,151 @@ export async function pgListInvitesForBoard(boardId: string): Promise<BoardInvit
     [boardId],
   );
   return res.rows.map(mapInvite);
+}
+
+type AttachmentBlobRow = {
+  id: string;
+  board_id: string;
+  card_id: string;
+  name: string;
+  mime_type: string;
+  byte_size: number;
+  data: Buffer;
+};
+
+export async function pgSaveAttachmentBlob(opts: {
+  id: string;
+  boardId: string;
+  cardId: string;
+  name: string;
+  mimeType: string;
+  bytes: Buffer;
+}) {
+  const p = await getPool();
+  if (!p) return false;
+  await p.query(
+    `INSERT INTO card_attachment_blobs (id, board_id, card_id, name, mime_type, byte_size, data)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (id) DO UPDATE SET
+       board_id = EXCLUDED.board_id,
+       card_id = EXCLUDED.card_id,
+       name = EXCLUDED.name,
+       mime_type = EXCLUDED.mime_type,
+       byte_size = EXCLUDED.byte_size,
+       data = EXCLUDED.data`,
+    [opts.id, opts.boardId, opts.cardId, opts.name, opts.mimeType, opts.bytes.length, opts.bytes],
+  );
+  return true;
+}
+
+export async function pgGetAttachmentBlob(opts: {
+  id: string;
+  boardId: string;
+  cardId: string;
+}): Promise<{ name: string; mimeType: string; data: Buffer } | null> {
+  const p = await getPool();
+  if (!p) return null;
+  const res = await p.query<AttachmentBlobRow>(
+    `SELECT id, board_id, card_id, name, mime_type, byte_size, data
+     FROM card_attachment_blobs
+     WHERE id = $1 AND board_id = $2 AND card_id = $3`,
+    [opts.id, opts.boardId, opts.cardId],
+  );
+  const row = res.rows[0];
+  if (!row) return null;
+  return { name: row.name, mimeType: row.mime_type, data: row.data };
+}
+
+export async function pgDeleteAttachmentBlob(opts: {
+  id: string;
+  boardId: string;
+  cardId: string;
+}) {
+  const p = await getPool();
+  if (!p) return false;
+  await p.query(
+    "DELETE FROM card_attachment_blobs WHERE id = $1 AND board_id = $2 AND card_id = $3",
+    [opts.id, opts.boardId, opts.cardId],
+  );
+  return true;
+}
+
+type MayaChatRow = {
+  user_email: string;
+  board_id: string;
+  date: string;
+  messages: unknown;
+  updated_at: Date | string;
+};
+
+function mapMayaChatRow(row: MayaChatRow): MayaDayLog | null {
+  let messages: unknown = row.messages;
+  if (typeof messages === "string") {
+    try {
+      messages = JSON.parse(messages);
+    } catch {
+      messages = [];
+    }
+  }
+  return normalizeMayaDayLog(row.board_id, row.date, Array.isArray(messages) ? messages : [], iso(row.updated_at));
+}
+
+export async function pgListMayaChats(
+  email: string,
+  boardId?: string,
+): Promise<Record<string, MayaDayLog>> {
+  const p = await getPool();
+  if (!p) return {};
+  const key = email.trim().toLowerCase();
+  const res = boardId
+    ? await p.query<MayaChatRow>(
+        `SELECT user_email, board_id, date, messages, updated_at
+         FROM maya_chats
+         WHERE lower(user_email) = $1 AND board_id = $2
+         ORDER BY date ASC`,
+        [key, boardId],
+      )
+    : await p.query<MayaChatRow>(
+        `SELECT user_email, board_id, date, messages, updated_at
+         FROM maya_chats
+         WHERE lower(user_email) = $1
+         ORDER BY board_id ASC, date ASC`,
+        [key],
+      );
+  return mayaLogsRecord(res.rows.map(mapMayaChatRow).filter((log): log is MayaDayLog => Boolean(log)));
+}
+
+export async function pgSaveMayaDayChat(email: string, log: MayaDayLog) {
+  const p = await getPool();
+  if (!p) return false;
+  const key = email.trim().toLowerCase();
+  await p.query(
+    `INSERT INTO maya_chats (user_email, board_id, date, messages, updated_at)
+     VALUES ($1, $2, $3, $4::jsonb, $5::timestamptz)
+     ON CONFLICT (user_email, board_id, date)
+     DO UPDATE SET messages = $4::jsonb, updated_at = $5::timestamptz`,
+    [key, log.boardId, log.date, JSON.stringify(log.messages), log.updatedAt],
+  );
+  return true;
+}
+
+export async function pgSaveMayaChats(email: string, logs: MayaDayLog[]) {
+  for (const log of logs) {
+    await pgSaveMayaDayChat(email, log);
+  }
+  return true;
+}
+
+export async function pgDeleteMayaDayChat(email: string, boardId: string, date: string) {
+  const p = await getPool();
+  if (!p) return false;
+  const key = email.trim().toLowerCase();
+  await p.query(
+    `DELETE FROM maya_chats
+     WHERE lower(user_email) = $1 AND board_id = $2 AND date = $3`,
+    [key, boardId, date],
+  );
+  return true;
 }
 
 export function pgSchemaDdl(schema = readPgConfig()?.schema || "trelloai") {

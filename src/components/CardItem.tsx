@@ -3,10 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  CalendarRange,
   Check,
   CheckSquare,
   GripVertical,
+  NotebookPen,
   Palette,
+  Paperclip,
   Plus,
   Pencil,
   Trash2,
@@ -27,11 +30,14 @@ import {
   normalizeCoverColor,
 } from "@/lib/card-appearance";
 import { dueUrgency } from "@/lib/board-filters";
+import { formatCardScheduleLabel, resolveCardDates } from "@/lib/card-schedule";
 import { useToast } from "@/components/Toast";
 import { CardLabelBars } from "@/components/CardLabelBars";
 import { CardCoverSwatches } from "@/components/CardCoverSwatches";
 import { PhotoFileButton } from "@/components/MemberAvatar";
 import { CardAssigneeCombo } from "@/components/CardAssigneeCombo";
+import { CardAttachments } from "@/components/CardAttachments";
+import { CardDailyNotes } from "@/components/CardDailyNotes";
 import {
   boardAssigneeOptions,
   cardAssigneeIds,
@@ -74,6 +80,7 @@ export function CardItem({
   );
   const [draftListId, setDraftListId] = useState(card.listId);
   const [draftDueDate, setDraftDueDate] = useState(card.dueDate ?? "");
+  const [draftStartDate, setDraftStartDate] = useState(card.startDate ?? "");
   const [draftRequirementId, setDraftRequirementId] = useState<string | null>(
     card.requirementId ?? null,
   );
@@ -121,6 +128,8 @@ export function CardItem({
   const checklistDone = (card.checklist || []).filter((i) => i.done).length;
   const checklistTotal = (card.checklist || []).length;
   const urgency = dueUrgency(card.dueDate);
+  const scheduleLabel = formatCardScheduleLabel(card.startDate, card.dueDate);
+  const dailyNoteCount = (card.dailyNotes || []).length;
 
   useEffect(() => {
     setMounted(true);
@@ -134,6 +143,7 @@ export function CardItem({
     setDraftAssigneeIds(cardAssigneeIds(card));
     setDraftListId(card.listId);
     setDraftDueDate(card.dueDate ?? "");
+    setDraftStartDate(card.startDate ?? "");
     setDraftRequirementId(card.requirementId ?? null);
     setDraftAcceptance(card.acceptanceCriteria ?? "");
     setDraftLabels(card.labels ?? []);
@@ -155,6 +165,7 @@ export function CardItem({
     card.assigneeIds,
     card.listId,
     card.dueDate,
+    card.startDate,
     card.requirementId,
     card.acceptanceCriteria,
     card.labels,
@@ -187,13 +198,15 @@ export function CardItem({
       if (created && !ids.includes(created)) ids = [...ids, created];
     }
     const { assigneeId, assigneeIds } = syncCardAssignees(ids);
+    const dates = resolveCardDates(draftStartDate, draftDueDate);
     updateCard(card.id, {
       title: draftTitle.trim() || card.title,
       description: draftDescription,
       priority: draftPriority,
       assigneeId,
       assigneeIds,
-      dueDate: draftDueDate || null,
+      startDate: dates.startDate,
+      dueDate: dates.dueDate,
       requirementId: draftRequirementId,
       acceptanceCriteria: draftAcceptance,
       labels: draftLabels,
@@ -403,7 +416,17 @@ export function CardItem({
                   </div>
 
                   <label className="block text-xs text-[var(--muted)] sm:text-sm">
-                    Prazo
+                    Início
+                    <input
+                      type="date"
+                      className="mt-1.5 w-full rounded-2xl border border-[var(--line)] bg-[var(--ink)] px-4 py-3 text-sm text-white outline-none focus:border-[var(--accent)]"
+                      value={draftStartDate}
+                      onChange={(e) => setDraftStartDate(e.target.value)}
+                    />
+                  </label>
+
+                  <label className="block text-xs text-[var(--muted)] sm:text-sm">
+                    Fim
                     <input
                       type="date"
                       className="mt-1.5 w-full rounded-2xl border border-[var(--line)] bg-[var(--ink)] px-4 py-3 text-sm text-white outline-none focus:border-[var(--accent)]"
@@ -531,6 +554,15 @@ export function CardItem({
                       </button>
                     </div>
                   </div>
+
+                  <CardDailyNotes
+                    card={card}
+                    members={members}
+                    startDate={draftStartDate || null}
+                    dueDate={draftDueDate || null}
+                  />
+
+                  <CardAttachments card={card} boardId={boardId} />
 
                   <div className="rounded-2xl border border-[var(--line)] bg-black/15 p-4 md:col-span-2">
                     <p className="mb-2 text-xs font-medium text-[var(--muted)] sm:text-sm">
@@ -781,9 +813,9 @@ export function CardItem({
                 sem prioridade
               </span>
             )}
-            {!chip && card.dueDate ? (
+            {!chip && scheduleLabel ? (
               <span
-                className={`text-[10px] font-medium ${
+                className={`inline-flex items-center gap-0.5 text-[10px] font-medium ${
                   urgency === "overdue"
                     ? "text-rose-600"
                     : urgency === "today"
@@ -793,14 +825,27 @@ export function CardItem({
                         : "board-card-muted"
                 }`}
               >
+                <CalendarRange className="h-3 w-3" />
                 {urgency === "overdue" ? "Atrasado · " : ""}
-                {card.dueDate.split("-").reverse().join("/")}
+                {scheduleLabel}
+              </span>
+            ) : null}
+            {dailyNoteCount > 0 ? (
+              <span className="board-card-muted inline-flex items-center gap-0.5 text-[10px]">
+                <NotebookPen className="h-3 w-3" />
+                {dailyNoteCount}
               </span>
             ) : null}
             {checklistTotal > 0 ? (
               <span className="board-card-muted inline-flex items-center gap-0.5 text-[10px]">
                 <CheckSquare className="h-3 w-3" />
                 {checklistDone}/{checklistTotal}
+              </span>
+            ) : null}
+            {(card.attachments || []).length > 0 ? (
+              <span className="board-card-muted inline-flex items-center gap-0.5 text-[10px]">
+                <Paperclip className="h-3 w-3" />
+                {(card.attachments || []).length}
               </span>
             ) : null}
           </div>
@@ -825,7 +870,17 @@ export function CardItem({
                 className="board-card-muted rounded p-1 hover:bg-black/5 hover:text-rose-600"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (confirm(`Excluir o card "${card.title}"?`)) deleteCard(card.id);
+                  if (!confirm(`Excluir o card "${card.title}"?`)) return;
+                  if (boardId) {
+                    for (const attachment of card.attachments || []) {
+                      if (attachment.kind === "link") continue;
+                      void fetch(
+                        `/api/boards/${boardId}/cards/${card.id}/attachments/${attachment.id}`,
+                        { method: "DELETE", credentials: "include" },
+                      );
+                    }
+                  }
+                  deleteCard(card.id);
                 }}
                 aria-label="Excluir card"
               >

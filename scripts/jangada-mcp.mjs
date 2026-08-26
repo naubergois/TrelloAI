@@ -48,7 +48,7 @@ async function handle(req) {
       capabilities: { tools: {} },
       serverInfo: { name: "jangada", version: "0.1.0" },
       instructions:
-        "Kanban Jangada (ASESI/CGE). Use jangada_criar_card / jangada_criar_cards / jangada_mover_card para Cursor e Kiro alimentarem o mesmo board. Board padrão: asesi.",
+        "Kanban Jangada (ASESI/CGE). Use jangada_criar_card / jangada_anexar_arquivo / jangada_mover_card para Cursor e Kiro alimentarem o mesmo board. Board padrão: asesi.",
     });
     return;
   }

@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { useBoardStore } from "@/lib/store";
+import { deleteMayaChatOnServer, scheduleBoardSync } from "@/lib/board-sync";
 import type { AiAction, BoardRiskReport } from "@/lib/types";
 import { labelStyles } from "@/lib/utils";
 import {
@@ -112,6 +113,8 @@ export function ManagerPanel({
   const activities = useBoardStore((s) => s.activities);
   const postCalendarDayAlert = useBoardStore((s) => s.postCalendarDayAlert);
   const mayaLogs = useBoardStore((s) => s.mayaLogs);
+  const deleteMayaDayChat = useBoardStore((s) => s.deleteMayaDayChat);
+  const deleteMayaChatMessage = useBoardStore((s) => s.deleteMayaChatMessage);
 
   const [tab, setTab] = useState<Tab>("chat");
   const [processing, setProcessing] = useState(false);
@@ -120,6 +123,7 @@ export function ManagerPanel({
   const [gitDraft, setGitDraft] = useState("");
   const [calendarDay, setCalendarDay] = useState(calendarDayKey());
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [historyDate, setHistoryDate] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -171,9 +175,11 @@ export function ManagerPanel({
   }, [board, boardId, calendarDay, activities]);
 
   const todayKey = calendarDayKey();
-  const todayMessages = useMemo(
-    () => collectMayaDayMessages(boardId, todayKey, mayaLogs, standups),
-    [boardId, todayKey, mayaLogs, standups],
+  const visibleDate = historyDate && historyDate !== todayKey ? historyDate : todayKey;
+  const viewingToday = visibleDate === todayKey;
+  const visibleMessages = useMemo(
+    () => collectMayaDayMessages(boardId, visibleDate, mayaLogs, standups),
+    [boardId, visibleDate, mayaLogs, standups],
   );
   const previousChatDays = useMemo(
     () => listMayaChatDays(boardId, mayaLogs, standups).filter((day) => day !== todayKey),
@@ -193,7 +199,7 @@ export function ManagerPanel({
       window.cancelAnimationFrame(frame);
       window.clearTimeout(later);
     };
-  }, [todayMessages.length, processing, standup?.awaitingReplyFrom, standup?.id, tab]);
+  }, [visibleMessages.length, processing, standup?.awaitingReplyFrom, standup?.id, tab, visibleDate]);
 
   useEffect(() => {
     if (tab === "chat" && standup?.awaitingReplyFrom) {
@@ -564,6 +570,25 @@ export function ManagerPanel({
     );
   };
 
+  const persistChatDelete = (date: string, messageId?: string) => {
+    void deleteMayaChatOnServer(boardId, date, messageId);
+    scheduleBoardSync(boardId, 200);
+  };
+
+  const confirmDeleteDay = (date: string) => {
+    const label = formatCalendarDayLabel(date);
+    if (!confirm(`Apagar a conversa de ${label}? Esta ação não pode ser desfeita.`)) return;
+    deleteMayaDayChat(boardId, date);
+    persistChatDelete(date);
+    if (historyDate === date) setHistoryDate(null);
+  };
+
+  const confirmDeleteMessage = (date: string, messageId: string) => {
+    if (!confirm("Apagar esta mensagem?")) return;
+    deleteMayaChatMessage(boardId, date, messageId);
+    persistChatDelete(date, messageId);
+  };
+
   return (
     <aside className="anim-rise panel-glass flex h-full min-h-0 w-full flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl">
       {/* Header Maya */}
@@ -641,19 +666,29 @@ export function ManagerPanel({
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] px-3 py-2">
             <p className="text-[11px] text-[var(--muted)]">
-              Hoje · {todayMessages.length}{" "}
-              {todayMessages.length === 1 ? "mensagem" : "mensagens"}
+              {viewingToday ? "Hoje" : formatCalendarDayLabel(visibleDate)} · {visibleMessages.length}{" "}
+              {visibleMessages.length === 1 ? "mensagem" : "mensagens"}
             </p>
             <div className="flex items-center gap-1">
-              {todayMessages.length > 0 ? (
-                <button
-                  type="button"
-                  onClick={() => downloadDayFile(todayKey)}
-                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-[var(--muted)] hover:text-white"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  Salvar hoje
-                </button>
+              {visibleMessages.length > 0 ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => downloadDayFile(visibleDate)}
+                    className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-[var(--muted)] hover:text-white"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    {viewingToday ? "Salvar hoje" : "Salvar"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => confirmDeleteDay(visibleDate)}
+                    className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-[var(--muted)] hover:text-rose-300"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Apagar
+                  </button>
+                </>
               ) : null}
               <button
                 type="button"
@@ -678,21 +713,42 @@ export function ManagerPanel({
             <div className="shrink-0 border-b border-[var(--line)] bg-black/20 px-3 py-2">
               {previousChatDays.length === 0 ? (
                 <p className="text-[11px] text-[var(--muted)]">
-                  Conversas de outros dias aparecem aqui como arquivo .txt para baixar.
+                  Conversas de outros dias aparecem aqui para baixar ou apagar.
                 </p>
               ) : (
                 <ul className="max-h-36 space-y-1 overflow-y-auto">
                   {previousChatDays.map((day) => (
                     <li key={day} className="flex items-center justify-between gap-2">
-                      <span className="text-xs text-white">{formatCalendarDayLabel(day)}</span>
                       <button
                         type="button"
-                        onClick={() => downloadDayFile(day)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-[var(--line)] px-2 py-1 text-[11px] text-[var(--muted)] hover:text-white"
+                        onClick={() => {
+                          setHistoryDate(day);
+                          setArchiveOpen(false);
+                        }}
+                        className={`text-left text-xs hover:text-[var(--accent)] ${
+                          historyDate === day ? "text-[var(--accent)]" : "text-white"
+                        }`}
                       >
-                        <Download className="h-3 w-3" />
-                        Arquivo
+                        {formatCalendarDayLabel(day)}
                       </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => downloadDayFile(day)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-[var(--line)] px-2 py-1 text-[11px] text-[var(--muted)] hover:text-white"
+                        >
+                          <Download className="h-3 w-3" />
+                          Arquivo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => confirmDeleteDay(day)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-[var(--line)] px-2 py-1 text-[11px] text-[var(--muted)] hover:text-rose-300"
+                          aria-label={`Apagar conversa de ${formatCalendarDayLabel(day)}`}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -700,7 +756,7 @@ export function ManagerPanel({
             </div>
           ) : null}
 
-          {!standup && todayMessages.length === 0 ? (
+          {viewingToday && !standup && visibleMessages.length === 0 ? (
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
                 <MayaAvatar size="lg" />
@@ -766,11 +822,25 @@ export function ManagerPanel({
             </div>
           ) : (
             <>
+              {!viewingToday ? (
+                <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] bg-black/20 px-3 py-2">
+                  <p className="text-[11px] text-[var(--muted)]">
+                    Arquivo · {formatCalendarDayLabel(visibleDate)}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryDate(null)}
+                    className="rounded-lg px-2 py-1 text-[11px] text-[var(--accent)] hover:underline"
+                  >
+                    Voltar para hoje
+                  </button>
+                </div>
+              ) : null}
               <div ref={chatScrollRef} className="board-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-4">
-                {todayMessages.map((msg, i) => {
+                {visibleMessages.map((msg, i) => {
                   const isManager = msg.role === "manager";
                   const who = msg.memberId ? members[msg.memberId] : null;
-                  const prevMember = i > 0 ? todayMessages[i - 1].memberId : null;
+                  const prevMember = i > 0 ? visibleMessages[i - 1].memberId : null;
                   const showTurn = Boolean(msg.memberId && msg.memberId !== prevMember);
                   return (
                     <div key={msg.id} className="space-y-2">
@@ -784,7 +854,7 @@ export function ManagerPanel({
                         </div>
                       ) : null}
                     <div
-                      className={`chat-bubble flex gap-2 ${isManager ? "items-end" : "flex-row-reverse items-end"}`}
+                      className={`chat-bubble group relative flex gap-2 ${isManager ? "items-end" : "flex-row-reverse items-end"}`}
                       style={{ animationDelay: `${Math.min(i, 8) * 20}ms` }}
                     >
                       {isManager ? (
@@ -801,7 +871,7 @@ export function ManagerPanel({
                         </span>
                       )}
                       <div
-                        className={`max-w-[78%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm ${
+                        className={`relative max-w-[78%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm ${
                           isManager
                             ? "rounded-bl-md border border-white/10 bg-[#132536] text-[var(--text)]"
                             : "rounded-br-md bg-[var(--accent)] text-[var(--accent-on)]"
@@ -820,13 +890,23 @@ export function ManagerPanel({
                           </span>
                         </div>
                         <p className="whitespace-pre-wrap">{msg.content}</p>
+                        <button
+                          type="button"
+                          onClick={() => confirmDeleteMessage(visibleDate, msg.id)}
+                          className={`absolute -top-2 rounded-full border border-[var(--line)] bg-[var(--ink)] p-1 text-[var(--muted)] opacity-80 hover:text-rose-300 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100 ${
+                            isManager ? "-right-2" : "-left-2"
+                          }`}
+                          aria-label="Apagar mensagem"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
                       </div>
                     </div>
                     </div>
                   );
                 })}
 
-                {processing || (awaitingMember && standup?.status === "open") ? (
+                {viewingToday && (processing || (awaitingMember && standup?.status === "open")) ? (
                   <div className="chat-bubble flex items-center gap-2 pl-1 text-xs text-[var(--muted)]">
                     <MayaAvatar size="sm" />
                     <span className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-white/5 px-2.5 py-1">
@@ -843,6 +923,8 @@ export function ManagerPanel({
                 ) : null}
               </div>
 
+              {viewingToday ? (
+                <>
               {resultMsg || standup?.managerSummary ? (
                 <div className="mx-3 mb-2 whitespace-pre-wrap rounded-2xl border border-[var(--accent)]/25 bg-[var(--accent)]/10 px-3 py-2 text-xs text-[var(--text)]">
                   {resultMsg || standup?.managerSummary}
@@ -1011,6 +1093,8 @@ export function ManagerPanel({
                     Nova daily
                   </button>
                 </div>
+              ) : null}
+                </>
               ) : null}
             </>
           )}

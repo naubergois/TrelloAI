@@ -10,6 +10,9 @@ import {
   type BoardSnapshot,
 } from "@/lib/shared-boards";
 import { assertBodySize } from "@/lib/api-security";
+import { mergeSnapshotAttachments } from "@/lib/card-attachments";
+import { withoutSharedMayaLogs, withPreservedMayaLogs } from "@/lib/board-snapshot";
+import { listMayaChatsForUser } from "@/lib/maya-chat-store";
 
 export async function GET(
   _request: Request,
@@ -28,7 +31,11 @@ export async function GET(
   if (!isAdmin && !(await emailHasBoardAccess(session.user.email, boardId))) {
     return NextResponse.json({ error: "Sem acesso a este board." }, { status: 403 });
   }
-  return NextResponse.json({ snapshot });
+  const mayaLogs = await listMayaChatsForUser(session.user.email, {
+    boardId,
+    legacyLogs: snapshot.mayaLogs,
+  });
+  return NextResponse.json({ snapshot: withoutSharedMayaLogs(snapshot), mayaLogs });
 }
 
 export async function PUT(
@@ -60,7 +67,9 @@ export async function PUT(
     return NextResponse.json({ error: "Sem acesso a este board." }, { status: 403 });
   }
 
-  await saveSharedBoard(body.snapshot);
+  await saveSharedBoard(
+    withPreservedMayaLogs(mergeSnapshotAttachments(existing, body.snapshot), existing),
+  );
   await addMembership(session.user.email, boardId);
   await addVisibleBoard(session.user.email, boardId);
   return NextResponse.json({ ok: true, updatedAt: body.snapshot.updatedAt });

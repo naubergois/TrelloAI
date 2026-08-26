@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useBoardStore } from "@/lib/store";
-import { loadServerBoards, scheduleBoardSync } from "@/lib/board-sync";
+import { loadServerBoards, scheduleBoardSync, scheduleMayaChatSync } from "@/lib/board-sync";
 
 /** Pull cloud boards after login and push local changes while editing. */
 export function BoardSync() {
@@ -33,8 +33,17 @@ export function BoardSync() {
         state.members !== prev.members ||
         state.teams !== prev.teams ||
         state.requirements !== prev.requirements ||
-        state.calendarEvents !== prev.calendarEvents;
+        state.calendarEvents !== prev.calendarEvents ||
+        state.standups !== prev.standups;
       if (changed) scheduleBoardSync(boardId);
+      if (state.mayaLogs !== prev.mayaLogs) {
+        const ids = new Set<string>();
+        if (boardId) ids.add(boardId);
+        for (const log of Object.values(state.mayaLogs || {})) {
+          if (state.mayaLogs[log.id] !== prev.mayaLogs?.[log.id]) ids.add(log.boardId);
+        }
+        for (const id of ids) scheduleMayaChatSync(id);
+      }
     });
     return unsub;
   }, [status]);

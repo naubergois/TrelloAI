@@ -1,4 +1,5 @@
 import type { Board } from "./types";
+import { sanitizeApplicationUrl } from "./application-url";
 import { ensureBoardHierarchy } from "./board-hierarchy";
 import { normalizeWhatsAppGroups } from "./whatsapp-groups";
 
@@ -534,6 +535,7 @@ export function ensureBoardAppearance(board: Board): Board {
     ...board,
     executiveSummary:
       typeof board.executiveSummary === "string" ? board.executiveSummary : "",
+    applicationUrl: sanitizeApplicationUrl(board.applicationUrl),
     memberIds: board.memberIds ?? [],
     externalMemberIds: Array.isArray(board.externalMemberIds) ? board.externalMemberIds : [],
     teamId: board.teamId ?? null,

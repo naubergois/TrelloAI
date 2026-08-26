@@ -31,6 +31,8 @@ export type MayaRelatedBoardMemory = {
   relation: MayaBoardRelation;
   description: string;
   executiveSummary: string;
+  objectives?: string;
+  applicationUrl?: string | null;
   stats: Pick<
     BoardIndicatorStats,
     "cards" | "progressPct" | "overdue" | "blocked" | "wip" | "risks" | "highPriority"
@@ -93,6 +95,8 @@ function toRelated(
     relation,
     description: board.description || "",
     executiveSummary: board.executiveSummary || "",
+    objectives: board.objectives || "",
+    applicationUrl: board.applicationUrl || null,
     stats: compactStats(boardStats(board.id, boards, lists, cards, requirements)),
   };
 }
@@ -205,6 +209,12 @@ export function formatMayaMemoryPrompt(memory: MayaBoardMemory, today = calendar
     memory.self.description ? `Descrição: ${memory.self.description}` : null,
     memory.self.executiveSummary
       ? `Resumo executivo:\n${memory.self.executiveSummary.trim().slice(0, 1200)}`
+      : null,
+    memory.self.objectives
+      ? `Objetivos:\n${memory.self.objectives.trim().slice(0, 800)}`
+      : null,
+    memory.self.applicationUrl
+      ? `Link da aplicação: ${memory.self.applicationUrl}`
       : null,
     `Indicadores deste board: ${statsLine(memory.self.stats)}.`,
   ].filter(Boolean) as string[];

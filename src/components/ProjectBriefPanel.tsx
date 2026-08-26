@@ -3,13 +3,19 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   ClipboardList,
+  ExternalLink,
   Flag,
   LayoutList,
+  Link2,
   Plus,
   Target,
   X,
 } from "lucide-react";
 import { useBoardStore } from "@/lib/store";
+import {
+  applicationUrlLabel,
+  sanitizeApplicationUrl,
+} from "@/lib/application-url";
 import { sanitizeExecutiveSummary } from "@/lib/executive-summary";
 import {
   priorityLabel,
@@ -38,11 +44,15 @@ export function ProjectBriefPanel({
   const board = useBoardStore((s) => s.boards[boardId]);
   const requirements = useBoardStore((s) => s.requirements);
   const updateBoardObjectives = useBoardStore((s) => s.updateBoardObjectives);
+  const updateBoardApplicationUrl = useBoardStore((s) => s.updateBoardApplicationUrl);
   const createRequirement = useBoardStore((s) => s.createRequirement);
   const updateRequirement = useBoardStore((s) => s.updateRequirement);
 
   const stored = sanitizeExecutiveSummary(board?.objectives);
+  const storedUrl = sanitizeApplicationUrl(board?.applicationUrl);
   const [draft, setDraft] = useState(stored);
+  const [urlDraft, setUrlDraft] = useState(storedUrl || "");
+  const [urlError, setUrlError] = useState("");
   const [editingObjectives, setEditingObjectives] = useState(!stored);
   const [newTitle, setNewTitle] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -50,6 +60,11 @@ export function ProjectBriefPanel({
   useEffect(() => {
     if (!editingObjectives) setDraft(stored);
   }, [stored, editingObjectives]);
+
+  useEffect(() => {
+    setUrlDraft(storedUrl || "");
+    setUrlError("");
+  }, [storedUrl]);
 
   const list = useMemo(
     () =>
@@ -62,6 +77,17 @@ export function ProjectBriefPanel({
   const saveObjectives = () => {
     updateBoardObjectives(boardId, draft);
     setEditingObjectives(false);
+  };
+
+  const saveApplicationUrl = (e: FormEvent) => {
+    e.preventDefault();
+    const trimmedUrl = urlDraft.trim();
+    if (trimmedUrl && !sanitizeApplicationUrl(trimmedUrl)) {
+      setUrlError("Use um link http(s), por exemplo https://app.cge.ce.gov.br");
+      return;
+    }
+    updateBoardApplicationUrl(boardId, trimmedUrl || null);
+    setUrlError("");
   };
 
   const addRequirement = (e: FormEvent) => {
@@ -157,6 +183,54 @@ export function ProjectBriefPanel({
           ) : (
             <p className="rounded-xl border border-dashed border-white/15 px-3 py-4 text-xs text-white/50">
               Ainda não há objetivos neste projeto.
+            </p>
+          )}
+        </section>
+
+        <section>
+          <div className="mb-2 flex items-center gap-2">
+            <Link2 className="h-4 w-4 text-[var(--accent)]" />
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-white/70">
+              Link da aplicação
+            </h3>
+          </div>
+          {storedUrl ? (
+            <a
+              href={storedUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mb-2 inline-flex max-w-full items-center gap-1.5 rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5 text-xs text-[var(--accent)] hover:underline"
+            >
+              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{applicationUrlLabel(storedUrl)}</span>
+            </a>
+          ) : null}
+          <form onSubmit={saveApplicationUrl} className="flex gap-2">
+            <input
+              type="text"
+              inputMode="url"
+              autoComplete="url"
+              value={urlDraft}
+              onChange={(e) => {
+                setUrlDraft(e.target.value);
+                if (urlError) setUrlError("");
+              }}
+              placeholder="https://app.cge.ce.gov.br/…"
+              className="min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-black/25 px-3 py-2 text-sm text-white outline-none placeholder:text-white/35 focus:border-[var(--accent)]"
+              aria-label="Link da aplicação"
+            />
+            <button
+              type="submit"
+              className="rounded-xl bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-[var(--accent-on)]"
+            >
+              Salvar
+            </button>
+          </form>
+          {urlError ? (
+            <p className="mt-1.5 text-xs text-rose-200">{urlError}</p>
+          ) : (
+            <p className="mt-1.5 text-[11px] text-white/40">
+              Endereço de homologação ou produção deste projeto.
             </p>
           )}
         </section>

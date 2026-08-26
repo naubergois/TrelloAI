@@ -55,6 +55,30 @@ CREATE TABLE IF NOT EXISTS trelloai.user_board_visibility (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS trelloai.card_attachment_blobs (
+  id TEXT PRIMARY KEY,
+  board_id TEXT NOT NULL,
+  card_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  byte_size INTEGER NOT NULL,
+  data BYTEA NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS card_attachment_blobs_card_idx
+  ON trelloai.card_attachment_blobs (board_id, card_id);
+
+CREATE TABLE IF NOT EXISTS trelloai.maya_chats (
+  user_email TEXT NOT NULL,
+  board_id TEXT NOT NULL,
+  date TEXT NOT NULL,
+  messages JSONB NOT NULL DEFAULT '[]'::jsonb,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_email, board_id, date)
+);
+CREATE INDEX IF NOT EXISTS maya_chats_user_idx ON trelloai.maya_chats (user_email);
+CREATE INDEX IF NOT EXISTS maya_chats_board_idx ON trelloai.maya_chats (board_id);
+
 -- Homolog/prod usa asesi_jangada. CREATE TABLE feito como postgres deixa
 -- essa role só com SELECT (permission denied no INSERT/UPDATE).
 DO $$
@@ -66,6 +90,8 @@ BEGIN
     ALTER TABLE trelloai.users OWNER TO asesi_jangada;
     ALTER TABLE trelloai.invites OWNER TO asesi_jangada;
     ALTER TABLE trelloai.user_board_visibility OWNER TO asesi_jangada;
+    ALTER TABLE trelloai.card_attachment_blobs OWNER TO asesi_jangada;
+    ALTER TABLE trelloai.maya_chats OWNER TO asesi_jangada;
     GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA trelloai TO asesi_jangada;
   END IF;
 END $$;

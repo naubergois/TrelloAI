@@ -24,7 +24,12 @@ export interface Card {
   origin?: "maya" | null;
   /** Chave estável do risco para a Maya atualizar em vez de duplicar */
   originKey?: string | null;
+  /** Início previsto (YYYY-MM-DD). */
+  startDate?: string | null;
+  /** Fim / prazo (YYYY-MM-DD). */
   dueDate: string | null;
+  /** Observações diárias no intervalo do card. */
+  dailyNotes?: CardDailyNote[];
   priority: "low" | "medium" | "high" | null;
   /** Responsável principal (primeiro de assigneeIds; compatível com dados antigos) */
   assigneeId: string | null;
@@ -68,6 +73,16 @@ export interface CardComment {
   authorId: string | null;
   body: string;
   createdAt: string;
+}
+
+export interface CardDailyNote {
+  id: string;
+  /** Dia YYYY-MM-DD */
+  date: string;
+  body: string;
+  authorId: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type RequirementStatus = "draft" | "approved" | "in_progress" | "done" | "rejected";
@@ -204,6 +219,8 @@ export interface Board {
   executiveSummary?: string;
   /** Objetivos do projeto (painel direito dos boards de nível projeto). */
   objectives?: string;
+  /** Link da aplicação em produção/homologação (http/https). */
+  applicationUrl?: string | null;
   listIds: string[];
   memberIds: string[];
   /** Contatos externos (não entram no time nem no acesso ao board) */
@@ -387,7 +404,7 @@ export interface StandupSession {
   updatedAt: string;
 }
 
-/** Conversa da Maya de um board em um dia (YYYY-MM-DD local). */
+/** Conversa da Maya de um board em um dia (YYYY-MM-DD local), por usuário. */
 export interface MayaDayLog {
   id: string;
   boardId: string;

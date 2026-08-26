@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { assertBodySize, checkRateLimit } from "@/lib/api-security";
 import { setVisibleBoards } from "@/lib/shared-boards";
+import { withoutSharedMayaLogs } from "@/lib/board-snapshot";
+import { listMayaChatsForUser } from "@/lib/maya-chat-store";
 
 async function save(request: Request) {
   const session = await auth();
@@ -36,7 +38,12 @@ async function save(request: Request) {
     return NextResponse.json({
       ok: true,
       boardIds: result.boardIds,
-      snapshots: result.snapshots,
+      snapshots: result.snapshots.map(withoutSharedMayaLogs),
+      mayaLogs: await listMayaChatsForUser(session.user.email, {
+        legacyByBoard: Object.fromEntries(
+          result.snapshots.map((snapshot) => [snapshot.board.id, snapshot.mayaLogs]),
+        ),
+      }),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Falha ao salvar a escolha.";

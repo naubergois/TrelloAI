@@ -1,8 +1,92 @@
 import type { MayaDayLog, StandupChatMessage, StandupSession, TeamMember } from "./types";
 import { formatCalendarDayLabel } from "./calendar-report";
 
+export const MAYA_CHAT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+export const MAYA_CHAT_MESSAGE_MAX = 8000;
+export const MAYA_CHAT_DAY_MESSAGE_MAX = 200;
+export const MAYA_CHAT_ID_MAX = 80;
+
 export function mayaDayLogId(boardId: string, date: string) {
   return `${boardId}:${date}`;
+}
+
+export function isMayaChatDate(value: string) {
+  return MAYA_CHAT_DATE_RE.test(value);
+}
+
+export function parseMayaChatMessages(raw: unknown): StandupChatMessage[] {
+  if (!Array.isArray(raw)) return [];
+  const incoming: StandupChatMessage[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    const id = String(rec.id || "").trim().slice(0, MAYA_CHAT_ID_MAX);
+    const content = String(rec.content || "").trim().slice(0, MAYA_CHAT_MESSAGE_MAX);
+    const role = rec.role === "manager" ? "manager" : rec.role === "member" ? "member" : null;
+    if (!id || !content || !role) continue;
+    const createdAt =
+      typeof rec.createdAt === "string" && rec.createdAt.trim()
+        ? rec.createdAt
+        : new Date().toISOString();
+    incoming.push({
+      id,
+      role,
+      memberId: rec.memberId ? String(rec.memberId).trim().slice(0, MAYA_CHAT_ID_MAX) : null,
+      content,
+      createdAt,
+    });
+  }
+  return mergeMayaMessages([], incoming).slice(-MAYA_CHAT_DAY_MESSAGE_MAX);
+}
+
+export function normalizeMayaDayLog(
+  boardId: string,
+  date: string,
+  messages: StandupChatMessage[],
+  updatedAt?: string,
+): MayaDayLog | null {
+  if (!boardId.trim() || !isMayaChatDate(date)) return null;
+  const parsed = parseMayaChatMessages(messages);
+  if (parsed.length === 0) return null;
+  return {
+    id: mayaDayLogId(boardId, date),
+    boardId,
+    date,
+    messages: parsed,
+    updatedAt: updatedAt || new Date().toISOString(),
+  };
+}
+
+export function mayaLogsRecord(logs: MayaDayLog[]): Record<string, MayaDayLog> {
+  const out: Record<string, MayaDayLog> = {};
+  for (const log of logs) {
+    if (!log?.id || !log.boardId || !isMayaChatDate(log.date)) continue;
+    const normalized = normalizeMayaDayLog(log.boardId, log.date, log.messages, log.updatedAt);
+    if (normalized) out[normalized.id] = normalized;
+  }
+  return out;
+}
+
+export function mergeMayaLogRecords(
+  base: Record<string, MayaDayLog> | undefined,
+  incoming: Record<string, MayaDayLog> | undefined,
+): Record<string, MayaDayLog> {
+  const out: Record<string, MayaDayLog> = { ...(base || {}) };
+  for (const log of Object.values(incoming || {})) {
+    const prev = out[log.id];
+    const messages = mergeMayaMessages(prev?.messages ?? [], log.messages ?? []);
+    if (messages.length === 0) continue;
+    const updatedAt =
+      (prev?.updatedAt || "") > (log.updatedAt || "") ? prev!.updatedAt : log.updatedAt;
+    out[log.id] = {
+      id: log.id || mayaDayLogId(log.boardId, log.date),
+      boardId: log.boardId,
+      date: log.date,
+      messages,
+      updatedAt: updatedAt || new Date().toISOString(),
+    };
+  }
+  return out;
 }
 
 /** Garante que a próxima mensagem fique depois da última, mesmo no mesmo milissegundo. */
@@ -53,6 +137,78 @@ export function upsertMayaDayLog(
       updatedAt: new Date().toISOString(),
     },
   };
+}
+
+export function omitMayaDayLog(
+  logs: Record<string, MayaDayLog>,
+  boardId: string,
+  date: string,
+): Record<string, MayaDayLog> {
+  const id = mayaDayLogId(boardId, date);
+  if (!logs[id]) return logs;
+  const next = { ...logs };
+  delete next[id];
+  return next;
+}
+
+/** Substitui as mensagens do dia. Lista vazia remove a conversa. */
+export function replaceMayaDayLog(
+  logs: Record<string, MayaDayLog>,
+  boardId: string,
+  date: string,
+  messages: StandupChatMessage[],
+): Record<string, MayaDayLog> {
+  const parsed = parseMayaChatMessages(messages);
+  if (parsed.length === 0) return omitMayaDayLog(logs, boardId, date);
+  const id = mayaDayLogId(boardId, date);
+  return {
+    ...logs,
+    [id]: {
+      id,
+      boardId,
+      date,
+      messages: parsed,
+      updatedAt: new Date().toISOString(),
+    },
+  };
+}
+
+export function removeMayaChatMessage(
+  logs: Record<string, MayaDayLog>,
+  boardId: string,
+  date: string,
+  messageId: string,
+): Record<string, MayaDayLog> {
+  const id = mayaDayLogId(boardId, date);
+  const log = logs[id];
+  if (!log || !messageId) return logs;
+  return replaceMayaDayLog(
+    logs,
+    boardId,
+    date,
+    log.messages.filter((msg) => msg.id !== messageId),
+  );
+}
+
+export function stripMayaStandupChat(
+  standups: Record<string, StandupSession>,
+  boardId: string,
+  date: string,
+  messageIds?: ReadonlySet<string>,
+): Record<string, StandupSession> {
+  let changed = false;
+  const next = { ...standups };
+  const now = new Date().toISOString();
+  for (const [id, session] of Object.entries(standups)) {
+    if (session.boardId !== boardId || session.date !== date) continue;
+    const chat = session.chat ?? [];
+    if (chat.length === 0) continue;
+    const filtered = messageIds ? chat.filter((msg) => !messageIds.has(msg.id)) : [];
+    if (filtered.length === chat.length) continue;
+    changed = true;
+    next[id] = { ...session, chat: filtered, updatedAt: now };
+  }
+  return changed ? next : standups;
 }
 
 export function collectMayaDayMessages(

@@ -7,6 +7,7 @@ import type {
   Board,
   Card,
   CardAttachment,
+  CardDailyNote,
   KanbanActivity,
   LabelColor,
   List,
@@ -64,7 +65,14 @@ import {
   shiftCalendarDay,
 } from "./calendar-report";
 import { extractMeetingUrlFromText, sanitizeMeetingUrl } from "./meeting-links";
+import { sanitizeApplicationUrl } from "./application-url";
 import { sanitizeExecutiveSummary } from "./executive-summary";
+import {
+  normalizeDailyNotes,
+  resolveCardDates,
+  sanitizeCalendarDay,
+  sanitizeDailyNoteBody,
+} from "./card-schedule";
 import {
   findDuplicateWhatsAppGroup,
   mergeWhatsAppGroup,
@@ -78,7 +86,15 @@ import {
   membersForSnapshot,
   syncCardAssignees,
 } from "./members";
-import { mergeMayaMessages, mayaDayLogId, mayaMessageTimestamp, upsertMayaDayLog } from "./maya-chat";
+import {
+  mergeMayaLogRecords,
+  mayaDayLogId,
+  mayaMessageTimestamp,
+  omitMayaDayLog,
+  removeMayaChatMessage,
+  stripMayaStandupChat,
+  upsertMayaDayLog,
+} from "./maya-chat";
 
 function normalizeCalendarEvent(event: TeamCalendarEvent): TeamCalendarEvent {
   const meetingUrl =
@@ -95,6 +111,7 @@ function normalizeCalendarEvent(event: TeamCalendarEvent): TeamCalendarEvent {
 
 function normalizeCard(card: Card): Card {
   const assignees = syncCardAssignees(cardAssigneeIds(card));
+  const dates = resolveCardDates(card.startDate, card.dueDate);
   return {
     ...card,
     assigneeId: assignees.assigneeId,
@@ -103,12 +120,14 @@ function normalizeCard(card: Card): Card {
     acceptanceCriteria: card.acceptanceCriteria ?? "",
     checklist: Array.isArray(card.checklist) ? card.checklist : [],
     comments: Array.isArray(card.comments) ? card.comments : [],
+    dailyNotes: normalizeDailyNotes(card.dailyNotes),
     archived: card.archived ?? false,
     labels: Array.isArray(card.labels) ? card.labels : [],
     coverColor: card.coverColor ?? null,
     origin: card.origin ?? null,
     originKey: card.originKey ?? null,
-    dueDate: card.dueDate ?? null,
+    startDate: dates.startDate,
+    dueDate: dates.dueDate,
     priority: card.priority ?? null,
   };
 }
@@ -148,6 +167,7 @@ interface BoardState {
       backgroundTint?: number;
       executiveSummary?: string;
       objectives?: string;
+      applicationUrl?: string | null;
     },
   ) => string;
   setActiveBoard: (boardId: string) => void;
@@ -155,6 +175,7 @@ interface BoardState {
   updateBoardDescription: (boardId: string, description: string) => void;
   updateBoardExecutiveSummary: (boardId: string, executiveSummary: string) => void;
   updateBoardObjectives: (boardId: string, objectives: string) => void;
+  updateBoardApplicationUrl: (boardId: string, applicationUrl: string | null) => boolean;
   addBoardGitRepo: (boardId: string, url: string, label?: string) => string | null;
   removeBoardGitRepo: (boardId: string, repoId: string) => void;
   addBoardWhatsAppGroup: (
@@ -237,6 +258,8 @@ interface BoardState {
         | "description"
         | "priority"
         | "dueDate"
+        | "startDate"
+        | "dailyNotes"
         | "labels"
         | "coverColor"
         | "origin"
@@ -257,6 +280,9 @@ interface BoardState {
   archiveCard: (cardId: string) => void;
   restoreCard: (cardId: string, listId?: string) => void;
   addCardComment: (cardId: string, body: string) => void;
+  addCardDailyNote: (cardId: string, date: string, body: string) => string | null;
+  updateCardDailyNote: (cardId: string, noteId: string, body: string) => boolean;
+  removeCardDailyNote: (cardId: string, noteId: string) => void;
   addCardAttachment: (cardId: string, attachment: CardAttachment) => void;
   removeCardAttachment: (cardId: string, attachmentId: string) => void;
   createRequirement: (input: {
@@ -360,12 +386,15 @@ interface BoardState {
       content: string;
     },
   ) => void;
+  deleteMayaDayChat: (boardId: string, date: string) => void;
+  deleteMayaChatMessage: (boardId: string, date: string, messageId: string) => void;
   setActiveStandup: (standupId: string | null) => void;
   closeStandup: (standupId: string, summary: string) => void;
   applyManagerActions: (actions: AiAction[], boardId?: string) => void;
   ensureAsesiBoard: () => string;
   mergeBoardSnapshot: (snapshot: BoardSnapshot, opts?: { setActive?: boolean }) => void;
   adoptServerSnapshots: (snapshots: BoardSnapshot[]) => void;
+  adoptUserMayaLogs: (logs: Record<string, MayaDayLog>) => void;
   exportBoardSnapshot: (boardId: string) => BoardSnapshot | null;
   addBoardMemberFromProfile: (
     boardId: string,
@@ -433,12 +462,6 @@ function withStandupAndMayaLog(
 ) {
   return {
     standups: { ...state.standups, [standup.id]: standup },
-    mayaLogs: upsertMayaDayLog(
-      state.mayaLogs || {},
-      standup.boardId,
-      standup.date,
-      standup.chat ?? [],
-    ),
   };
 }
 
@@ -508,6 +531,7 @@ export const useBoardStore = create<BoardState>()(
           description,
           executiveSummary: sanitizeExecutiveSummary(appearance?.executiveSummary),
           objectives: sanitizeExecutiveSummary(appearance?.objectives),
+          applicationUrl: sanitizeApplicationUrl(appearance?.applicationUrl),
           listIds,
           memberIds,
           teamId: team ? team.id : null,
@@ -613,6 +637,27 @@ export const useBoardStore = create<BoardState>()(
             },
           };
         }),
+
+      updateBoardApplicationUrl: (boardId, applicationUrl) => {
+        const trimmed = (applicationUrl || "").trim();
+        const sanitized = sanitizeApplicationUrl(trimmed);
+        if (trimmed && !sanitized) return false;
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+          return {
+            boards: {
+              ...state.boards,
+              [boardId]: {
+                ...ensureBoardMembers(board),
+                applicationUrl: sanitized,
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          };
+        });
+        return true;
+      },
 
       addBoardGitRepo: (boardId, url, label) => {
         const trimmed = url.trim();
@@ -1316,7 +1361,8 @@ export const useBoardStore = create<BoardState>()(
             coverColor: extras.coverColor ?? null,
             origin: extras.origin ?? null,
             originKey: extras.originKey ?? null,
-            dueDate: extras.dueDate ?? null,
+            ...resolveCardDates(extras.startDate, extras.dueDate),
+            dailyNotes: normalizeDailyNotes(extras.dailyNotes),
             priority: extras.priority ?? null,
             ...syncCardAssignees(
               extras.assigneeIds ?? (extras.assigneeId ? [extras.assigneeId] : []),
@@ -1357,15 +1403,22 @@ export const useBoardStore = create<BoardState>()(
           const list = state.lists[card.listId];
           boardId = list?.boardId ?? null;
           const assigneeFields = applyAssigneePatch(patch);
+          const next = {
+            ...card,
+            ...patch,
+            ...(assigneeFields ?? {}),
+            id: card.id,
+            updatedAt: new Date().toISOString(),
+          };
+          const dates = resolveCardDates(next.startDate, next.dueDate);
           return {
             cards: {
               ...state.cards,
               [cardId]: {
-                ...card,
-                ...patch,
-                ...(assigneeFields ?? {}),
-                id: card.id,
-                updatedAt: new Date().toISOString(),
+                ...next,
+                startDate: dates.startDate,
+                dueDate: dates.dueDate,
+                dailyNotes: normalizeDailyNotes(next.dailyNotes),
               },
             },
           };
@@ -1512,6 +1565,95 @@ export const useBoardStore = create<BoardState>()(
             note: text.slice(0, 80),
           });
         }
+      },
+
+      addCardDailyNote: (cardId, date, body) => {
+        const day = sanitizeCalendarDay(date);
+        const text = sanitizeDailyNoteBody(body);
+        if (!day || !text) return null;
+        const noteId = nanoid();
+        const now = new Date().toISOString();
+        let boardId: string | null = null;
+        set((state) => {
+          const card = state.cards[cardId];
+          if (!card) return state;
+          boardId = state.lists[card.listId]?.boardId ?? null;
+          const note: CardDailyNote = {
+            id: noteId,
+            date: day,
+            body: text,
+            authorId: state.currentUserId,
+            createdAt: now,
+            updatedAt: now,
+          };
+          return {
+            cards: {
+              ...state.cards,
+              [cardId]: {
+                ...card,
+                dailyNotes: normalizeDailyNotes([...(card.dailyNotes || []), note]),
+                updatedAt: now,
+              },
+            },
+          };
+        });
+        if (boardId) {
+          get().recordActivity({
+            boardId,
+            kind: "card_update",
+            cardId,
+            note: `obs ${day}: ${text.slice(0, 60)}`,
+          });
+        }
+        return noteId;
+      },
+
+      updateCardDailyNote: (cardId, noteId, body) => {
+        const text = sanitizeDailyNoteBody(body);
+        if (!text) return false;
+        let ok = false;
+        set((state) => {
+          const card = state.cards[cardId];
+          if (!card) return state;
+          const notes = card.dailyNotes || [];
+          if (!notes.some((note) => note.id === noteId)) return state;
+          const now = new Date().toISOString();
+          ok = true;
+          return {
+            cards: {
+              ...state.cards,
+              [cardId]: {
+                ...card,
+                dailyNotes: normalizeDailyNotes(
+                  notes.map((note) =>
+                    note.id === noteId ? { ...note, body: text, updatedAt: now } : note,
+                  ),
+                ),
+                updatedAt: now,
+              },
+            },
+          };
+        });
+        return ok;
+      },
+
+      removeCardDailyNote: (cardId, noteId) => {
+        set((state) => {
+          const card = state.cards[cardId];
+          if (!card) return state;
+          const notes = card.dailyNotes || [];
+          if (!notes.some((note) => note.id === noteId)) return state;
+          return {
+            cards: {
+              ...state.cards,
+              [cardId]: {
+                ...card,
+                dailyNotes: notes.filter((note) => note.id !== noteId),
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          };
+        });
       },
 
       addCardAttachment: (cardId, attachment) => {
@@ -2582,11 +2724,7 @@ export const useBoardStore = create<BoardState>()(
         const date = calendarDayKey();
         set((state) => {
           const log = state.mayaLogs?.[mayaDayLogId(boardId, date)];
-          const openStandup = Object.values(state.standups).find(
-            (s) => s.boardId === boardId && s.date === date && s.status === "open",
-          );
-          const last =
-            log?.messages?.at(-1)?.createdAt || openStandup?.chat?.at(-1)?.createdAt || null;
+          const last = log?.messages?.at(-1)?.createdAt || null;
           const now = mayaMessageTimestamp(last);
           const msg: StandupChatMessage = {
             id: nanoid(),
@@ -2595,20 +2733,30 @@ export const useBoardStore = create<BoardState>()(
             content: text,
             createdAt: now,
           };
-          const logs = upsertMayaDayLog(state.mayaLogs || {}, boardId, date, [msg]);
-          if (!openStandup) return { mayaLogs: logs };
-          return {
-            mayaLogs: logs,
-            standups: {
-              ...state.standups,
-              [openStandup.id]: {
-                ...openStandup,
-                chat: mergeMayaMessages(openStandup.chat ?? [], [msg]),
-                updatedAt: now,
-              },
-            },
-          };
+          return { mayaLogs: upsertMayaDayLog(state.mayaLogs || {}, boardId, date, [msg]) };
         });
+      },
+
+      deleteMayaDayChat: (boardId, date) => {
+        if (!boardId.trim() || !date.trim()) return;
+        set((state) => ({
+          mayaLogs: omitMayaDayLog(state.mayaLogs || {}, boardId, date),
+          standups: stripMayaStandupChat(state.standups || {}, boardId, date),
+        }));
+      },
+
+      deleteMayaChatMessage: (boardId, date, messageId) => {
+        const id = messageId.trim();
+        if (!boardId.trim() || !date.trim() || !id) return;
+        set((state) => ({
+          mayaLogs: removeMayaChatMessage(state.mayaLogs || {}, boardId, date, id),
+          standups: stripMayaStandupChat(
+            state.standups || {},
+            boardId,
+            date,
+            new Set([id]),
+          ),
+        }));
       },
 
       setActiveStandup: (standupId) => set({ activeStandupId: standupId }),
@@ -2856,11 +3004,6 @@ export const useBoardStore = create<BoardState>()(
           if (standup.boardId === boardId) standups[id] = standup;
         }
 
-        const mayaLogs: Record<string, MayaDayLog> = {};
-        for (const [id, log] of Object.entries(state.mayaLogs || {})) {
-          if (log.boardId === boardId) mayaLogs[id] = log;
-        }
-
         const activities: Record<string, KanbanActivity> = {};
         for (const [id, activity] of Object.entries(state.activities || {})) {
           if (activity.boardId === boardId) activities[id] = activity;
@@ -2888,7 +3031,7 @@ export const useBoardStore = create<BoardState>()(
           meetings,
           managers,
           standups,
-          mayaLogs,
+          mayaLogs: {},
           activities,
           requirements,
           calendarEvents,
@@ -2917,7 +3060,6 @@ export const useBoardStore = create<BoardState>()(
             meetings: { ...state.meetings, ...snapshot.meetings },
             managers: { ...state.managers, ...snapshot.managers },
             standups: { ...state.standups, ...snapshot.standups },
-            mayaLogs: { ...(state.mayaLogs || {}), ...(snapshot.mayaLogs || {}) },
             activities: { ...(state.activities || {}), ...snapshot.activities },
             requirements: {
               ...(state.requirements || {}),
@@ -3003,6 +3145,12 @@ export const useBoardStore = create<BoardState>()(
         for (const snapshot of snapshots) {
           get().mergeBoardSnapshot(snapshot, { setActive: false });
         }
+      },
+
+      adoptUserMayaLogs: (logs) => {
+        set((state) => ({
+          mayaLogs: mergeMayaLogRecords(state.mayaLogs, logs),
+        }));
       },
 
       addBoardMemberFromProfile: (boardId, profile, opts) => {
@@ -3186,16 +3334,6 @@ export const useBoardStore = create<BoardState>()(
         if (!state.standups) state.standups = {};
         if (!state.mayaLogs) state.mayaLogs = {};
         if (!state.activities) state.activities = {};
-        for (const standup of Object.values(state.standups)) {
-          if (standup.chat?.length) {
-            state.mayaLogs = upsertMayaDayLog(
-              state.mayaLogs,
-              standup.boardId,
-              standup.date,
-              standup.chat,
-            );
-          }
-        }
         if (!state.requirements) state.requirements = {};
         if (!state.calendarEvents) state.calendarEvents = {};
         if (state.skipAsesiSeed === undefined) state.skipAsesiSeed = false;

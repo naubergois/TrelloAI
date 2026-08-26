@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { listBoardsForHome } from "@/lib/shared-boards";
+import { withoutSharedMayaLogs } from "@/lib/board-snapshot";
+import { listMayaChatsForUser } from "@/lib/maya-chat-store";
 
 export async function GET() {
   const session = await auth();
@@ -11,5 +13,13 @@ export async function GET() {
     session.user.email,
     session.user.role === "admin",
   );
-  return NextResponse.json({ snapshots });
+  const legacyByBoard = Object.fromEntries(
+    snapshots.map((snapshot) => [snapshot.board.id, snapshot.mayaLogs]),
+  );
+  const mayaLogs = await listMayaChatsForUser(session.user.email, { legacyByBoard });
+  return NextResponse.json({
+    snapshots: snapshots.map(withoutSharedMayaLogs),
+    mayaLogs,
+  });
 }
+

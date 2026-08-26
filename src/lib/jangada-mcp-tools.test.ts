@@ -2,14 +2,18 @@ import { describe, expect, it } from "vitest";
 import {
   applyAdicionarGit,
   applyAdicionarWhatsApp,
+  applyAnexarArquivo,
   applyAtualizarResumo,
   applyAtualizarWhatsApp,
   applyCriarCard,
   applyCriarLista,
   applyMoverCard,
+  applyRemoverAnexo,
   applyRemoverWhatsApp,
   compactBoard,
   findList,
+  listTools,
+  resolveAttachmentInput,
 } from "../../scripts/jangada-mcp-tools.mjs";
 
 function snapshot() {
@@ -106,5 +110,71 @@ describe("jangada MCP snapshot tools", () => {
 
     const removed = applyRemoverWhatsApp(edited.snapshot, { group_id: added.groupId });
     expect(removed.snapshot.board.whatsappGroups).toEqual([]);
+  });
+
+  it("attaches and removes files on a card, including via URL", () => {
+    const created = applyCriarCard(snapshot(), { title: "Mapa", list_title: "Backlog" });
+    const withFile = applyAnexarArquivo(created.snapshot, {
+      card_id: created.cardId,
+      attachment: {
+        id: "att1",
+        name: "mapa.pdf",
+        mimeType: "application/pdf",
+        size: 12,
+        kind: "file",
+        url: "/api/boards/asesi/cards/x/attachments/att1",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+    });
+    expect(withFile.snapshot.cards[created.cardId].attachments).toHaveLength(1);
+    expect(compactBoard(withFile.snapshot).lists[0].cards[0].attachments[0].name).toBe("mapa.pdf");
+
+    const withLink = applyAnexarArquivo(withFile.snapshot, {
+      card_id: created.cardId,
+      attachment: {
+        id: "att2",
+        name: "norma",
+        mimeType: "text/uri-list",
+        size: 0,
+        kind: "link",
+        url: "https://example.com/norma.pdf",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+    });
+    expect(withLink.snapshot.cards[created.cardId].attachments).toHaveLength(2);
+
+    const removed = applyRemoverAnexo(withLink.snapshot, {
+      card_id: created.cardId,
+      attachment_id: "att1",
+    });
+    expect(removed.snapshot.cards[created.cardId].attachments).toHaveLength(1);
+    expect(removed.snapshot.cards[created.cardId].attachments[0].id).toBe("att2");
+  });
+
+  it("resolves MCP attachment input from base64 and rejects executables", () => {
+    const decoded = resolveAttachmentInput(
+      { content_base64: Buffer.from("hello").toString("base64"), filename: "notas.txt" },
+      process.cwd(),
+    );
+    expect(decoded.kind).toBe("file");
+    expect(decoded.name).toBe("notas.txt");
+    expect(decoded.bytes?.toString()).toBe("hello");
+
+    const link = resolveAttachmentInput(
+      { url: "https://cge.ce.gov.br/doc.pdf", filename: "doc.pdf" },
+      process.cwd(),
+    );
+    expect(link.kind).toBe("link");
+    expect(link.url).toContain("cge.ce.gov.br");
+
+    expect(() =>
+      resolveAttachmentInput({ content_base64: "QQ==", filename: "setup.exe" }, process.cwd()),
+    ).toThrow(/não permitido/);
+  });
+
+  it("exposes attachment tools", () => {
+    const names = listTools().map((tool) => tool.name);
+    expect(names).toContain("jangada_anexar_arquivo");
+    expect(names).toContain("jangada_remover_anexo");
   });
 });

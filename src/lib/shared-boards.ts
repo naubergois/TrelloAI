@@ -11,6 +11,7 @@ import {
   pgSaveBoard,
   pgSetVisibility,
 } from "@/lib/storage/pg";
+import { deleteMayaChatsForBoard } from "@/lib/maya-chat-store";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "fs";
 import path from "path";
 import {
@@ -272,6 +273,7 @@ export async function deleteSharedBoard(boardId: string) {
     store.visibility[email] = (store.visibility[email] || []).filter((id) => id !== boardId);
   }
   tryWriteStore(store);
+  await deleteMayaChatsForBoard(boardId);
 }
 
 export async function addMembership(email: string, boardId: string) {

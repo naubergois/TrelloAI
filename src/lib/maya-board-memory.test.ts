@@ -77,6 +77,8 @@ describe("Maya board memory", () => {
       level: "project",
       parentBoardId: "asesi",
       executiveSummary: "Transparência de gastos.",
+      objectives: "Publicar o painel de gastos.",
+      applicationUrl: "https://farol.cge.ce.gov.br",
       listIds: ["f-todo"],
     }),
   };
@@ -155,6 +157,21 @@ describe("Maya board memory", () => {
     expect(prompt).toMatch(/CGE/);
     expect(prompt).toMatch(/Fecho amanhã/);
     expect(prompt).toMatch(/não invente/i);
+  });
+
+  it("includes project objectives and application url", () => {
+    const memory = buildMayaBoardMemory({
+      boardId: "farol",
+      boards,
+      lists,
+      cards,
+      members: { ana: { name: "Ana Costa" } },
+      managerName: "Maya",
+      logs,
+    });
+    const prompt = formatMayaMemoryPrompt(memory!, "2026-08-26");
+    expect(prompt).toMatch(/Objetivos:\nPublicar o painel de gastos/);
+    expect(prompt).toMatch(/Link da aplicação: https:\/\/farol.cge.ce.gov.br/);
   });
 
   it("keeps chat history and avoids duplicating the latest user message", () => {

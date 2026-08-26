@@ -17,6 +17,7 @@ Qualquer pedido para criar/mover/atualizar cards, listas ou requisitos no Jangad
 - `jangada_listar_boards` / `jangada_ver_board` — leitura (`board_id` default `asesi`)
 - `jangada_criar_card` / `jangada_criar_cards` — escrita
 - `jangada_criar_lista`, `jangada_mover_card`, `jangada_atualizar_card`
+- `jangada_anexar_arquivo` / `jangada_remover_anexo` — arquivos no card (`file_path`, `content_base64` ou `url`)
 - `jangada_atualizar_resumo` — guarda o resumo executivo do board
 - `jangada_adicionar_git` — liga um repositório para a Maya comparar código vs kanban
 - `jangada_adicionar_whatsapp` / `jangada_atualizar_whatsapp` / `jangada_remover_whatsapp` — metadados de grupos WhatsApp do board (`name`, `invite_url`, `jid`, `notes`)
