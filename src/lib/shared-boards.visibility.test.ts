@@ -50,19 +50,32 @@ describe("per-user board visibility", () => {
     expect(catalog.every((b) => b.selected)).toBe(true);
   });
 
-  it("keeps only the boards the user selected", async () => {
+  it("keeps extra boards the user selected and still pins org + team", async () => {
     const email = "admin@cge.ce.gov.br";
     const saved = await setVisibleBoards(email, ["asesi", "ghost"], true);
-    expect(saved.boardIds).toEqual(["asesi"]);
-    expect(saved.snapshots.map((s) => s.board.id)).toEqual(["asesi"]);
+    expect(saved.boardIds).toEqual([]);
+    expect(saved.snapshots.map((s) => s.board.id).sort()).toEqual(["asesi", "cge"]);
 
-    expect(await getVisibleBoardPreference(email)).toEqual(["asesi"]);
+    expect(await getVisibleBoardPreference(email)).toEqual([]);
     const home = await listBoardsForHome(email, true);
-    expect(home.map((s) => s.board.id)).toEqual(["asesi"]);
+    expect(home.map((s) => s.board.id).sort()).toEqual(["asesi", "cge"]);
 
     const catalog = await listBoardCatalog(email, true);
     expect(catalog.find((b) => b.id === "asesi")?.selected).toBe(true);
-    expect(catalog.find((b) => b.id === "cge")?.selected).toBe(false);
+    expect(catalog.find((b) => b.id === "cge")?.selected).toBe(true);
+  });
+
+  it("keeps org and team on the home without expanding the organization tree", async () => {
+    const email = "admin@cge.ce.gov.br";
+    const saved = await setVisibleBoards(email, ["cge"], true);
+    expect(saved.boardIds).toEqual([]);
+    expect(saved.snapshots.map((s) => s.board.id).sort()).toEqual(["asesi", "cge"]);
+    expect(saved.snapshots.find((s) => s.board.id === "asesi")?.board.parentBoardId).toBe(
+      "cge",
+    );
+
+    const home = await listBoardsForHome(email, true);
+    expect(home.map((s) => s.board.id).sort()).toEqual(["asesi", "cge"]);
   });
 
   it("lists every board of a team even when the person is only on one snapshot", async () => {
@@ -153,5 +166,15 @@ describe("per-user board visibility", () => {
 
     const catalog = await listBoardCatalog(charles, false);
     expect(catalog.map((b) => b.id).sort()).toEqual(["asesi", "cge", "farol", "mandacaru"]);
+
+    const home = await listBoardsForHome("admin@cge.ce.gov.br", true);
+    expect(home.map((s) => s.board.id).sort()).toEqual(["asesi", "cge", "farol", "mandacaru"]);
+
+    const saved = await setVisibleBoards("admin@cge.ce.gov.br", ["cge", "asesi"], true);
+    expect(saved.boardIds).toEqual([]);
+    expect(saved.snapshots.map((s) => s.board.id).sort()).toEqual(["asesi", "cge"]);
+    expect((await listBoardsForHome("admin@cge.ce.gov.br", true)).map((s) => s.board.id).sort()).toEqual(
+      ["asesi", "cge"],
+    );
   });
 });

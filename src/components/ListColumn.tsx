@@ -44,12 +44,12 @@ export function ListColumn({
   return (
     <section
       ref={setNodeRef}
-      className={`board-list-column flex h-full shrink-0 flex-col border ${
+      className={`board-list-column flex h-auto min-h-[12rem] shrink-0 flex-col overflow-visible border ${
         isOver ? "border-[var(--accent)]/60" : ""
       } ${systemList ? "border-[var(--accent)]/35" : ""}`}
       style={{
         borderRadius: "var(--board-list-radius, 1rem)",
-        width: "min(var(--board-list-width, 18rem), 78vw)",
+        width: "min(var(--board-list-width, 18rem), 86vw)",
       }}
     >
       <header className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2.5">
@@ -91,7 +91,7 @@ export function ListColumn({
       </header>
 
       <div
-        className="board-scroll flex min-h-0 flex-1 flex-col overflow-y-auto p-2.5 sm:p-3"
+        className="board-list-cards flex flex-col overflow-visible p-2.5 sm:p-3"
         style={{ gap: "var(--board-gap, 0.75rem)" }}
       >
         <SortableContext items={visibleIds} strategy={verticalListSortingStrategy}>

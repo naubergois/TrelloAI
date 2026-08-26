@@ -50,6 +50,7 @@ import {
   type BoardDesignId,
 } from "./board-themes";
 import {
+  applyOfficialBoardHierarchy,
   isValidParentLevel,
   normalizeBoardLevel,
 } from "./board-hierarchy";
@@ -385,7 +386,7 @@ export const useBoardStore = create<BoardState>()(
           };
         }
 
-        const board: Board = {
+        const board: Board = applyOfficialBoardHierarchy({
           id: boardId,
           title: title.trim() || "Novo board",
           description,
@@ -404,7 +405,7 @@ export const useBoardStore = create<BoardState>()(
           riskReport: null,
           createdAt: now,
           updatedAt: now,
-        };
+        });
 
         const manager: VirtualManager = {
           boardId,
@@ -572,11 +573,11 @@ export const useBoardStore = create<BoardState>()(
           return {
             boards: {
               ...state.boards,
-              [boardId]: {
+              [boardId]: applyOfficialBoardHierarchy({
                 ...ensureBoardMembers(board),
                 parentBoardId: nextParent,
                 updatedAt: now,
-              },
+              }),
             },
           };
         }),
@@ -598,12 +599,12 @@ export const useBoardStore = create<BoardState>()(
           return {
             boards: {
               ...state.boards,
-              [boardId]: {
+              [boardId]: applyOfficialBoardHierarchy({
                 ...ensureBoardMembers(board),
                 level: normalized,
                 parentBoardId,
                 updatedAt: now,
-              },
+              }),
             },
           };
         }),
@@ -2441,7 +2442,7 @@ export const useBoardStore = create<BoardState>()(
         if (state.managers[boardId]) managers[boardId] = state.managers[boardId];
 
         return {
-          board,
+          board: applyOfficialBoardHierarchy(board),
           lists,
           cards,
           members,
@@ -2459,7 +2460,7 @@ export const useBoardStore = create<BoardState>()(
       mergeBoardSnapshot: (snapshot, opts) => {
         set((state) => {
           const pieces = cloneBoardPieces(
-            ensureBoardMembers(snapshot.board),
+            applyOfficialBoardHierarchy(ensureBoardMembers(snapshot.board)),
             snapshot.lists,
             Object.fromEntries(
               Object.entries(snapshot.cards).map(([id, card]) => [id, normalizeCard(card)]),

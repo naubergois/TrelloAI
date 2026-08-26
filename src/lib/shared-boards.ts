@@ -18,12 +18,15 @@ import {
   snapshotVisibleViaSharedTeam,
   teamIdsHeldByEmail,
 } from "@/lib/board-access";
+import { applyOfficialBoardHierarchy } from "@/lib/board-hierarchy";
 import type { BoardSnapshot } from "./board-snapshot";
 import {
-  applyVisibilityPreference,
   buildBoardCatalog,
   filterExistingBoardIds,
   withDescendantBoardIds,
+  withFeaturedHomeBoardIds,
+  withoutFeaturedHomeBoardIds,
+  withPinnedFeaturedBoards,
   type BoardCatalogItem,
 } from "./board-visibility";
 
@@ -73,22 +76,29 @@ function tryWriteStore(store: SharedStore) {
   }
 }
 
+function withOfficialHierarchy(snapshot: BoardSnapshot): BoardSnapshot {
+  const board = applyOfficialBoardHierarchy(snapshot.board);
+  return board === snapshot.board ? snapshot : { ...snapshot, board };
+}
+
 export async function getSharedBoard(boardId: string): Promise<BoardSnapshot | null> {
   if (isPgConfigured()) {
     const pg = await pgGetBoard(boardId);
-    if (pg) return pg;
+    if (pg) return withOfficialHierarchy(pg);
   }
-  return readStore().boards[boardId] ?? null;
+  const local = readStore().boards[boardId] ?? null;
+  return local ? withOfficialHierarchy(local) : null;
 }
 
 /** Sync read for legacy callers — prefers file cache when DB enabled */
 export function getSharedBoardSync(boardId: string): BoardSnapshot | null {
-  return readStore().boards[boardId] ?? null;
+  const local = readStore().boards[boardId] ?? null;
+  return local ? withOfficialHierarchy(local) : null;
 }
 
 export async function saveSharedBoard(snapshot: BoardSnapshot) {
   const next: BoardSnapshot = {
-    ...snapshot,
+    ...withOfficialHierarchy(snapshot),
     updatedAt: new Date().toISOString(),
   };
 
@@ -104,18 +114,18 @@ export async function saveSharedBoard(snapshot: BoardSnapshot) {
 export async function listAllSharedBoards(): Promise<BoardSnapshot[]> {
   if (isPgConfigured()) {
     const pgBoards = await pgListAllBoards();
-    if (pgBoards.length > 0) return pgBoards;
+    if (pgBoards.length > 0) return pgBoards.map(withOfficialHierarchy);
   }
-  return Object.values(readStore().boards);
+  return Object.values(readStore().boards).map(withOfficialHierarchy);
 }
 
 export async function listBoardsForEmail(email: string): Promise<BoardSnapshot[]> {
   if (isPgConfigured()) {
-    return pgListBoardsForEmail(email);
+    return (await pgListBoardsForEmail(email)).map(withOfficialHierarchy);
   }
   const store = readStore();
   const ids = store.memberships[email.trim().toLowerCase()] || [];
-  return ids.map((id) => store.boards[id]).filter(Boolean);
+  return ids.map((id) => store.boards[id]).filter(Boolean).map(withOfficialHierarchy);
 }
 
 export async function getVisibleBoardPreference(
@@ -136,7 +146,11 @@ export async function listBoardCatalog(
 ): Promise<BoardCatalogItem[]> {
   const accessible = await listBoardsVisibleToUser(email, isAdmin);
   const pref = await getVisibleBoardPreference(email);
-  const selected = pref ?? accessible.map((snapshot) => snapshot.board.id);
+  const accessibleIds = accessible.map((snapshot) => snapshot.board.id);
+  const selected =
+    pref === null
+      ? accessibleIds
+      : withFeaturedHomeBoardIds(pref, accessibleIds);
   return buildBoardCatalog(
     accessible.map((snapshot) => ({
       id: snapshot.board.id,
@@ -156,7 +170,9 @@ export async function setVisibleBoards(
 ): Promise<{ boardIds: string[]; snapshots: BoardSnapshot[] }> {
   const accessible = await listBoardsVisibleToUser(email, isAdmin);
   const allowedIds = accessible.map((snapshot) => snapshot.board.id);
-  const nextIds = filterExistingBoardIds(boardIds, allowedIds);
+  const nextIds = withoutFeaturedHomeBoardIds(
+    filterExistingBoardIds(boardIds, allowedIds),
+  );
   const key = email.trim().toLowerCase();
 
   if (isPgConfigured()) {
@@ -167,9 +183,20 @@ export async function setVisibleBoards(
   store.visibility[key] = nextIds;
   tryWriteStore(store);
 
+  const keep = new Set(
+    withDescendantBoardIds(
+      nextIds,
+      accessible.map((snapshot) => snapshot.board),
+    ),
+  );
+  const chosen = accessible.filter((snapshot) => keep.has(snapshot.board.id));
   return {
     boardIds: nextIds,
-    snapshots: applyVisibilityPreference(accessible, nextIds, (snapshot) => snapshot.board.id),
+    snapshots: withPinnedFeaturedBoards(
+      chosen,
+      accessible,
+      (snapshot) => snapshot.board.id,
+    ),
   };
 }
 
@@ -192,19 +219,20 @@ export async function listBoardsForHome(
 ): Promise<BoardSnapshot[]> {
   const accessible = await listBoardsVisibleToUser(email, isAdmin);
   const pref = await getVisibleBoardPreference(email);
-  const selected = applyVisibilityPreference(
-    accessible,
-    pref,
-    (snapshot) => snapshot.board.id,
-  );
   if (pref === null) return accessible;
+  const userIds = withoutFeaturedHomeBoardIds(pref);
   const keep = new Set(
     withDescendantBoardIds(
-      selected.map((snapshot) => snapshot.board.id),
+      userIds,
       accessible.map((snapshot) => snapshot.board),
     ),
   );
-  return accessible.filter((snapshot) => keep.has(snapshot.board.id));
+  const chosen = accessible.filter((snapshot) => keep.has(snapshot.board.id));
+  return withPinnedFeaturedBoards(
+    chosen,
+    accessible,
+    (snapshot) => snapshot.board.id,
+  );
 }
 
 /** Admin sees every board; others see team/personal boards plus descendants of those. */

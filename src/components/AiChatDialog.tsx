@@ -30,10 +30,11 @@ type ChatLine = {
 type DialogPos = { x: number; y: number; w: number; h: number };
 
 const POS_KEY = "jangada-ai-dialog-pos";
-const MIN_W = 320;
-const MIN_H = 380;
+const MIN_W = 280;
+const MIN_H = 320;
 const DEFAULT_W = 380;
 const DEFAULT_H = 520;
+const NARROW_MQ = "(max-width: 639px)";
 
 function chatKey(boardId: string) {
   return `jangada-ai-tools-chat-${boardId}`;
@@ -96,6 +97,7 @@ export function AiChatDialog({
   const updateCalendarEvent = useBoardStore((s) => s.updateCalendarEvent);
 
   const [mounted, setMounted] = useState(false);
+  const [narrow, setNarrow] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [pos, setPos] = useState<DialogPos>(defaultPos);
   const [prompt, setPrompt] = useState("");
@@ -122,6 +124,16 @@ export function AiChatDialog({
   useEffect(() => {
     setMounted(true);
     setPos(clampPos(loadPos()));
+    const mq = window.matchMedia(NARROW_MQ);
+    const applyMq = () => setNarrow(mq.matches);
+    applyMq();
+    mq.addEventListener("change", applyMq);
+    const onResize = () => setPos((p) => clampPos(p));
+    window.addEventListener("resize", onResize);
+    return () => {
+      mq.removeEventListener("change", applyMq);
+      window.removeEventListener("resize", onResize);
+    };
   }, []);
 
   useEffect(() => {
@@ -225,6 +237,7 @@ export function AiChatDialog({
   };
 
   const startDrag = (mode: "move" | "resize", e: ReactPointerEvent) => {
+    if (narrow) return;
     e.preventDefault();
     dragRef.current = {
       mode,
@@ -304,13 +317,19 @@ export function AiChatDialog({
 
   if (!mounted) return null;
 
+  const sheet = narrow && !minimized;
+
   return createPortal(
     minimized ? (
       <button
         type="button"
         onClick={() => setMinimized(false)}
         className="fixed z-[170] inline-flex items-center gap-2 rounded-full border border-white/20 bg-[#0e2416]/95 py-1.5 pl-1.5 pr-3 text-sm text-white shadow-xl backdrop-blur"
-        style={{ left: pos.x, top: pos.y }}
+        style={
+          narrow
+            ? { right: 12, bottom: 16, left: "auto", top: "auto" }
+            : { left: pos.x, top: pos.y }
+        }
       >
         <JangadaBuddy size="sm" mood="happy" />
         Jangadinha
@@ -319,19 +338,29 @@ export function AiChatDialog({
       <div
         role="dialog"
         aria-label="Chat da Jangadinha"
-        className="fixed z-[170] flex flex-col overflow-hidden rounded-2xl border border-white/18 bg-[#102818]/96 shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-md"
-        style={{
-          left: pos.x,
-          top: pos.y,
-          width: pos.w,
-          height: pos.h,
-        }}
+        className={`fixed z-[170] flex flex-col overflow-hidden border border-white/18 bg-[#102818]/96 shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-md ${
+          sheet
+            ? "inset-x-0 bottom-0 top-auto h-[min(92dvh,100dvh)] w-full rounded-t-3xl pb-[env(safe-area-inset-bottom)]"
+            : "rounded-2xl"
+        }`}
+        style={
+          sheet
+            ? undefined
+            : {
+                left: pos.x,
+                top: pos.y,
+                width: pos.w,
+                height: pos.h,
+              }
+        }
       >
         <header
-          className="flex shrink-0 cursor-grab items-center gap-2 border-b border-white/12 bg-black/25 px-3 py-2 active:cursor-grabbing"
+          className={`flex shrink-0 items-center gap-2 border-b border-white/12 bg-black/25 px-3 py-2 ${
+            sheet ? "" : "cursor-grab active:cursor-grabbing"
+          }`}
           onPointerDown={(e) => startDrag("move", e)}
         >
-          <GripHorizontal className="h-4 w-4 text-white/45" />
+          {sheet ? null : <GripHorizontal className="h-4 w-4 text-white/45" />}
           <JangadaBuddy size="md" mood={loading ? "thinking" : "idle"} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-white">Jangadinha</p>
@@ -435,12 +464,14 @@ export function AiChatDialog({
           </form>
         </div>
 
-        <button
-          type="button"
-          aria-label="Redimensionar"
-          className="absolute bottom-1 right-1 h-4 w-4 cursor-nwse-resize rounded-sm bg-white/25"
-          onPointerDown={(e) => startDrag("resize", e)}
-        />
+        {sheet ? null : (
+          <button
+            type="button"
+            aria-label="Redimensionar"
+            className="absolute bottom-1 right-1 h-4 w-4 cursor-nwse-resize rounded-sm bg-white/25"
+            onPointerDown={(e) => startDrag("resize", e)}
+          />
+        )}
       </div>
     ),
     document.body,

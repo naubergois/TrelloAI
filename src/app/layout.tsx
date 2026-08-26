@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { DM_Sans, Kanit } from "next/font/google";
 import { AuthSessionProvider } from "@/components/AuthSessionProvider";
@@ -22,9 +22,16 @@ export const metadata: Metadata = {
     "Kanban da Terra da Luz: boards, listas, cards e IA para a gestão pública cearense.",
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#04662e",
+};
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="pt-BR" className={`${display.variable} ${body.variable} h-full antialiased`}>
+    <html lang="pt-BR" className={`${display.variable} ${body.variable} min-h-full antialiased`}>
       <body className="min-h-full flex flex-col font-sans">
         <AuthSessionProvider>{children}</AuthSessionProvider>
       </body>

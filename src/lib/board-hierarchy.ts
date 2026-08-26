@@ -1,3 +1,4 @@
+import { ASESI_BOARD_ID, CGE_BOARD_ID } from "@/lib/constants";
 import type { Board, BoardLevel } from "@/lib/types";
 
 export const BOARD_LEVELS: BoardLevel[] = [
@@ -68,11 +69,29 @@ export function normalizeBoardLevel(level?: string | null): BoardLevel {
 }
 
 export function ensureBoardHierarchy(board: Board): Board {
-  return {
+  return applyOfficialBoardHierarchy({
     ...board,
     level: normalizeBoardLevel(board.level),
     parentBoardId: board.parentBoardId ?? null,
-  };
+  });
+}
+
+/**
+ * CGE is the organization; ASESI is the team under it. Stale local snapshots
+ * used to save ASESI as another organization with no parent, so CGE went blank.
+ */
+export function applyOfficialBoardHierarchy<
+  T extends { id: string; level: BoardLevel; parentBoardId: string | null },
+>(board: T): T {
+  if (board.id === CGE_BOARD_ID) {
+    if (board.level === "organization" && board.parentBoardId === null) return board;
+    return { ...board, level: "organization", parentBoardId: null };
+  }
+  if (board.id === ASESI_BOARD_ID) {
+    if (board.level === "team" && board.parentBoardId === CGE_BOARD_ID) return board;
+    return { ...board, level: "team", parentBoardId: CGE_BOARD_ID };
+  }
+  return board;
 }
 
 export function getChildBoards(

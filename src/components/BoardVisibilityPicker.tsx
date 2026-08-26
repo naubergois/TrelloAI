@@ -8,6 +8,7 @@ import {
 } from "@/lib/board-hierarchy";
 import {
   catalogDepth,
+  isFeaturedHomeBoard,
   orderedCatalog,
   type BoardCatalogItem,
 } from "@/lib/board-visibility";
@@ -42,7 +43,12 @@ export function BoardVisibilityPicker({
         if (cancelled) return;
         const boards = data.boards ?? [];
         setItems(boards);
-        setSelected(new Set(boards.filter((b) => b.selected).map((b) => b.id)));
+        setSelected(
+          new Set([
+            ...boards.filter((b) => b.selected).map((b) => b.id),
+            ...boards.filter((b) => isFeaturedHomeBoard(b.id)).map((b) => b.id),
+          ]),
+        );
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -71,6 +77,7 @@ export function BoardVisibilityPicker({
 
   const toggle = (id: string) => {
     setSelected((cur) => {
+      if (isFeaturedHomeBoard(id) && cur.has(id)) return cur;
       const next = new Set(cur);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -115,8 +122,8 @@ export function BoardVisibilityPicker({
                 Boards visíveis
               </p>
               <p className="text-xs text-[var(--muted)]">
-                Marque os kanbans da sua equipe que devem aparecer na home. Para criar um
-                novo, feche e use Novo board.
+                Marque os kanbans da sua equipe que devem aparecer na home. O board da
+                organização e o do time ficam sempre no destaque.
               </p>
             </div>
           </div>
@@ -151,7 +158,11 @@ export function BoardVisibilityPicker({
             <span className="text-[var(--muted)]">·</span>
             <button
               type="button"
-              onClick={() => setSelected(new Set())}
+              onClick={() =>
+                setSelected(
+                  new Set(items.filter((b) => isFeaturedHomeBoard(b.id)).map((b) => b.id)),
+                )
+              }
               className="text-xs text-[var(--muted)] hover:text-white"
             >
               Limpar
@@ -181,6 +192,7 @@ export function BoardVisibilityPicker({
               {visible.map((board) => {
                 const depth = catalogDepth(board, items);
                 const on = selected.has(board.id);
+                const locked = isFeaturedHomeBoard(board.id);
                 return (
                   <li key={board.id}>
                     <button
@@ -189,7 +201,7 @@ export function BoardVisibilityPicker({
                       style={{ paddingLeft: `${12 + depth * 16}px` }}
                       className={`flex w-full items-start gap-3 rounded-xl py-2.5 pr-3 text-left transition ${
                         on ? "bg-[var(--accent)]/10" : "hover:bg-white/5"
-                      }`}
+                      } ${locked ? "cursor-default" : ""}`}
                     >
                       <span
                         className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
@@ -208,6 +220,11 @@ export function BoardVisibilityPicker({
                           >
                             {BOARD_LEVEL_LABELS[board.level]}
                           </span>
+                          {locked ? (
+                            <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase text-[var(--accent)]">
+                              Destaque
+                            </span>
+                          ) : null}
                         </span>
                         {board.description ? (
                           <span className="mt-0.5 line-clamp-2 block text-xs text-[var(--muted)]">

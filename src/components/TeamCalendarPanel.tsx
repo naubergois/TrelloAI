@@ -296,7 +296,7 @@ export function TeamCalendarPanel({
       role="dialog"
       aria-modal="true"
       aria-label="Calendário do time"
-      className="anim-overlay fixed inset-0 z-[200] flex h-dvh max-h-dvh w-screen flex-col bg-[#026aa7]"
+      className="anim-overlay fixed inset-0 z-[200] flex h-dvh max-h-dvh w-full max-w-full flex-col bg-[#026aa7]"
     >
       <div
         className="pointer-events-none absolute inset-0"

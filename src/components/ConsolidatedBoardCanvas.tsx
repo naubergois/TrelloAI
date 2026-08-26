@@ -216,7 +216,7 @@ export function ConsolidatedBoardCanvas({
               : ""}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-2">
           <label className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/40" />
             <input
@@ -226,7 +226,7 @@ export function ConsolidatedBoardCanvas({
                 if (e.key === "Escape") setQuery("");
               }}
               placeholder="Filtrar filhos…"
-              className="w-44 rounded-lg border border-white/15 bg-black/25 py-1.5 pl-8 pr-2 text-xs text-white outline-none placeholder:text-white/40 focus:border-[var(--accent)]"
+              className="w-full rounded-lg border border-white/15 bg-black/25 py-1.5 pl-8 pr-2 text-xs text-white outline-none placeholder:text-white/40 focus:border-[var(--accent)] sm:w-44"
             />
           </label>
           <select

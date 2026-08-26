@@ -16,8 +16,6 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useBoardStore } from "@/lib/store";
-import { ASESI_BOARD_ID } from "@/lib/constants";
 import { AuthButton } from "@/components/AuthButton";
 import { BrandMark } from "@/components/BrandMark";
 import { TeamsManager } from "@/components/TeamsManager";
@@ -35,9 +33,12 @@ import {
 } from "@/lib/board-hierarchy";
 import { extractBoardIndicators } from "@/lib/board-indicators";
 import { BoardIndicators } from "@/components/BoardIndicators";
+import { MayaSuggestionsBar } from "@/components/MayaSuggestionsBar";
 import { ExecutiveSummaryField } from "@/components/BoardExecutiveSummary";
+import { suggestMayaActivities } from "@/lib/maya-suggestions";
 import { executiveSummaryExcerpt } from "@/lib/executive-summary";
 import { useVisibleBoards } from "@/lib/use-visible-boards";
+import { featuredHomeBoards, isFeaturedHomeBoard } from "@/lib/board-visibility";
 import {
   DEFAULT_BACKGROUND_ID,
   DEFAULT_BACKGROUND_TINT,
@@ -48,10 +49,98 @@ import {
   type BoardCardThemeId,
   type BoardDesignId,
 } from "@/lib/board-themes";
+import { useBoardStore } from "@/lib/store";
 import { BoardVisibilityPicker } from "@/components/BoardVisibilityPicker";
-import type { BoardLevel } from "@/lib/types";
+import type { Board, BoardLevel } from "@/lib/types";
+import type { BoardIndicatorStats } from "@/lib/board-indicators";
+import type { MayaSuggestion } from "@/lib/maya-suggestions";
 
 type HomeTab = "boards" | "teams";
+
+function FeaturedBoardCard({
+  board,
+  stats,
+  rolledUp,
+  suggestions,
+  onOpen,
+  onInvite,
+}: {
+  board: Board;
+  stats?: BoardIndicatorStats;
+  rolledUp: boolean;
+  suggestions: MayaSuggestion[];
+  onOpen: () => void;
+  onInvite: () => void;
+}) {
+  const isOrg = board.level === "organization";
+  return (
+    <article
+      className={`flex flex-col overflow-hidden rounded-3xl border p-5 sm:p-6 ${
+        isOrg
+          ? "border-sky-400/35 bg-gradient-to-br from-sky-500/15 via-black/20 to-blue-600/10"
+          : "border-[var(--accent)]/30 bg-gradient-to-br from-[var(--accent)]/15 via-black/20 to-emerald-500/10"
+      }`}
+    >
+      <p
+        className={`text-xs font-semibold uppercase tracking-wide ${
+          isOrg ? "text-sky-300" : "text-[var(--accent)]"
+        }`}
+      >
+        {BOARD_LEVEL_LABELS[board.level]}
+      </p>
+      <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl text-white">
+        {board.title}
+      </h2>
+      {board.description ? (
+        <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
+          {board.description}
+        </p>
+      ) : null}
+      {board.executiveSummary ? (
+        <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-white/85">
+          <span
+            className={`text-[11px] font-semibold uppercase tracking-wide ${
+              isOrg ? "text-sky-300" : "text-[var(--accent)]"
+            }`}
+          >
+            Resumo executivo
+          </span>
+          <span className="mt-1 block">
+            {executiveSummaryExcerpt(board.executiveSummary, 280)}
+          </span>
+        </p>
+      ) : null}
+      {stats ? (
+        <div className="mt-4">
+          <BoardIndicators stats={stats} variant="full" rolledUp={rolledUp} />
+          <MayaSuggestionsBar
+            suggestions={suggestions}
+            variant="compact"
+            onSelect={onOpen}
+          />
+        </div>
+      ) : null}
+      <div className="mt-auto flex w-full flex-col gap-2 pt-4 sm:flex-row sm:flex-wrap">
+        <button
+          type="button"
+          onClick={onOpen}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-[var(--accent-on)] transition hover:brightness-110 sm:w-auto"
+        >
+          Abrir
+          <span className="hidden max-w-[14rem] truncate sm:inline"> {board.title}</span>
+        </button>
+        <button
+          type="button"
+          onClick={onInvite}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--line)] px-4 py-2.5 text-sm text-white transition hover:border-[var(--accent)] sm:w-auto"
+        >
+          <UserPlus className="h-4 w-4" />
+          Convidar equipe
+        </button>
+      </div>
+    </article>
+  );
+}
 
 export function BoardsHome() {
   const router = useRouter();
@@ -78,7 +167,11 @@ export function BoardsHome() {
 
   const me = currentUserId ? members[currentUserId] : null;
 
-  const asesiBoard = boardList.find((b) => b.id === ASESI_BOARD_ID) ?? null;
+  const featuredBoards = useMemo(() => featuredHomeBoards(boardList), [boardList]);
+  const featuredIds = useMemo(
+    () => new Set(featuredBoards.map((board) => board.id)),
+    [featuredBoards],
+  );
 
   const [tab, setTab] = useState<HomeTab>("boards");
   const [creating, setCreating] = useState(false);
@@ -106,8 +199,9 @@ export function BoardsHome() {
 
   const filteredBoards = useMemo(() => {
     const q = boardQuery.trim().toLowerCase();
-    if (!q) return boardList;
-    return boardList.filter((b) => {
+    const source = boardList.filter((b) => !featuredIds.has(b.id));
+    if (!q) return source;
+    return source.filter((b) => {
       const teamName = b.teamId ? teams[b.teamId]?.name ?? "" : "";
       const parentTitle = b.parentBoardId
         ? boards[b.parentBoardId]?.title ?? ""
@@ -121,7 +215,7 @@ export function BoardsHome() {
         BOARD_LEVEL_LABELS[b.level].toLowerCase().includes(q)
       );
     });
-  }, [boardList, boardQuery, teams, boards]);
+  }, [boardList, boardQuery, teams, boards, featuredIds]);
 
   const parentBoardOptions = useMemo(
     () => eligibleParentBoards(boardLevel, boardList),
@@ -142,6 +236,24 @@ export function BoardsHome() {
     }
     return map;
   }, [boardList, boards, lists, cards, requirements]);
+
+  const suggestionsByBoard = useMemo(() => {
+    const map: Record<string, ReturnType<typeof suggestMayaActivities>> = {};
+    for (const b of boardList) {
+      const descendantIds = getDescendantBoardIds(b.id, boards);
+      map[b.id] = suggestMayaActivities({
+        boardIds: [b.id, ...descendantIds],
+        rootBoardId: b.id,
+        boards,
+        lists,
+        cards,
+        requirements,
+        members,
+        limit: 1,
+      });
+    }
+    return map;
+  }, [boardList, boards, lists, cards, requirements, members]);
 
   const openBoard = (boardId: string) => {
     setActiveBoard(boardId);
@@ -179,6 +291,10 @@ export function BoardsHome() {
   };
 
   const hideBoard = async (boardId: string) => {
+    if (isFeaturedHomeBoard(boardId)) {
+      toast("O board da organização e o do time ficam sempre no destaque.");
+      return;
+    }
     const nextIds = boardList.filter((b) => b.id !== boardId).map((b) => b.id);
     try {
       await saveVisibleBoards(nextIds);
@@ -230,10 +346,10 @@ export function BoardsHome() {
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="app-bar shrink-0 border-b backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:h-16 sm:px-6">
+        <div className="mx-auto flex min-h-14 max-w-6xl items-center gap-2 px-3 py-2 sm:h-16 sm:gap-3 sm:px-6 sm:py-0">
           <div className="min-w-0 flex-1">
             <BrandMark size="sm" subtitle="Ceará · Terra da Luz" />
-            <p className="mt-0.5 truncate text-xs text-[var(--muted)]">
+            <p className="mt-0.5 hidden truncate text-xs text-[var(--muted)] sm:block">
               {me ? `Olá, ${me.name.split(" ")[0]}` : "Seus boards"}
             </p>
           </div>
@@ -241,7 +357,7 @@ export function BoardsHome() {
           <button
             type="button"
             onClick={() => setPickingBoards(true)}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--line)] px-3 py-2 text-sm text-[var(--muted)] transition hover:text-white"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-[var(--line)] p-2 text-sm text-[var(--muted)] transition hover:text-white sm:px-3 sm:py-2"
             title="Escolher quais boards aparecem na home"
           >
             <Eye className="h-4 w-4" />
@@ -250,7 +366,7 @@ export function BoardsHome() {
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="inline-flex items-center gap-1.5 rounded-xl btn-accent px-3 py-2 text-sm font-semibold"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl btn-accent p-2 text-sm font-semibold sm:px-3 sm:py-2"
           >
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">Novo board</span>
@@ -259,14 +375,14 @@ export function BoardsHome() {
       </header>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
-        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
           <div className="max-w-xl">
             <h1 className="font-[family-name:var(--font-display)] text-2xl text-white sm:text-3xl">
               {tab === "boards" ? "Seus boards" : "Equipes"}
             </h1>
             <p className="mt-1 text-sm text-[var(--muted)]">
               {tab === "boards"
-                ? "Escolha quais boards da sua equipe aparecem aqui. O administrador vê o catálogo inteiro."
+                ? "O board da organização e o do time ficam no destaque. Escolha quais outros kanbans aparecem abaixo."
                 : "Crie equipes e vincule-as a cada board. Cada equipe só vê os próprios kanbans."}
             </p>
           </div>
@@ -301,58 +417,23 @@ export function BoardsHome() {
 
         {tab === "teams" ? <TeamsManager /> : null}
 
-        {tab === "boards" && asesiBoard ? (
-          <section className="mb-6 overflow-hidden rounded-3xl border border-[var(--accent)]/30 bg-gradient-to-br from-[var(--accent)]/15 via-black/20 to-sky-500/10 p-5 sm:p-6">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="max-w-xl">
-                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">
-                  Board oficial
-                </p>
-                <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl text-white">
-                  {asesiBoard.title}
-                </h2>
-                <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
-                  {asesiBoard.description}
-                </p>
-                {asesiBoard.executiveSummary ? (
-                  <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-white/85">
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--accent)]">
-                      Resumo executivo
-                    </span>
-                    <span className="mt-1 block">
-                      {executiveSummaryExcerpt(asesiBoard.executiveSummary, 360)}
-                    </span>
-                  </p>
-                ) : null}
-                {indicatorsByBoard[ASESI_BOARD_ID] ? (
-                  <div className="mt-4 max-w-lg">
-                    <BoardIndicators
-                      stats={indicatorsByBoard[ASESI_BOARD_ID]}
-                      variant="full"
-                      rolledUp={
-                        getDescendantBoardIds(ASESI_BOARD_ID, boards).length > 0
-                      }
-                    />
-                  </div>
-                ) : null}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => openBoard(ASESI_BOARD_ID)}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-[var(--accent-on)] transition hover:brightness-110"
-                >
-                  Abrir ASESI
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInviteBoardId(ASESI_BOARD_ID)}
-                  className="inline-flex items-center gap-2 rounded-xl border border-[var(--line)] px-4 py-2.5 text-sm text-white transition hover:border-[var(--accent)]"
-                >
-                  <UserPlus className="h-4 w-4" />
-                  Convidar equipe
-                </button>
-              </div>
+        {tab === "boards" && featuredBoards.length > 0 ? (
+          <section className="mb-6">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">
+              Destaque
+            </p>
+            <div className="grid gap-4 lg:grid-cols-2">
+              {featuredBoards.map((board) => (
+                <FeaturedBoardCard
+                  key={board.id}
+                  board={board}
+                  stats={indicatorsByBoard[board.id]}
+                  rolledUp={getDescendantBoardIds(board.id, boards).length > 0}
+                  suggestions={suggestionsByBoard[board.id] || []}
+                  onOpen={() => openBoard(board.id)}
+                  onInvite={() => setInviteBoardId(board.id)}
+                />
+              ))}
             </div>
           </section>
         ) : null}
@@ -382,7 +463,7 @@ export function BoardsHome() {
             <span className="text-sm font-medium">Criar board</span>
           </button>
 
-          {!boardQuery.trim() && filteredBoards.length === 0 ? (
+          {!boardQuery.trim() && filteredBoards.length === 0 && featuredBoards.length === 0 ? (
             <div className="col-span-full rounded-2xl border border-dashed border-[var(--line)] bg-black/15 px-6 py-12 text-center">
               <p className="text-sm text-white">Nenhum board nesta lista</p>
               <p className="mt-1 text-xs text-[var(--muted)]">
@@ -469,12 +550,17 @@ export function BoardsHome() {
                             getDescendantBoardIds(board.id, boards).length > 0
                           }
                         />
+                        <MayaSuggestionsBar
+                          suggestions={suggestionsByBoard[board.id] || []}
+                          variant="compact"
+                          onSelect={() => openBoard(board.id)}
+                        />
                       </div>
                     </div>
                   </div>
                 </button>
 
-                <div className="absolute right-2 top-2 flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
+                <div className="flex shrink-0 items-center justify-end gap-1 border-t border-white/10 bg-black/45 px-2 py-1.5">
                   <button
                     type="button"
                     title="Ocultar da minha home"
@@ -482,7 +568,7 @@ export function BoardsHome() {
                       e.stopPropagation();
                       void hideBoard(board.id);
                     }}
-                    className="rounded-lg border border-white/15 bg-black/45 p-2 text-white backdrop-blur hover:bg-black/65"
+                    className="rounded-lg border border-white/15 bg-black/35 p-2 text-white hover:bg-black/65"
                   >
                     <EyeOff className="h-3.5 w-3.5" />
                   </button>
@@ -493,7 +579,7 @@ export function BoardsHome() {
                       e.stopPropagation();
                       setInviteBoardId(board.id);
                     }}
-                    className="rounded-lg border border-white/15 bg-black/45 p-2 text-white backdrop-blur hover:bg-black/65"
+                    className="rounded-lg border border-white/15 bg-black/35 p-2 text-white hover:bg-black/65"
                   >
                     <UserPlus className="h-3.5 w-3.5" />
                   </button>
@@ -504,7 +590,7 @@ export function BoardsHome() {
                       e.stopPropagation();
                       setCustomizeId(board.id);
                     }}
-                    className="rounded-lg border border-white/15 bg-black/45 p-2 text-white backdrop-blur hover:bg-black/65"
+                    className="rounded-lg border border-white/15 bg-black/35 p-2 text-white hover:bg-black/65"
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
@@ -515,7 +601,7 @@ export function BoardsHome() {
                       e.stopPropagation();
                       setPendingDeleteId(board.id);
                     }}
-                    className="rounded-lg border border-rose-400/30 bg-black/45 p-2 text-rose-100 backdrop-blur hover:bg-rose-600/70"
+                    className="rounded-lg border border-rose-400/30 bg-black/35 p-2 text-rose-100 hover:bg-rose-600/70"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -526,7 +612,7 @@ export function BoardsHome() {
                       e.stopPropagation();
                       setCustomizeId(board.id);
                     }}
-                    className="rounded-lg border border-white/15 bg-black/45 p-2 text-white backdrop-blur hover:bg-black/65"
+                    className="rounded-lg border border-white/15 bg-black/35 p-2 text-white hover:bg-black/65"
                   >
                     <Palette className="h-3.5 w-3.5" />
                   </button>
@@ -853,27 +939,27 @@ export function BoardsHome() {
               />
             </div>
 
-            <footer className="flex flex-wrap gap-2 border-t border-[var(--line)] p-4">
+            <footer className="flex flex-col-reverse gap-2 border-t border-[var(--line)] p-4 sm:flex-row sm:flex-wrap">
               <button
                 type="button"
                 onClick={() => setPendingDeleteId(customizeBoard.id)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/30 px-3 py-2.5 text-sm text-rose-300 hover:bg-rose-500/10"
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-rose-500/30 px-3 py-2.5 text-sm text-rose-300 hover:bg-rose-500/10"
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 Excluir
               </button>
-              <div className="ml-auto flex gap-2">
+              <div className="flex gap-2 sm:ml-auto">
                 <button
                   type="button"
                   onClick={() => setCustomizeId(null)}
-                  className="rounded-xl border border-[var(--line)] px-3 py-2.5 text-sm text-[var(--muted)] hover:text-white"
+                  className="flex-1 rounded-xl border border-[var(--line)] px-3 py-2.5 text-sm text-[var(--muted)] hover:text-white sm:flex-none"
                 >
                   Fechar
                 </button>
                 <button
                   type="button"
                   onClick={() => openBoard(customizeBoard.id)}
-                  className="rounded-xl bg-[var(--accent)] px-3 py-2.5 text-sm font-semibold text-[var(--accent-on)]"
+                  className="flex-1 rounded-xl bg-[var(--accent)] px-3 py-2.5 text-sm font-semibold text-[var(--accent-on)] sm:flex-none"
                 >
                   Abrir board
                 </button>

@@ -71,7 +71,7 @@ export function UsersAdmin() {
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="app-bar shrink-0 border-b backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-4xl items-center gap-3 px-4 sm:h-16 sm:px-6">
+        <div className="mx-auto flex h-14 max-w-4xl items-center gap-2 px-3 sm:h-16 sm:gap-3 sm:px-6">
           <div className="min-w-0 flex-1">
             <BrandMark size="sm" subtitle="Administração" />
           </div>
@@ -170,7 +170,7 @@ export function UsersAdmin() {
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-[var(--accent-on)] transition hover:brightness-110 disabled:opacity-60"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-[var(--accent-on)] transition hover:brightness-110 disabled:opacity-60 sm:w-auto"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
               Cadastrar usuário

@@ -3,13 +3,16 @@ import { useBoardStore } from "@/lib/store";
 
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingBoardId: string | null = null;
+let serverAdopted = false;
 
 export async function loadServerBoards(): Promise<number> {
   const res = await fetch("/api/boards", { credentials: "include" });
   if (!res.ok) return 0;
   const data = (await res.json()) as { snapshots?: BoardSnapshot[] };
   const snapshots = data.snapshots ?? [];
+  if (snapshots.length === 0) return 0;
   useBoardStore.getState().adoptServerSnapshots(snapshots);
+  serverAdopted = true;
   return snapshots.length;
 }
 
@@ -29,10 +32,12 @@ export async function saveVisibleBoards(boardIds: string[]): Promise<number> {
   }
   const snapshots = data.snapshots ?? [];
   useBoardStore.getState().adoptServerSnapshots(snapshots);
+  serverAdopted = true;
   return snapshots.length;
 }
 
 export async function pushBoardToServer(boardId: string): Promise<boolean> {
+  if (!serverAdopted) return false;
   const snapshot = useBoardStore.getState().exportBoardSnapshot(boardId);
   if (!snapshot) return false;
   const res = await fetch(`/api/boards/${boardId}`, {
@@ -45,6 +50,7 @@ export async function pushBoardToServer(boardId: string): Promise<boolean> {
 }
 
 export function scheduleBoardSync(boardId: string, delayMs = 2000) {
+  if (!serverAdopted) return;
   pendingBoardId = boardId;
   if (pushTimer) clearTimeout(pushTimer);
   pushTimer = setTimeout(() => {

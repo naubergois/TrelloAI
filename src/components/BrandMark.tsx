@@ -23,7 +23,7 @@ export function BrandMark({ size = "md", subtitle, stacked = false }: BrandMarkP
           Jangada
         </p>
         {subtitle ? (
-          <p className="mt-1 truncate text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--ce-gold)]">
+          <p className="mt-1 truncate text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--ce-gold)] max-[380px]:hidden">
             {subtitle}
           </p>
         ) : null}

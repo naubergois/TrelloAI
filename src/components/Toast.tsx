@@ -46,11 +46,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed inset-x-0 bottom-4 z-[300] flex flex-col items-center gap-2 px-4">
+      <div className="pointer-events-none fixed inset-x-0 bottom-4 z-[300] flex flex-col items-center gap-2 px-3 pb-[env(safe-area-inset-bottom)] sm:px-4">
         {items.map((item) => (
           <div
             key={item.id}
-            className="anim-sheet pointer-events-auto flex max-w-md items-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--panel-strong)] px-4 py-3 text-sm text-white shadow-[0_16px_40px_rgba(0,0,0,0.4)]"
+            className="anim-sheet pointer-events-auto flex w-full max-w-md items-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--panel-strong)] px-4 py-3 text-sm text-white shadow-[0_16px_40px_rgba(0,0,0,0.4)]"
           >
             <CheckCircle2 className="h-4 w-4 shrink-0 text-[var(--accent)]" />
             <p className="min-w-0 flex-1">{item.message}</p>

@@ -1,8 +1,80 @@
 import {
+  applyOfficialBoardHierarchy,
   BOARD_LEVEL_ORDER,
   normalizeBoardLevel,
 } from "@/lib/board-hierarchy";
+import { ASESI_BOARD_ID, CGE_BOARD_ID } from "@/lib/constants";
 import type { BoardLevel } from "@/lib/types";
+
+/** Organização + time — sempre no destaque da home. */
+export const FEATURED_HOME_BOARD_IDS: readonly string[] = [
+  CGE_BOARD_ID,
+  ASESI_BOARD_ID,
+];
+
+export function isFeaturedHomeBoard(boardId: string): boolean {
+  return FEATURED_HOME_BOARD_IDS.includes(boardId);
+}
+
+/** Org first, then team. Falls back to any boards at those levels. */
+export function featuredHomeBoards<T extends { id: string; level: BoardLevel }>(
+  boards: T[],
+): T[] {
+  const byId = new Map(boards.map((board) => [board.id, board]));
+  const official = FEATURED_HOME_BOARD_IDS.map((id) => byId.get(id)).filter(
+    (board): board is T => board !== undefined,
+  );
+  if (official.length === 2) return official;
+
+  const picked: T[] = [];
+  const used = new Set<string>();
+  const take = (board: T | undefined) => {
+    if (!board || used.has(board.id)) return;
+    used.add(board.id);
+    picked.push(board);
+  };
+  take(
+    official.find((board) => board.level === "organization") ??
+      boards.find((board) => board.level === "organization"),
+  );
+  take(
+    official.find((board) => board.level === "team") ??
+      boards.find((board) => board.level === "team"),
+  );
+  for (const board of official) take(board);
+  return picked.slice(0, 2);
+}
+
+export function withoutFeaturedHomeBoardIds(ids: string[]): string[] {
+  return uniqueBoardIds(ids).filter((id) => !isFeaturedHomeBoard(id));
+}
+
+export function withFeaturedHomeBoardIds(
+  selectedIds: string[],
+  accessibleIds: string[],
+): string[] {
+  const accessible = new Set(accessibleIds);
+  const pinned = FEATURED_HOME_BOARD_IDS.filter((id) => accessible.has(id));
+  return uniqueBoardIds([
+    ...pinned,
+    ...selectedIds.filter((id) => accessible.has(id)),
+  ]);
+}
+
+export function withPinnedFeaturedBoards<T>(
+  selected: T[],
+  accessible: T[],
+  getId: (item: T) => string,
+): T[] {
+  const have = new Set(selected.map(getId));
+  const extra = FEATURED_HOME_BOARD_IDS.map((id) =>
+    accessible.find((item) => getId(item) === id),
+  ).filter((item): item is T => {
+    if (!item) return false;
+    return !have.has(getId(item));
+  });
+  return [...extra, ...selected];
+}
 
 export type BoardCatalogItem = {
   id: string;
@@ -45,14 +117,21 @@ export function buildBoardCatalog(
 ): BoardCatalogItem[] {
   const selected = new Set(selectedIds);
   return boards
-    .map((board) => ({
-      id: board.id,
-      title: board.title,
-      description: board.description || "",
-      level: normalizeBoardLevel(board.level),
-      parentBoardId: board.parentBoardId ?? null,
-      selected: selected.has(board.id),
-    }))
+    .map((board) => {
+      const hierarchy = applyOfficialBoardHierarchy({
+        id: board.id,
+        level: normalizeBoardLevel(board.level),
+        parentBoardId: board.parentBoardId ?? null,
+      });
+      return {
+        id: board.id,
+        title: board.title,
+        description: board.description || "",
+        level: hierarchy.level,
+        parentBoardId: hierarchy.parentBoardId,
+        selected: selected.has(board.id),
+      };
+    })
     .sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
 }
 

@@ -99,7 +99,7 @@ export function BoardCanvas({
   if (!board) return null;
 
   return (
-    <div className="h-full min-h-0">
+    <div className="h-auto min-h-[12rem]">
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -108,23 +108,17 @@ export function BoardCanvas({
         onDragEnd={onDragEnd}
       >
         <div
-          className="board-scroll flex h-full overflow-x-auto overflow-y-hidden pb-1 pr-1"
+          className="board-canvas-scroll flex items-start overflow-x-auto pb-1 pr-1"
           style={{ gap: "var(--board-gap, 0.75rem)" }}
           onWheel={(event) => {
             if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-            const inColumn = (event.target as HTMLElement | null)?.closest?.(
-              ".board-list-column",
-            );
-            if (inColumn) return;
-            const page = event.currentTarget.closest("[data-board-page-scroll]");
-            if (!(page instanceof HTMLElement)) return;
-            page.scrollTop += event.deltaY;
+            window.scrollBy(0, event.deltaY);
           }}
         >
           {orderedLists.map((list, index) => (
             <div
               key={list.id}
-              className="anim-rise flex h-full shrink-0"
+              className="anim-rise flex shrink-0 self-start"
               style={{ animationDelay: `${index * 60}ms` }}
             >
               <ListColumn listId={list.id} filter={filter} />
@@ -135,7 +129,7 @@ export function BoardCanvas({
             className="h-fit shrink-0 border border-dashed border-[var(--line)] bg-[var(--panel)] p-3"
             style={{
               borderRadius: "var(--board-list-radius, 1rem)",
-              width: "min(var(--board-list-width, 18rem), 78vw)",
+              width: "min(var(--board-list-width, 18rem), 86vw)",
             }}
             onSubmit={(e) => {
               e.preventDefault();
@@ -162,7 +156,7 @@ export function BoardCanvas({
 
         <DragOverlay>
           {activeCard ? (
-            <div className="w-72 rotate-2 opacity-95">
+            <div className="w-64 max-w-[86vw] rotate-2 opacity-95">
               <CardItem card={activeCard} overlay />
             </div>
           ) : null}

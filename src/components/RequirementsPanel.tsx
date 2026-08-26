@@ -76,7 +76,7 @@ function PromptViewer({
       role="dialog"
       aria-modal="true"
       aria-label={`Prompts ${req.code}`}
-      className="fixed inset-0 z-[230] flex h-[100dvh] max-h-[100dvh] w-screen max-w-[100vw] flex-col bg-[var(--ink-2)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+      className="fixed inset-0 z-[230] flex h-[100dvh] max-h-[100dvh] w-full max-w-full flex-col bg-[var(--ink-2)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
     >
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] bg-black/40 px-3 py-2.5 backdrop-blur-md sm:px-6 sm:py-4">
         <div className="min-w-0 flex-1">
@@ -380,7 +380,7 @@ export function RequirementsPanel({
       role="dialog"
       aria-modal="true"
       aria-label="Cadastro de requisitos"
-      className="anim-overlay fixed inset-0 z-[200] flex h-[100dvh] w-screen flex-col bg-[var(--ink)]"
+      className="anim-overlay fixed inset-0 z-[200] flex h-[100dvh] w-full max-w-full flex-col bg-[var(--ink)]"
     >
       <div
         className="pointer-events-none absolute inset-0 opacity-80"
@@ -648,7 +648,7 @@ export function RequirementsPanel({
               aria-label={
                 editorMode === "create" ? "Novo requisito" : "Editar requisito"
               }
-              className="fixed inset-0 z-[220] flex h-[100dvh] max-h-[100dvh] w-screen max-w-[100vw] flex-col bg-[var(--ink-2)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+              className="fixed inset-0 z-[220] flex h-[100dvh] max-h-[100dvh] w-full max-w-full flex-col bg-[var(--ink-2)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
             >
               <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] bg-black/40 px-3 py-2.5 backdrop-blur-md sm:px-6 sm:py-4 md:px-8 lg:px-10">
                 <div className="min-w-0 flex-1">

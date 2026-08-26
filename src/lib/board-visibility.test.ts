@@ -3,10 +3,14 @@ import {
   applyVisibilityPreference,
   buildBoardCatalog,
   catalogDepth,
+  featuredHomeBoards,
   filterExistingBoardIds,
   orderedCatalog,
   uniqueBoardIds,
   withDescendantBoardIds,
+  withFeaturedHomeBoardIds,
+  withoutFeaturedHomeBoardIds,
+  withPinnedFeaturedBoards,
 } from "./board-visibility";
 
 describe("board visibility helpers", () => {
@@ -63,5 +67,43 @@ describe("board visibility helpers", () => {
     const ordered = orderedCatalog(catalog);
     expect(ordered.map((b) => b.id)).toEqual(["cge", "asesi", "farol"]);
     expect(catalogDepth(ordered[2], catalog)).toBe(2);
+  });
+
+  it("always features organization then team", () => {
+    const boards = [
+      { id: "farol", level: "project" as const },
+      { id: "asesi", level: "team" as const },
+      { id: "cge", level: "organization" as const },
+    ];
+    expect(featuredHomeBoards(boards).map((b) => b.id)).toEqual(["cge", "asesi"]);
+    expect(withoutFeaturedHomeBoardIds(["cge", "asesi", "farol"])).toEqual(["farol"]);
+    expect(withFeaturedHomeBoardIds(["farol"], ["cge", "asesi", "farol"])).toEqual([
+      "cge",
+      "asesi",
+      "farol",
+    ]);
+    expect(
+      withPinnedFeaturedBoards(
+        [{ id: "farol" }],
+        [{ id: "cge" }, { id: "asesi" }, { id: "farol" }],
+        (b) => b.id,
+      ).map((b) => b.id),
+    ).toEqual(["cge", "asesi", "farol"]);
+  });
+
+  it("nests ASESI under CGE even when a snapshot drifted to organization", () => {
+    const catalog = buildBoardCatalog(
+      [
+        { id: "asesi", title: "ASESI", level: "organization", parentBoardId: null },
+        { id: "cge", title: "CGE", level: "organization", parentBoardId: null },
+        { id: "farol", title: "Farol", level: "project", parentBoardId: "asesi" },
+      ],
+      ["cge", "asesi", "farol"],
+    );
+    expect(catalog.find((b) => b.id === "asesi")).toMatchObject({
+      level: "team",
+      parentBoardId: "cge",
+    });
+    expect(orderedCatalog(catalog).map((b) => b.id)).toEqual(["cge", "asesi", "farol"]);
   });
 });

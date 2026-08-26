@@ -202,7 +202,7 @@ export function CardItem({
             role="dialog"
             aria-modal="true"
             aria-label="Editar card"
-            className="fixed inset-0 z-[200] flex h-[100dvh] w-screen flex-col bg-[var(--ink-2)]"
+            className="fixed inset-0 z-[200] flex h-[100dvh] w-full flex-col bg-[var(--ink-2)] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
           >
             <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] bg-black/30 px-4 py-3 backdrop-blur-md sm:px-6 sm:py-4 lg:px-10">
               <div className="min-w-0">
@@ -513,11 +513,11 @@ export function CardItem({
               </div>
             </div>
 
-            <footer className="flex shrink-0 border-t border-[var(--line)] bg-black/25 px-4 py-3 backdrop-blur-md sm:px-6 sm:py-4 lg:px-10">
-              <div className="mx-auto flex w-full max-w-5xl gap-2">
+            <footer className="flex shrink-0 border-t border-[var(--line)] bg-black/25 px-3 py-3 backdrop-blur-md sm:px-6 sm:py-4 lg:px-10">
+              <div className="mx-auto flex w-full max-w-5xl flex-col-reverse gap-2 sm:flex-row">
                 <button
                   type="button"
-                  className="rounded-xl border border-[var(--line)] px-3 py-3.5 text-sm text-[var(--muted)] hover:text-white"
+                  className="rounded-xl border border-[var(--line)] px-3 py-3.5 text-sm text-[var(--muted)] hover:text-white sm:w-auto"
                   onClick={() => {
                     archiveCard(card.id);
                     setOpen(false);
@@ -526,20 +526,22 @@ export function CardItem({
                 >
                   Arquivar
                 </button>
-                <button
-                  type="button"
-                  className="flex-1 rounded-xl border border-[var(--line)] px-3 py-3.5 text-sm text-[var(--muted)] hover:text-white"
-                  onClick={() => setOpen(false)}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  className="flex-[1.4] rounded-xl bg-[var(--accent)] px-3 py-3.5 text-sm font-semibold text-[var(--accent-on)]"
-                  onClick={save}
-                >
-                  Salvar
-                </button>
+                <div className="flex gap-2 sm:flex-1">
+                  <button
+                    type="button"
+                    className="flex-1 rounded-xl border border-[var(--line)] px-3 py-3.5 text-sm text-[var(--muted)] hover:text-white"
+                    onClick={() => setOpen(false)}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="flex-[1.4] rounded-xl bg-[var(--accent)] px-3 py-3.5 text-sm font-semibold text-[var(--accent-on)]"
+                    onClick={save}
+                  >
+                    Salvar
+                  </button>
+                </div>
               </div>
             </footer>
           </div>,
@@ -623,7 +625,6 @@ export function CardItem({
                 title="Trocar fundo do card"
               >
                 <Palette className="h-3.5 w-3.5" />
-                Fundo
               </button>
             ) : null}
             <button

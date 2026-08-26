@@ -32,11 +32,11 @@ export function MeetingRoom() {
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-[#050b14]">
-      <header className="flex items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--panel-strong)] px-4 py-3">
+      <header className="flex shrink-0 flex-col gap-3 border-b border-[var(--line)] bg-[var(--panel-strong)] px-3 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:flex-row sm:items-center sm:justify-between sm:px-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-rose-400" />
-            <p className="truncate font-[family-name:var(--font-display)] text-lg text-white">
+            <span className="inline-flex h-2 w-2 shrink-0 animate-pulse rounded-full bg-rose-400" />
+            <p className="truncate font-[family-name:var(--font-display)] text-base text-white sm:text-lg">
               {meeting.title}
             </p>
           </div>
@@ -44,27 +44,28 @@ export function MeetingRoom() {
             Sala · {meeting.roomSlug} · você entra como {displayName}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <a
             href={openUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line)] px-3 py-2 text-sm text-[var(--muted)] transition hover:text-white"
+            className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg border border-[var(--line)] px-3 py-2 text-sm text-[var(--muted)] transition hover:text-white sm:flex-none"
           >
             <ExternalLink className="h-4 w-4" />
-            Abrir em nova aba
+            <span className="sm:hidden">Nova aba</span>
+            <span className="hidden sm:inline">Abrir em nova aba</span>
           </a>
           <button
             type="button"
             onClick={() => leaveMeeting()}
-            className="rounded-lg border border-[var(--line)] px-3 py-2 text-sm text-[var(--muted)] transition hover:text-white"
+            className="min-h-10 flex-1 rounded-lg border border-[var(--line)] px-3 py-2 text-sm text-[var(--muted)] transition hover:text-white sm:flex-none"
           >
-            Voltar ao board
+            Voltar
           </button>
           <button
             type="button"
             onClick={() => endMeeting(meeting.id)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-rose-500 px-3 py-2 text-sm font-medium text-white transition hover:brightness-110"
+            className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-rose-500 px-3 py-2 text-sm font-medium text-white transition hover:brightness-110 sm:flex-none"
           >
             <PhoneOff className="h-4 w-4" />
             Encerrar

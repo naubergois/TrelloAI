@@ -49,10 +49,14 @@
   box-sizing: border-box;
 }
 
+html {
+  overflow-x: clip;
+}
+
 html,
 body {
-  height: 100%;
-  max-height: 100dvh;
+  min-height: 100%;
+  max-width: 100%;
 }
 
 body {
@@ -67,6 +71,37 @@ body {
   background-attachment: fixed;
   min-height: 100%;
   overscroll-behavior: none;
+  overflow-x: clip;
+}
+
+.app-bar,
+.board-header-bar {
+  padding-top: env(safe-area-inset-top);
+}
+
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+@media (max-width: 640px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  .board-canvas-scroll {
+    scroll-snap-type: x proximity;
+    scroll-padding-inline: 0.5rem;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+
+  .board-canvas-scroll > * {
+    scroll-snap-align: start;
+  }
 }
 
 @media (max-width: 768px) {
@@ -91,6 +126,13 @@ body {
   background: var(--board-list-bg);
   border-color: var(--board-list-border);
   backdrop-filter: blur(6px);
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+.board-theme .board-list-cards {
+  overflow: visible;
 }
 
 .board-theme .board-list-column header {
