@@ -78,12 +78,14 @@ export function BoardIndicators({
   stats,
   variant = "compact",
   rolledUp = false,
+  descendantCount = 0,
   onChipClick,
   activeFilter,
 }: {
   stats: BoardIndicatorStats;
   variant?: "compact" | "full";
   rolledUp?: boolean;
+  descendantCount?: number;
   onChipClick?: (chip: IndicatorChip) => void;
   activeFilter?: BoardCardFilter;
 }) {
@@ -91,6 +93,17 @@ export function BoardIndicators({
   const clickable = Boolean(onChipClick) && variant === "full";
 
   if (stats.cards === 0 && stats.risks === 0 && stats.requirements === 0) {
+    if (rolledUp && descendantCount > 0) {
+      return (
+        <div className={variant === "full" ? "space-y-2" : "space-y-1.5"}>
+          <p className="text-[11px] text-white/65">
+            Carteira sem cards ainda — {descendantCount} board
+            {descendantCount === 1 ? "" : "s"} filho
+            {descendantCount === 1 ? "" : "s"} abaixo.
+          </p>
+        </div>
+      );
+    }
     return variant === "full" ? (
       <p className="text-[11px] text-white/65">Sem indicadores ainda — o board está vazio.</p>
     ) : (
@@ -138,7 +151,11 @@ export function BoardIndicators({
         </div>
       ) : null}
       {rolledUp && variant === "full" ? (
-        <p className="text-[10px] text-white/60">Inclui boards inferiores</p>
+        <p className="text-[10px] text-white/60">
+          {descendantCount
+            ? `Carteira: este board + ${descendantCount} inferior${descendantCount === 1 ? "" : "es"}`
+            : "Inclui boards inferiores"}
+        </p>
       ) : null}
     </div>
   );

@@ -48,3 +48,9 @@ CREATE TABLE IF NOT EXISTS trelloai.invites (
 
 CREATE INDEX IF NOT EXISTS invites_board_id_idx ON trelloai.invites (board_id);
 CREATE INDEX IF NOT EXISTS memberships_board_id_idx ON trelloai.board_memberships (board_id);
+
+CREATE TABLE IF NOT EXISTS trelloai.user_board_visibility (
+  email TEXT PRIMARY KEY,
+  board_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

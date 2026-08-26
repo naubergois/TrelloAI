@@ -1,6 +1,7 @@
 import type { BoardInvite } from "@/lib/invites";
 import {
   addMembership,
+  addVisibleBoard,
   emailHasBoardAccess,
   getSharedBoard,
   listAllSharedBoards,
@@ -52,6 +53,7 @@ export async function applyInviteJoin(
   }
   for (const boardId of membershipBoardIds) {
     await addMembership(profile.email, boardId);
+    await addVisibleBoard(profile.email, boardId);
   }
 
   return {

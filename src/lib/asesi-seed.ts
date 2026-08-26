@@ -10,7 +10,7 @@ import type {
   VirtualManager,
 } from "./types";
 import type { BoardSnapshot } from "./board-snapshot";
-import { ASESI_BOARD_ID, ASESI_LIST_IDS, ASESI_TEAM_ID, MAYA_RISKS_LIST_KEY, MAYA_RISKS_LIST_TITLE } from "./constants";
+import { ASESI_BOARD_ID, ASESI_LIST_IDS, ASESI_TEAM_ID, CGE_BOARD_ID, CGE_LIST_IDS, MAYA_RISKS_LIST_KEY, MAYA_RISKS_LIST_TITLE } from "./constants";
 import { calendarDayKey, shiftCalendarDay } from "./calendar-report";
 import { withRequirementPrompts } from "./requirement-prompts";
 
@@ -174,9 +174,9 @@ export function createAsesiBoardSeed(owner?: {
 
   const board: Board = {
     id: ASESI_BOARD_ID,
-    title: "ASESI — Gestão de Projetos",
+    title: "ASESI",
     description:
-      "Kanban da ASESI com Maya (gestora virtual): dailies, prioridades, atribuições e convites da equipe.",
+      "Kanban do time ASESI (Assessoria de Sistemas e Inteligência), ligado à organização CGE. Projetos da carteira ficam em boards filhos.",
     listIds: [
       ASESI_LIST_IDS.backlog,
       ASESI_LIST_IDS.doing,
@@ -186,8 +186,8 @@ export function createAsesiBoardSeed(owner?: {
     ],
     memberIds: [ownerId],
     teamId: ASESI_TEAM_ID,
-    level: "organization",
-    parentBoardId: null,
+    level: "team",
+    parentBoardId: CGE_BOARD_ID,
     backgroundId: "trello",
     designId: "soft",
     gitRepos: [],
@@ -317,4 +317,107 @@ export function createAsesiBoardSnapshot(
     calendarEvents: seed.calendarEvents,
     updatedAt: new Date().toISOString(),
   };
+}
+
+export function createCgeBoardSeed(owner?: {
+  id?: string;
+  name: string;
+  email: string;
+  image?: string | null;
+}) {
+  const asesi = createAsesiBoardSeed(owner);
+  const now = new Date().toISOString();
+  const ownerId = asesi.ownerId;
+
+  const lists: Record<string, List> = {
+    [CGE_LIST_IDS.backlog]: {
+      id: CGE_LIST_IDS.backlog,
+      boardId: CGE_BOARD_ID,
+      title: "A fazer",
+      cardIds: [],
+    },
+    [CGE_LIST_IDS.doing]: {
+      id: CGE_LIST_IDS.doing,
+      boardId: CGE_BOARD_ID,
+      title: "Em progresso",
+      cardIds: [],
+    },
+    [CGE_LIST_IDS.done]: {
+      id: CGE_LIST_IDS.done,
+      boardId: CGE_BOARD_ID,
+      title: "Concluído",
+      cardIds: [],
+    },
+    [CGE_LIST_IDS.risks]: {
+      id: CGE_LIST_IDS.risks,
+      boardId: CGE_BOARD_ID,
+      title: MAYA_RISKS_LIST_TITLE,
+      cardIds: [],
+      systemKey: MAYA_RISKS_LIST_KEY,
+    },
+  };
+
+  const board: Board = {
+    id: CGE_BOARD_ID,
+    title: "CGE",
+    description:
+      "Organização Controladoria e Ouvidoria Geral do Estado do Ceará. O time ASESI e os projetos ficam em boards abaixo deste.",
+    listIds: [
+      CGE_LIST_IDS.backlog,
+      CGE_LIST_IDS.doing,
+      CGE_LIST_IDS.done,
+      CGE_LIST_IDS.risks,
+    ],
+    memberIds: [ownerId],
+    teamId: ASESI_TEAM_ID,
+    level: "organization",
+    parentBoardId: null,
+    backgroundId: "ocean",
+    designId: "soft",
+    gitRepos: [],
+    riskReport: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  const manager: VirtualManager = {
+    boardId: CGE_BOARD_ID,
+    name: "Maya",
+    persona:
+      "Gestora virtual da CGE: visão da organização, riscos e acompanhamento dos times.",
+    enabled: true,
+    autoStartDaily: false,
+    dailyTime: "09:00",
+    lastStandupDate: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  return { board, lists, members: asesi.members, team: asesi.team, manager, ownerId };
+}
+
+export function createCgeBoardSnapshot(
+  owner?: Parameters<typeof createCgeBoardSeed>[0],
+): BoardSnapshot {
+  const seed = createCgeBoardSeed(owner);
+  return {
+    board: seed.board,
+    lists: seed.lists,
+    cards: {},
+    members: seed.members,
+    teams: { [seed.team.id]: seed.team },
+    meetings: {},
+    managers: { [seed.board.id]: seed.manager },
+    standups: {},
+    activities: {},
+    requirements: {},
+    calendarEvents: {},
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function createOfficialHierarchySnapshots(
+  owner?: Parameters<typeof createAsesiBoardSeed>[0],
+): BoardSnapshot[] {
+  return [createCgeBoardSnapshot(owner), createAsesiBoardSnapshot(owner)];
 }

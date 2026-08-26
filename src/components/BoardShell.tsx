@@ -14,6 +14,7 @@ import {
   Users,
   Video,
   Trash2,
+  ArrowRight,
 } from "lucide-react";
 import { useBoardStore } from "@/lib/store";
 import { boardThemeStyle } from "@/lib/board-themes";
@@ -49,6 +50,8 @@ import {
 } from "@/lib/board-filters";
 import { extractBoardIndicators } from "@/lib/board-indicators";
 import { BoardIndicators } from "@/components/BoardIndicators";
+import { ChildBoardMetrics } from "@/components/ChildBoardMetrics";
+import { useVisibleBoards } from "@/lib/use-visible-boards";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -70,6 +73,7 @@ export function BoardShell({
   const router = useRouter();
   const boards = useBoardStore((s) => s.boards);
   const teams = useBoardStore((s) => s.teams);
+  const { boardList, visibleIds } = useVisibleBoards();
   const lists = useBoardStore((s) => s.lists);
   const cards = useBoardStore((s) => s.cards);
   const members = useBoardStore((s) => s.members);
@@ -110,24 +114,22 @@ export function BoardShell({
     return () => window.clearTimeout(t);
   }, [editingTitle]);
 
-  const boardList = useMemo(
-    () => Object.values(boards).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-    [boards],
-  );
-
-  const board = boards[boardId] ?? null;
+  const board = visibleIds.has(boardId) ? boards[boardId] ?? null : null;
   const assignedTeam = board?.teamId ? teams[board.teamId] : null;
   const ancestors = useMemo(
-    () => (board ? getBoardAncestors(board.id, boards) : []),
-    [board, boards],
+    () => (board ? getBoardAncestors(board.id, boards).filter((b) => visibleIds.has(b.id)) : []),
+    [board, boards, visibleIds],
   );
   const childBoards = useMemo(
-    () => (board ? getChildBoards(board.id, boards) : []),
-    [board, boards],
+    () => (board ? getChildBoards(board.id, boards).filter((b) => visibleIds.has(b.id)) : []),
+    [board, boards, visibleIds],
   );
   const descendantIds = useMemo(
-    () => (board ? getDescendantBoardIds(board.id, boards) : []),
-    [board, boards],
+    () =>
+      board
+        ? getDescendantBoardIds(board.id, boards).filter((id) => visibleIds.has(id))
+        : [],
+    [board, boards, visibleIds],
   );
   const [canvasView, setCanvasView] = useState<"local" | "all">("all");
 
@@ -163,16 +165,14 @@ export function BoardShell({
 
   const boardIndicators = useMemo(() => {
     if (!board) return null;
-    const boardIds =
-      canvasView === "all" ? [board.id, ...descendantIds] : [board.id];
     return extractBoardIndicators({
-      boardIds,
+      boardIds: [board.id, ...descendantIds],
       boards,
       lists,
       cards,
       requirements,
     });
-  }, [board, canvasView, descendantIds, boards, lists, cards, requirements]);
+  }, [board, descendantIds, boards, lists, cards, requirements]);
 
   const reqCount = useMemo(
     () =>
@@ -501,8 +501,7 @@ export function BoardShell({
                       ))}
                       {childBoards.length > 0 ? (
                         <span className="text-[11px] text-white/55">
-                          · {childBoards.length} filho(s) · {descendantIds.length}{" "}
-                          descendente(s)
+                          · {childBoards.length} projeto(s) abaixo
                         </span>
                       ) : null}
                     </div>
@@ -553,13 +552,32 @@ export function BoardShell({
             </select>
           </div>
 
+          {childBoards.length > 0 ? (
+            <div className="mb-2 flex shrink-0 items-center gap-1.5 overflow-x-auto px-1 pb-0.5">
+              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-white/50">
+                Abrir
+              </span>
+              {childBoards.map((child) => (
+                <Link
+                  key={child.id}
+                  href={`/board/${child.id}`}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/20 bg-black/25 px-2.5 py-1 text-[11px] font-medium text-white/90 transition hover:border-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--accent-on)]"
+                >
+                  {child.title}
+                  <ArrowRight className="h-3 w-3 opacity-70" />
+                </Link>
+              ))}
+            </div>
+          ) : null}
+
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-2 sm:px-3">
             {boardIndicators ? (
               <div className="mb-2 shrink-0 rounded-2xl border border-white/15 bg-black/20 px-3 py-2 sm:mb-3">
                 <BoardIndicators
                   stats={boardIndicators}
                   variant="full"
-                  rolledUp={canvasView === "all" && descendantIds.length > 0}
+                  rolledUp={descendantIds.length > 0}
+                  descendantCount={descendantIds.length}
                   activeFilter={cardFilter}
                   onChipClick={(chip) => {
                     if (!chip.filter) return;
@@ -579,6 +597,9 @@ export function BoardShell({
                     });
                   }}
                 />
+                {childBoards.length > 0 ? (
+                  <ChildBoardMetrics parentId={board.id} />
+                ) : null}
               </div>
             ) : null}
             <BoardFilterBar
@@ -618,18 +639,17 @@ export function BoardShell({
               <div
                 className={
                   canvasView === "all" && descendantIds.length > 0
-                    ? "min-h-0 max-h-[45%] shrink-0 overflow-hidden"
+                    ? "min-h-[11rem] max-h-[38%] shrink-0 overflow-hidden"
                     : "min-h-0 flex-1 overflow-hidden"
                 }
               >
                 <BoardCanvas boardId={board.id} filter={cardFilter} />
               </div>
               {canvasView === "all" && descendantIds.length > 0 ? (
-                <div className="min-h-0 flex-1 overflow-hidden">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                   <ConsolidatedBoardCanvas
                     boardId={board.id}
                     filter={cardFilter}
-                    onOpenBoard={(id) => router.push(`/board/${id}`)}
                   />
                 </div>
               ) : null}

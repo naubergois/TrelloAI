@@ -24,8 +24,8 @@ import type {
   BoardLevel,
 } from "./types";
 import { buildMeetingRoomSlug, createSampleWorkspace, defaultManagerQuestions } from "./sample-data";
-import { createAsesiBoardSeed } from "./asesi-seed";
-import { ASESI_BOARD_ID, MAYA_RISKS_LIST_KEY, MAYA_RISKS_LIST_TITLE } from "./constants";
+import { createAsesiBoardSeed, createCgeBoardSeed } from "./asesi-seed";
+import { ASESI_BOARD_ID, CGE_BOARD_ID, MAYA_RISKS_LIST_KEY, MAYA_RISKS_LIST_TITLE } from "./constants";
 import type { BoardSnapshot } from "./board-snapshot";
 import type { AiAction } from "./types";
 import {
@@ -287,6 +287,7 @@ interface BoardState {
   applyManagerActions: (actions: AiAction[], boardId?: string) => void;
   ensureAsesiBoard: () => string;
   mergeBoardSnapshot: (snapshot: BoardSnapshot, opts?: { setActive?: boolean }) => void;
+  adoptServerSnapshots: (snapshots: BoardSnapshot[]) => void;
   exportBoardSnapshot: (boardId: string) => BoardSnapshot | null;
   addBoardMemberFromProfile: (
     boardId: string,
@@ -352,12 +353,12 @@ export const useBoardStore = create<BoardState>()(
         const currentUserId = get().currentUserId;
         const teamId = appearance?.teamId ?? null;
         const team = teamId ? get().teams[teamId] : null;
-        const memberIds =
-          team?.memberIds?.length
-            ? [...team.memberIds]
-            : currentUserId
-              ? [currentUserId]
-              : [];
+        const memberIds = Array.from(
+          new Set([
+            ...(team?.memberIds ?? []),
+            ...(currentUserId ? [currentUserId] : []),
+          ]),
+        );
 
         const level = normalizeBoardLevel(appearance?.level ?? "project");
         let parentBoardId = appearance?.parentBoardId ?? null;
@@ -1470,17 +1471,6 @@ export const useBoardStore = create<BoardState>()(
 
           if (existing) {
             const memberId = existing.id;
-            const boards = { ...state.boards };
-            for (const [boardId, board] of Object.entries(boards)) {
-              const memberIds = board.memberIds ?? [];
-              if (!memberIds.includes(memberId)) {
-                boards[boardId] = {
-                  ...board,
-                  memberIds: [...memberIds, memberId],
-                  updatedAt: now,
-                };
-              }
-            }
             return {
               currentUserId: memberId,
               members: {
@@ -1493,7 +1483,6 @@ export const useBoardStore = create<BoardState>()(
                   role: existing.role === "owner" ? "owner" : existing.role,
                 },
               },
-              boards,
             };
           }
 
@@ -1508,18 +1497,6 @@ export const useBoardStore = create<BoardState>()(
             createdAt: now,
           };
 
-          const boards = { ...state.boards };
-          for (const [boardId, board] of Object.entries(boards)) {
-            const memberIds = (board.memberIds ?? []).filter(
-              (id) => id !== state.currentUserId,
-            );
-            boards[boardId] = {
-              ...board,
-              memberIds: [memberId, ...memberIds],
-              updatedAt: now,
-            };
-          }
-
           const nextMembers = { ...state.members, [memberId]: member };
           if (state.currentUserId && state.currentUserId !== memberId) {
             // demote previous local "Você" placeholder if unused
@@ -1532,7 +1509,6 @@ export const useBoardStore = create<BoardState>()(
           return {
             currentUserId: memberId,
             members: nextMembers,
-            boards,
           };
         }),
 
@@ -2253,6 +2229,43 @@ export const useBoardStore = create<BoardState>()(
         if (state.skipAsesiSeed && !state.boards[ASESI_BOARD_ID]) {
           return ASESI_BOARD_ID;
         }
+
+        if (!state.boards[CGE_BOARD_ID]) {
+          const me = state.currentUserId ? state.members[state.currentUserId] : null;
+          const seed = createCgeBoardSeed(
+            me
+              ? { id: me.id, name: me.name, email: me.email, image: me.image }
+              : undefined,
+          );
+          set((s) => {
+            const memberIds = Array.from(
+              new Set([
+                seed.ownerId,
+                ...(s.currentUserId ? [s.currentUserId] : []),
+                ...(s.boards[ASESI_BOARD_ID]?.memberIds || []),
+              ]),
+            );
+            const team = s.teams[seed.team.id]
+              ? {
+                  ...s.teams[seed.team.id],
+                  memberIds: Array.from(
+                    new Set([...s.teams[seed.team.id].memberIds, ...memberIds]),
+                  ),
+                }
+              : { ...seed.team, memberIds };
+            return {
+              boards: {
+                ...s.boards,
+                [CGE_BOARD_ID]: { ...seed.board, memberIds, teamId: team.id },
+              },
+              lists: { ...s.lists, ...seed.lists },
+              members: { ...seed.members, ...s.members },
+              teams: { ...s.teams, [team.id]: team },
+              managers: { ...s.managers, [CGE_BOARD_ID]: seed.manager },
+            };
+          });
+        }
+
         if (state.boards[ASESI_BOARD_ID]) {
           const hasReq = Object.values(state.requirements || {}).some(
             (r) => r.boardId === ASESI_BOARD_ID,
@@ -2283,6 +2296,25 @@ export const useBoardStore = create<BoardState>()(
                 : { ...(s.calendarEvents || {}), ...seed.calendarEvents },
             }));
           }
+          set((s) => {
+            const board = s.boards[ASESI_BOARD_ID];
+            const cge = s.boards[CGE_BOARD_ID];
+            if (!board || !cge) return s;
+            if (board.parentBoardId === CGE_BOARD_ID && board.level === "team") {
+              return s;
+            }
+            return {
+              boards: {
+                ...s.boards,
+                [ASESI_BOARD_ID]: {
+                  ...ensureBoardMembers(board),
+                  level: "team",
+                  parentBoardId: CGE_BOARD_ID,
+                  updatedAt: new Date().toISOString(),
+                },
+              },
+            };
+          });
           return ASESI_BOARD_ID;
         }
 
@@ -2309,6 +2341,8 @@ export const useBoardStore = create<BoardState>()(
           const board = {
             ...seed.board,
             memberIds: [...team.memberIds],
+            level: "team" as const,
+            parentBoardId: s.boards[CGE_BOARD_ID] ? CGE_BOARD_ID : seed.board.parentBoardId,
           };
 
           return {
@@ -2440,6 +2474,69 @@ export const useBoardStore = create<BoardState>()(
             activeBoardId: opts?.setActive ? pieces.board.id : state.activeBoardId,
           };
         });
+      },
+
+      adoptServerSnapshots: (snapshots) => {
+        const keep = new Set(snapshots.map((snap) => snap.board.id));
+        set((state) => {
+          const boards: Record<string, Board> = {};
+          const lists: Record<string, List> = {};
+          const cards: Record<string, Card> = {};
+          const meetings: Record<string, Meeting> = {};
+          const managers: Record<string, VirtualManager> = {};
+          const standups: Record<string, StandupSession> = {};
+          const activities: Record<string, KanbanActivity> = {};
+          const requirements: Record<string, Requirement> = {};
+          const calendarEvents: Record<string, TeamCalendarEvent> = {};
+
+          for (const [id, board] of Object.entries(state.boards)) {
+            if (keep.has(id)) boards[id] = board;
+          }
+          for (const [id, list] of Object.entries(state.lists)) {
+            if (keep.has(list.boardId)) lists[id] = list;
+          }
+          for (const [id, card] of Object.entries(state.cards)) {
+            const list = lists[card.listId] || state.lists[card.listId];
+            if (list && keep.has(list.boardId)) cards[id] = card;
+          }
+          for (const [id, meeting] of Object.entries(state.meetings)) {
+            if (keep.has(meeting.boardId)) meetings[id] = meeting;
+          }
+          for (const [id, manager] of Object.entries(state.managers)) {
+            if (keep.has(id) || keep.has(manager.boardId)) managers[id] = manager;
+          }
+          for (const [id, standup] of Object.entries(state.standups)) {
+            if (keep.has(standup.boardId)) standups[id] = standup;
+          }
+          for (const [id, activity] of Object.entries(state.activities || {})) {
+            if (keep.has(activity.boardId)) activities[id] = activity;
+          }
+          for (const [id, req] of Object.entries(state.requirements || {})) {
+            if (keep.has(req.boardId)) requirements[id] = req;
+          }
+          for (const [id, ev] of Object.entries(state.calendarEvents || {})) {
+            if (keep.has(ev.boardId)) calendarEvents[id] = ev;
+          }
+
+          return {
+            boards,
+            lists,
+            cards,
+            meetings,
+            managers,
+            standups,
+            activities,
+            requirements,
+            calendarEvents,
+            activeBoardId:
+              state.activeBoardId && keep.has(state.activeBoardId)
+                ? state.activeBoardId
+                : snapshots[0]?.board.id || null,
+          };
+        });
+        for (const snapshot of snapshots) {
+          get().mergeBoardSnapshot(snapshot, { setActive: false });
+        }
       },
 
       addBoardMemberFromProfile: (boardId, profile, opts) => {
@@ -2663,15 +2760,6 @@ export const useBoardStore = create<BoardState>()(
             };
           }
         }
-
-        // inject ASESI board once for existing installs
-        queueMicrotask(() => {
-          try {
-            useBoardStore.getState().ensureAsesiBoard();
-          } catch {
-            /* ignore */
-          }
-        });
 
         state.setHydrated(true);
       },

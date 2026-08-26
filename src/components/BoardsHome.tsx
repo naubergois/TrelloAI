@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Eye,
+  EyeOff,
   LayoutGrid,
   Palette,
   Pencil,
@@ -23,16 +25,17 @@ import { InvitePanel } from "@/components/InvitePanel";
 import { DeleteBoardDialog } from "@/components/DeleteBoardDialog";
 import { BoardAppearanceEditor } from "@/components/BoardAppearanceDrawer";
 import { useToast } from "@/components/Toast";
-import { removeBoardFromServer } from "@/lib/board-sync";
+import { removeBoardFromServer, saveVisibleBoards } from "@/lib/board-sync";
 import {
   BOARD_LEVEL_LABELS,
   BOARD_LEVEL_STYLES,
   BOARD_LEVELS,
+  eligibleParentBoards,
   getDescendantBoardIds,
-  parentLevelFor,
 } from "@/lib/board-hierarchy";
 import { extractBoardIndicators } from "@/lib/board-indicators";
 import { BoardIndicators } from "@/components/BoardIndicators";
+import { useVisibleBoards } from "@/lib/use-visible-boards";
 import {
   DEFAULT_BACKGROUND_ID,
   DEFAULT_BACKGROUND_TINT,
@@ -43,6 +46,7 @@ import {
   type BoardCardThemeId,
   type BoardDesignId,
 } from "@/lib/board-themes";
+import { BoardVisibilityPicker } from "@/components/BoardVisibilityPicker";
 import type { BoardLevel } from "@/lib/types";
 
 type HomeTab = "boards" | "teams";
@@ -56,7 +60,6 @@ export function BoardsHome() {
   const requirements = useBoardStore((s) => s.requirements);
   const members = useBoardStore((s) => s.members);
   const currentUserId = useBoardStore((s) => s.currentUserId);
-  const hydrated = useBoardStore((s) => s.hydrated);
   const createBoard = useBoardStore((s) => s.createBoard);
   const setActiveBoard = useBoardStore((s) => s.setActiveBoard);
   const updateBoardAppearance = useBoardStore((s) => s.updateBoardAppearance);
@@ -67,26 +70,12 @@ export function BoardsHome() {
   const setBoardLevel = useBoardStore((s) => s.setBoardLevel);
   const createTeam = useBoardStore((s) => s.createTeam);
   const deleteBoard = useBoardStore((s) => s.deleteBoard);
-  const ensureAsesiBoard = useBoardStore((s) => s.ensureAsesiBoard);
+  const { boardList, teamList: teamOptions } = useVisibleBoards();
   const { toast } = useToast();
 
   const me = currentUserId ? members[currentUserId] : null;
 
-  useEffect(() => {
-    if (hydrated) ensureAsesiBoard();
-  }, [hydrated, ensureAsesiBoard]);
-
-  const boardList = useMemo(
-    () => Object.values(boards).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-    [boards],
-  );
-
-  const asesiBoard = boards[ASESI_BOARD_ID] ?? null;
-
-  const teamOptions = useMemo(
-    () => Object.values(teams).sort((a, b) => a.name.localeCompare(b.name)),
-    [teams],
-  );
+  const asesiBoard = boardList.find((b) => b.id === ASESI_BOARD_ID) ?? null;
 
   const [tab, setTab] = useState<HomeTab>("boards");
   const [creating, setCreating] = useState(false);
@@ -107,6 +96,7 @@ export function BoardsHome() {
   const [customizeNewTeam, setCustomizeNewTeam] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [pickingBoards, setPickingBoards] = useState(false);
 
   const customizeBoard = customizeId ? boards[customizeId] : null;
 
@@ -128,11 +118,10 @@ export function BoardsHome() {
     });
   }, [boardList, boardQuery, teams, boards]);
 
-  const parentBoardOptions = useMemo(() => {
-    const parentLevel = parentLevelFor(boardLevel);
-    if (!parentLevel) return [];
-    return boardList.filter((b) => b.level === parentLevel);
-  }, [boardList, boardLevel]);
+  const parentBoardOptions = useMemo(
+    () => eligibleParentBoards(boardLevel, boardList),
+    [boardList, boardLevel],
+  );
 
   const indicatorsByBoard = useMemo(() => {
     const map: Record<string, ReturnType<typeof extractBoardIndicators>> = {};
@@ -184,6 +173,17 @@ export function BoardsHome() {
     );
   };
 
+  const hideBoard = async (boardId: string) => {
+    const nextIds = boardList.filter((b) => b.id !== boardId).map((b) => b.id);
+    const count = await saveVisibleBoards(nextIds);
+    if (count < 0) {
+      toast("Não foi possível ocultar este board.");
+      return;
+    }
+    const title = boards[boardId]?.title || "Board";
+    toast(`"${title}" saiu da sua home. Você pode reexibir em Boards visíveis.`);
+  };
+
   const onCreate = (e: FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
@@ -232,6 +232,15 @@ export function BoardsHome() {
           <AuthButton />
           <button
             type="button"
+            onClick={() => setPickingBoards(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--line)] px-3 py-2 text-sm text-[var(--muted)] transition hover:text-white"
+            title="Escolher quais boards aparecem na home"
+          >
+            <Eye className="h-4 w-4" />
+            <span className="hidden sm:inline">Boards visíveis</span>
+          </button>
+          <button
+            type="button"
             onClick={() => setCreating(true)}
             className="inline-flex items-center gap-1.5 rounded-xl btn-accent px-3 py-2 text-sm font-semibold"
           >
@@ -249,8 +258,8 @@ export function BoardsHome() {
             </h1>
             <p className="mt-1 text-sm text-[var(--muted)]">
               {tab === "boards"
-                ? "Kanban da Terra da Luz, com Maya, convites e o board ASESI."
-                : "Crie equipes e vincule-as a cada board."}
+                ? "Escolha quais boards da sua equipe aparecem aqui. O administrador vê o catálogo inteiro."
+                : "Crie equipes e vincule-as a cada board. Cada equipe só vê os próprios kanbans."}
             </p>
           </div>
 
@@ -355,6 +364,23 @@ export function BoardsHome() {
             <span className="text-sm font-medium">Criar board</span>
           </button>
 
+          {!boardQuery.trim() && filteredBoards.length === 0 ? (
+            <div className="col-span-full rounded-2xl border border-dashed border-[var(--line)] bg-black/15 px-6 py-12 text-center">
+              <p className="text-sm text-white">Nenhum board nesta lista</p>
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                Escolha quais boards visualizar, peça um convite da equipe ou crie um board novo.
+              </p>
+              <button
+                type="button"
+                onClick={() => setPickingBoards(true)}
+                className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-[var(--accent-on)]"
+              >
+                <Eye className="h-4 w-4" />
+                Escolher boards
+              </button>
+            </div>
+          ) : null}
+
           {filteredBoards.map((board) => {
             const bg = getBackground(board.backgroundId);
             const team = board.teamId ? teams[board.teamId] : null;
@@ -423,6 +449,17 @@ export function BoardsHome() {
                 </button>
 
                 <div className="absolute right-2 top-2 flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
+                  <button
+                    type="button"
+                    title="Ocultar da minha home"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void hideBoard(board.id);
+                    }}
+                    className="rounded-lg border border-white/15 bg-black/45 p-2 text-white backdrop-blur hover:bg-black/65"
+                  >
+                    <EyeOff className="h-3.5 w-3.5" />
+                  </button>
                   <button
                     type="button"
                     title="Convidar para o board"
@@ -693,7 +730,8 @@ export function BoardsHome() {
                 </select>
               </label>
 
-              {parentLevelFor(customizeBoard.level) ? (
+              {eligibleParentBoards(customizeBoard.level, boardList, customizeBoard.id)
+                .length > 0 ? (
                 <label className="block text-xs text-[var(--muted)]">
                   Board superior
                   <select
@@ -707,17 +745,15 @@ export function BoardsHome() {
                     className="mt-1 w-full rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)]"
                   >
                     <option value="">Sem superior</option>
-                    {boardList
-                      .filter(
-                        (b) =>
-                          b.level === parentLevelFor(customizeBoard.level) &&
-                          b.id !== customizeBoard.id,
-                      )
-                      .map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.title}
-                        </option>
-                      ))}
+                    {eligibleParentBoards(
+                      customizeBoard.level,
+                      boardList,
+                      customizeBoard.id,
+                    ).map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.title}
+                      </option>
+                    ))}
                   </select>
                 </label>
               ) : null}
@@ -837,6 +873,11 @@ export function BoardsHome() {
           onConfirm={() => void confirmDeleteBoard()}
         />
       ) : null}
+
+      <BoardVisibilityPicker
+        open={pickingBoards}
+        onClose={() => setPickingBoards(false)}
+      />
     </div>
   );
 }

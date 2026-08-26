@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import {
   addMembership,
+  addVisibleBoard,
   deleteSharedBoard,
   emailHasBoardAccess,
   getSharedBoard,
@@ -23,7 +24,8 @@ export async function GET(
   if (!snapshot) {
     return NextResponse.json({ error: "Board compartilhado não encontrado." }, { status: 404 });
   }
-  if (!(await emailHasBoardAccess(session.user.email, boardId))) {
+  const isAdmin = session.user.role === "admin";
+  if (!isAdmin && !(await emailHasBoardAccess(session.user.email, boardId))) {
     return NextResponse.json({ error: "Sem acesso a este board." }, { status: 403 });
   }
   return NextResponse.json({ snapshot });
@@ -52,8 +54,15 @@ export async function PUT(
     return NextResponse.json({ error: "Snapshot inválido." }, { status: 400 });
   }
 
+  const existing = await getSharedBoard(boardId);
+  const isAdmin = session.user.role === "admin";
+  if (existing && !isAdmin && !(await emailHasBoardAccess(session.user.email, boardId))) {
+    return NextResponse.json({ error: "Sem acesso a este board." }, { status: 403 });
+  }
+
   await saveSharedBoard(body.snapshot);
   await addMembership(session.user.email, boardId);
+  await addVisibleBoard(session.user.email, boardId);
   return NextResponse.json({ ok: true, updatedAt: body.snapshot.updatedAt });
 }
 
@@ -66,7 +75,8 @@ export async function DELETE(
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
   const { boardId } = await context.params;
-  if (!(await emailHasBoardAccess(session.user.email, boardId))) {
+  const isAdmin = session.user.role === "admin";
+  if (!isAdmin && !(await emailHasBoardAccess(session.user.email, boardId))) {
     const snapshot = await getSharedBoard(boardId);
     if (snapshot) {
       return NextResponse.json({ error: "Sem acesso a este board." }, { status: 403 });

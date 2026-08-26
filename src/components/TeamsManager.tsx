@@ -4,6 +4,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { Check, Copy, Link2, Loader2, Plus, Trash2, UserPlus, Users, X } from "lucide-react";
 import { useBoardStore } from "@/lib/store";
 import { loadServerBoards } from "@/lib/board-sync";
+import { useVisibleBoards } from "@/lib/use-visible-boards";
 import { labelStyles } from "@/lib/utils";
 import type { LabelColor } from "@/lib/types";
 import type { BoardSnapshot } from "@/lib/board-snapshot";
@@ -20,10 +21,7 @@ export function TeamsManager() {
   const addMemberToTeam = useBoardStore((s) => s.addMemberToTeam);
   const removeMemberFromTeam = useBoardStore((s) => s.removeMemberFromTeam);
 
-  const teamList = useMemo(
-    () => Object.values(teams).sort((a, b) => a.name.localeCompare(b.name)),
-    [teams],
-  );
+  const { teamList } = useVisibleBoards();
 
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -39,7 +37,10 @@ export function TeamsManager() {
   const [inviteCopied, setInviteCopied] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const activeTeam = activeTeamId ? teams[activeTeamId] : null;
+  const activeTeam =
+    activeTeamId && teamList.some((t) => t.id === activeTeamId)
+      ? teams[activeTeamId]
+      : null;
 
   const boardsUsingTeam = useMemo(() => {
     if (!activeTeam) return [];

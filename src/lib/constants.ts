@@ -1,5 +1,13 @@
+export const CGE_BOARD_ID = "cge";
 export const ASESI_BOARD_ID = "asesi";
 export const ASESI_TEAM_ID = "asesi-team";
+
+export const CGE_LIST_IDS = {
+  backlog: "cge-list-backlog",
+  doing: "cge-list-doing",
+  done: "cge-list-done",
+  risks: "cge-list-maya-risks",
+} as const;
 
 export const ASESI_LIST_IDS = {
   backlog: "asesi-list-backlog",

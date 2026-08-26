@@ -9,9 +9,21 @@ export async function loadServerBoards(): Promise<number> {
   if (!res.ok) return 0;
   const data = (await res.json()) as { snapshots?: BoardSnapshot[] };
   const snapshots = data.snapshots ?? [];
-  for (const snapshot of snapshots) {
-    useBoardStore.getState().mergeBoardSnapshot(snapshot, { setActive: false });
-  }
+  useBoardStore.getState().adoptServerSnapshots(snapshots);
+  return snapshots.length;
+}
+
+export async function saveVisibleBoards(boardIds: string[]): Promise<number> {
+  const res = await fetch("/api/boards/visibility", {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ boardIds }),
+  });
+  if (!res.ok) return -1;
+  const data = (await res.json()) as { snapshots?: BoardSnapshot[] };
+  const snapshots = data.snapshots ?? [];
+  useBoardStore.getState().adoptServerSnapshots(snapshots);
   return snapshots.length;
 }
 

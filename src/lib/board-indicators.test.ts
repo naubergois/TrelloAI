@@ -142,6 +142,62 @@ describe("extractBoardIndicators", () => {
     expect(stats.wip).toBe(1);
   });
 
+  it("rolls up child board metrics into the parent", () => {
+    const parent: Board = {
+      id: "cge",
+      title: "CGE",
+      description: "",
+      listIds: ["p-todo"],
+      memberIds: [],
+      teamId: null,
+      level: "organization",
+      parentBoardId: null,
+      backgroundId: "trello",
+      designId: "classic",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const child: Board = {
+      ...parent,
+      id: "farol",
+      title: "Farol",
+      listIds: ["c-doing", "c-done"],
+      level: "project",
+      parentBoardId: "cge",
+    };
+    const lists: Record<string, List> = {
+      "p-todo": { id: "p-todo", boardId: "cge", title: "A fazer", cardIds: ["p1"] },
+      "c-doing": { id: "c-doing", boardId: "farol", title: "Em progresso", cardIds: ["c1"] },
+      "c-done": { id: "c-done", boardId: "farol", title: "Concluído", cardIds: ["c2"] },
+    };
+    const cards: Record<string, Card> = {
+      p1: card({ id: "p1", listId: "p-todo", title: "Pauta CGE" }),
+      c1: card({
+        id: "c1",
+        listId: "c-doing",
+        title: "Homolog",
+        priority: "high",
+        dueDate: "2000-01-01",
+      }),
+      c2: card({ id: "c2", listId: "c-done", title: "Entrega" }),
+    };
+
+    const stats = extractBoardIndicators({
+      boardIds: ["cge", "farol"],
+      boards: { cge: parent, farol: child },
+      lists,
+      cards,
+    });
+
+    expect(stats.cards).toBe(3);
+    expect(stats.backlog).toBe(1);
+    expect(stats.doing).toBe(1);
+    expect(stats.done).toBe(1);
+    expect(stats.progressPct).toBe(33);
+    expect(stats.overdue).toBe(1);
+    expect(stats.highPriority).toBe(1);
+  });
+
   it("extracts ASESI seed KPIs", () => {
     const seed = createAsesiBoardSeed();
     const stats = extractBoardIndicators({

@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:ensure": "node scripts/ensure-asesi-db.mjs",
+    "db:seed-hierarchy": "node scripts/seed-cge-hierarchy.mjs",
     "mcp": "node scripts/jangada-mcp.mjs"
   },
   "dependencies": {

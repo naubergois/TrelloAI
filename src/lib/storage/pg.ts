@@ -2,8 +2,7 @@ import type { Pool, PoolConfig } from "pg";
 import type { BoardSnapshot } from "@/lib/board-snapshot";
 import type { BoardInvite } from "@/lib/invites";
 import type { StoredUser } from "@/lib/users";
-import { createAsesiBoardSnapshot } from "@/lib/asesi-seed";
-import { ASESI_BOARD_ID } from "@/lib/constants";
+import { createOfficialHierarchySnapshots } from "@/lib/asesi-seed";
 import { isPgConfigured, readPgConfig } from "@/lib/storage/config";
 
 export { isPgConfigured, readPgConfig };
@@ -113,6 +112,12 @@ function ddl(schema: string) {
     CREATE INDEX IF NOT EXISTS invites_board_id_idx ON ${s}.invites (board_id);
     CREATE INDEX IF NOT EXISTS invites_team_id_idx ON ${s}.invites (team_id);
     CREATE INDEX IF NOT EXISTS memberships_board_id_idx ON ${s}.board_memberships (board_id);
+
+    CREATE TABLE IF NOT EXISTS ${s}.user_board_visibility (
+      email TEXT PRIMARY KEY,
+      board_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   `;
 }
 
@@ -122,13 +127,14 @@ async function ensureSchema(p: Pool) {
 
   const existing = await p.query<{ n: number }>("SELECT COUNT(*)::int AS n FROM board_snapshots");
   if ((existing.rows[0]?.n ?? 0) === 0) {
-    const snapshot = createAsesiBoardSnapshot();
-    await p.query(
-      `INSERT INTO board_snapshots (board_id, snapshot, updated_at)
-       VALUES ($1, $2::jsonb, NOW())
-       ON CONFLICT (board_id) DO NOTHING`,
-      [ASESI_BOARD_ID, JSON.stringify(snapshot)],
-    );
+    for (const snapshot of createOfficialHierarchySnapshots()) {
+      await p.query(
+        `INSERT INTO board_snapshots (board_id, snapshot, updated_at)
+         VALUES ($1, $2::jsonb, NOW())
+         ON CONFLICT (board_id) DO NOTHING`,
+        [snapshot.board.id, JSON.stringify(snapshot)],
+      );
+    }
   }
 }
 
@@ -234,6 +240,87 @@ export async function pgAddMembership(email: string, boardId: string) {
     [key, boardId],
   );
   return true;
+}
+
+export async function pgListMembershipIds(email: string): Promise<string[]> {
+  const p = await getPool();
+  if (!p) return [];
+  const key = email.trim().toLowerCase();
+  const res = await p.query<{ board_id: string }>(
+    "SELECT board_id FROM board_memberships WHERE email = $1 ORDER BY created_at ASC",
+    [key],
+  );
+  return res.rows.map((row) => row.board_id);
+}
+
+export async function pgSetMemberships(email: string, boardIds: string[]) {
+  const p = await getPool();
+  if (!p) return false;
+  const key = email.trim().toLowerCase();
+  const client = await p.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("DELETE FROM board_memberships WHERE email = $1", [key]);
+    for (const boardId of boardIds) {
+      await client.query(
+        `INSERT INTO board_memberships (email, board_id) VALUES ($1, $2)
+         ON CONFLICT DO NOTHING`,
+        [key, boardId],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+  return true;
+}
+
+export async function pgGetVisibility(email: string): Promise<string[] | null> {
+  const p = await getPool();
+  if (!p) return null;
+  const key = email.trim().toLowerCase();
+  const res = await p.query<{ board_ids: string[] | string }>(
+    "SELECT board_ids FROM user_board_visibility WHERE email = $1",
+    [key],
+  );
+  const row = res.rows[0];
+  if (!row) return null;
+  if (Array.isArray(row.board_ids)) return row.board_ids.map(String);
+  if (typeof row.board_ids === "string") {
+    try {
+      const parsed = JSON.parse(row.board_ids) as unknown;
+      return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+export async function pgSetVisibility(email: string, boardIds: string[]) {
+  const p = await getPool();
+  if (!p) return false;
+  const key = email.trim().toLowerCase();
+  await p.query(
+    `INSERT INTO user_board_visibility (email, board_ids, updated_at)
+     VALUES ($1, $2::jsonb, NOW())
+     ON CONFLICT (email) DO UPDATE SET board_ids = $2::jsonb, updated_at = NOW()`,
+    [key, JSON.stringify(boardIds)],
+  );
+  return true;
+}
+
+export async function pgAddVisibleBoard(email: string, boardId: string) {
+  const p = await getPool();
+  if (!p) return false;
+  const key = email.trim().toLowerCase();
+  const current = await pgGetVisibility(key);
+  if (current === null) return true;
+  if (current.includes(boardId)) return true;
+  return pgSetVisibility(key, [...current, boardId]);
 }
 
 export async function pgEmailHasAccess(email: string, boardId: string) {
