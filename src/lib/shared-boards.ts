@@ -13,7 +13,11 @@ import {
 } from "@/lib/storage/pg";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "fs";
 import path from "path";
-import { snapshotVisibleToEmail } from "@/lib/board-access";
+import {
+  snapshotVisibleToEmail,
+  snapshotVisibleViaSharedTeam,
+  teamIdsHeldByEmail,
+} from "@/lib/board-access";
 import type { BoardSnapshot } from "./board-snapshot";
 import {
   applyVisibilityPreference,
@@ -60,6 +64,15 @@ function writeStore(store: SharedStore) {
   writeFileSync(storePath(), JSON.stringify(store, null, 2), "utf8");
 }
 
+function tryWriteStore(store: SharedStore) {
+  try {
+    writeStore(store);
+  } catch (err) {
+    if (!isPgConfigured()) throw err;
+    console.error("[shared-boards] cache local indisponível", err);
+  }
+}
+
 export async function getSharedBoard(boardId: string): Promise<BoardSnapshot | null> {
   if (isPgConfigured()) {
     const pg = await pgGetBoard(boardId);
@@ -85,7 +98,7 @@ export async function saveSharedBoard(snapshot: BoardSnapshot) {
 
   const store = readStore();
   store.boards[snapshot.board.id] = next;
-  writeStore(store);
+  tryWriteStore(store);
 }
 
 export async function listAllSharedBoards(): Promise<BoardSnapshot[]> {
@@ -152,7 +165,7 @@ export async function setVisibleBoards(
 
   const store = readStore();
   store.visibility[key] = nextIds;
-  writeStore(store);
+  tryWriteStore(store);
 
   return {
     boardIds: nextIds,
@@ -170,7 +183,7 @@ export async function addVisibleBoard(email: string, boardId: string) {
   const current = new Set(store.visibility[key] || []);
   current.add(boardId);
   store.visibility[key] = [...current];
-  writeStore(store);
+  tryWriteStore(store);
 }
 
 export async function listBoardsForHome(
@@ -204,9 +217,10 @@ export async function listBoardsVisibleToUser(
   const membershipIds = new Set(
     (await listBoardsForEmail(email)).map((snapshot) => snapshot.board.id),
   );
+  const teamIds = teamIdsHeldByEmail(all, email);
   const direct = all.filter((snapshot) => {
-    if (snapshotVisibleToEmail(snapshot, email)) return true;
-    return membershipIds.has(snapshot.board.id) && !snapshot.board.teamId;
+    if (snapshotVisibleViaSharedTeam(snapshot, email, teamIds)) return true;
+    return membershipIds.has(snapshot.board.id);
   });
   const keep = new Set(
     withDescendantBoardIds(
@@ -229,7 +243,7 @@ export async function deleteSharedBoard(boardId: string) {
   for (const email of Object.keys(store.visibility)) {
     store.visibility[email] = (store.visibility[email] || []).filter((id) => id !== boardId);
   }
-  writeStore(store);
+  tryWriteStore(store);
 }
 
 export async function addMembership(email: string, boardId: string) {
@@ -241,14 +255,15 @@ export async function addMembership(email: string, boardId: string) {
   const current = new Set(store.memberships[key] || []);
   current.add(boardId);
   store.memberships[key] = [...current];
-  writeStore(store);
+  tryWriteStore(store);
 }
 
 export async function emailHasBoardAccess(email: string, boardId: string) {
   const snapshot = await getSharedBoard(boardId);
-  if (snapshot) {
-    if (snapshotVisibleToEmail(snapshot, email)) return true;
-    if (snapshot.board.teamId) return false;
+  if (snapshot && snapshotVisibleToEmail(snapshot, email)) return true;
+  if (snapshot?.board.teamId) {
+    const all = await listAllSharedBoards();
+    if (teamIdsHeldByEmail(all, email).has(snapshot.board.teamId)) return true;
   }
   if (isPgConfigured()) {
     const ok = await pgEmailHasAccess(email, boardId);

@@ -78,3 +78,34 @@ export function emailIsBoardMember(snapshot: BoardSnapshot, email: string): bool
 export function snapshotVisibleToEmail(snapshot: BoardSnapshot, email: string): boolean {
   return emailIsOnBoardTeam(snapshot, email) || emailIsBoardMember(snapshot, email);
 }
+
+/**
+ * Team copies live inside each board snapshot. If the person is on Equipe ASESI
+ * in Mandacaru, they should still see Farol/ASESI — same teamId, other snapshot.
+ */
+export function teamIdsHeldByEmail(
+  snapshots: BoardSnapshot[],
+  email: string,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const snapshot of snapshots) {
+    const member = findMemberByEmail(snapshot.members, email);
+    if (!member) continue;
+    if (snapshot.board.teamId && (snapshot.board.memberIds || []).includes(member.id)) {
+      ids.add(snapshot.board.teamId);
+    }
+    for (const team of Object.values(snapshot.teams || {})) {
+      if (team.memberIds.includes(member.id)) ids.add(team.id);
+    }
+  }
+  return ids;
+}
+
+export function snapshotVisibleViaSharedTeam(
+  snapshot: BoardSnapshot,
+  email: string,
+  teamIdsHeld: Set<string>,
+): boolean {
+  if (snapshotVisibleToEmail(snapshot, email)) return true;
+  return Boolean(snapshot.board.teamId && teamIdsHeld.has(snapshot.board.teamId));
+}
