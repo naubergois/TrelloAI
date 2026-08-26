@@ -37,9 +37,24 @@ export interface Card {
   /** Checklist simples */
   checklist: ChecklistItem[];
   comments: CardComment[];
+  /** Arquivos e links anexados ao card (UI e MCP). */
+  attachments?: CardAttachment[];
   archived: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export type CardAttachmentKind = "file" | "link";
+
+export interface CardAttachment {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  kind: CardAttachmentKind;
+  /** Download autenticado (file) ou URL original (link). */
+  url: string;
+  createdAt: string;
 }
 
 export interface ChecklistItem {
