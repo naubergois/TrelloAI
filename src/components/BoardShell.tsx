@@ -316,10 +316,11 @@ export function BoardShell({
             <button
               type="button"
               onClick={() => setAppearanceOpen(true)}
-              title="Fundo e design"
-              className="rounded-xl border border-[var(--line)] p-1.5 text-[var(--muted)] transition hover:text-white sm:p-2"
+              title="Aparência: fundo do board e dos cards"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--line)] px-2 py-1.5 text-[var(--muted)] transition hover:text-white sm:px-2.5 sm:py-2"
             >
               <Palette className="h-4 w-4" />
+              <span className="hidden text-xs font-medium sm:inline">Aparência</span>
             </button>
 
             <button

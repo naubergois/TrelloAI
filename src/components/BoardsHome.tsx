@@ -423,7 +423,7 @@ export function BoardsHome() {
                   </button>
                   <button
                     type="button"
-                    title="Fundo e design"
+                    title="Aparência (fundo do board e dos cards)"
                     onClick={(e) => {
                       e.stopPropagation();
                       setCustomizeId(board.id);

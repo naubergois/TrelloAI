@@ -95,7 +95,7 @@ export function BoardAppearanceEditor({
           [
             ["cores", "Cores"],
             ["imagens", "Imagens"],
-            ["cards", "Cards"],
+            ["cards", "Cartões"],
             ["design", "Design"],
           ] as const
         ).map(([id, label]) => (
@@ -115,25 +115,37 @@ export function BoardAppearanceEditor({
       </div>
 
       {tab === "cores" ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {BOARD_BACKGROUNDS.map((bg) => {
-            const active = !backgroundImageUrl && bg.id === bgId;
-            return (
-              <button
-                key={bg.id}
-                type="button"
-                onClick={() => onChange({ backgroundId: bg.id, backgroundImageUrl: null })}
-                className={`overflow-hidden rounded-xl border text-left ${
-                  active
-                    ? "border-[var(--accent)] ring-2 ring-[var(--accent)]/40"
-                    : "border-[var(--line)] hover:border-white/30"
-                }`}
-              >
-                <div className="h-14 w-full" style={{ backgroundImage: bg.preview }} />
-                <p className="truncate bg-black/30 px-2 py-1.5 text-[11px] text-white">{bg.name}</p>
-              </button>
-            );
-          })}
+        <div className="space-y-4">
+          <div>
+            <p className="mb-2 text-xs font-medium text-white">Fundo do board</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {BOARD_BACKGROUNDS.map((bg) => {
+                const active = !backgroundImageUrl && bg.id === bgId;
+                return (
+                  <button
+                    key={bg.id}
+                    type="button"
+                    onClick={() => onChange({ backgroundId: bg.id, backgroundImageUrl: null })}
+                    className={`overflow-hidden rounded-xl border text-left ${
+                      active
+                        ? "border-[var(--accent)] ring-2 ring-[var(--accent)]/40"
+                        : "border-[var(--line)] hover:border-white/30"
+                    }`}
+                  >
+                    <div className="h-14 w-full" style={{ backgroundImage: bg.preview }} />
+                    <p className="truncate bg-black/30 px-2 py-1.5 text-[11px] text-white">{bg.name}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <p className="mb-1 text-xs font-medium text-white">Fundo dos cards</p>
+            <p className="mb-2 text-[11px] text-[var(--muted)]">
+              Cor padrão de todos os cards deste board. Cada card ainda pode ter uma cor própria.
+            </p>
+            <CardThemeGrid cardThemeId={cId} onChange={onChange} />
+          </div>
         </div>
       ) : null}
 
@@ -248,25 +260,11 @@ export function BoardAppearanceEditor({
       ) : null}
 
       {tab === "cards" ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-          {BOARD_CARD_THEMES.map((theme) => (
-            <button
-              key={theme.id}
-              type="button"
-              onClick={() => onChange({ cardThemeId: theme.id })}
-              className={`rounded-xl border px-2 py-2.5 text-left ${
-                theme.id === cId
-                  ? "border-[var(--accent)] ring-2 ring-[var(--accent)]/40"
-                  : "border-[var(--line)] hover:border-white/30"
-              }`}
-            >
-              <span
-                className="mb-1.5 block h-8 w-full rounded-lg border border-white/20"
-                style={{ background: theme.swatch }}
-              />
-              <p className="text-[11px] text-white">{theme.name}</p>
-            </button>
-          ))}
+        <div>
+          <p className="mb-2 text-[11px] text-[var(--muted)]">
+            Escolha o fundo padrão dos cards. Para um card só, use o botão Fundo no próprio card.
+          </p>
+          <CardThemeGrid cardThemeId={cId} onChange={onChange} />
         </div>
       ) : null}
 
@@ -289,6 +287,37 @@ export function BoardAppearanceEditor({
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function CardThemeGrid({
+  cardThemeId,
+  onChange,
+}: {
+  cardThemeId: BoardCardThemeId;
+  onChange: (patch: AppearancePatch) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+      {BOARD_CARD_THEMES.map((theme) => (
+        <button
+          key={theme.id}
+          type="button"
+          onClick={() => onChange({ cardThemeId: theme.id })}
+          className={`rounded-xl border px-2 py-2.5 text-left ${
+            theme.id === cardThemeId
+              ? "border-[var(--accent)] ring-2 ring-[var(--accent)]/40"
+              : "border-[var(--line)] hover:border-white/30"
+          }`}
+        >
+          <span
+            className="mb-1.5 block h-8 w-full rounded-lg border border-white/20"
+            style={{ background: theme.swatch }}
+          />
+          <p className="text-[11px] text-white">{theme.name}</p>
+        </button>
+      ))}
     </div>
   );
 }
@@ -334,9 +363,11 @@ export function BoardAppearanceDrawer({
             <Palette className="h-4 w-4 text-[var(--accent)]" />
             <div>
               <p className="font-[family-name:var(--font-display)] text-white">
-                Aparência do board
+                Aparência
               </p>
-              <p className="text-xs text-[var(--muted)]">{board.title}</p>
+              <p className="text-xs text-[var(--muted)]">
+                Fundo do board, fundo dos cards e design
+              </p>
             </div>
           </div>
           <button

@@ -6,6 +6,7 @@ import {
   Check,
   CheckSquare,
   GripVertical,
+  Palette,
   Plus,
   Pencil,
   Trash2,
@@ -21,16 +22,14 @@ import {
   priorityLabel,
 } from "@/lib/utils";
 import {
-  CARD_COVER_OPTIONS,
-  HEX_COVER_RE,
   cardCoverStyle,
   labelColorName,
   normalizeCoverColor,
-  resolveCardCover,
 } from "@/lib/card-appearance";
 import { dueUrgency } from "@/lib/board-filters";
 import { useToast } from "@/components/Toast";
 import { CardLabelBars } from "@/components/CardLabelBars";
+import { CardCoverSwatches } from "@/components/CardCoverSwatches";
 
 export function CardItem({
   card,
@@ -73,6 +72,7 @@ export function CardItem({
   const [draftCoverColor, setDraftCoverColor] = useState<string | null>(
     card.coverColor ?? null,
   );
+  const [pickingCover, setPickingCover] = useState(false);
   const [draftChecklist, setDraftChecklist] = useState<ChecklistItem[]>(
     card.checklist ?? [],
   );
@@ -182,6 +182,12 @@ export function CardItem({
     });
   };
 
+  const applyCover = (next: string | null) => {
+    const color = normalizeCoverColor(next);
+    setDraftCoverColor(color);
+    updateCard(card.id, { coverColor: color });
+  };
+
   const addCheckItem = () => {
     const text = newCheckText.trim();
     if (!text) return;
@@ -232,77 +238,16 @@ export function CardItem({
                     </label>
                     <div>
                       <p className="text-xs text-[var(--muted)] sm:text-sm">
-                        Cor do card
+                        Fundo do card
                       </p>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setDraftCoverColor(null)}
-                          className={`h-8 min-w-8 rounded-lg border px-2 text-[11px] font-medium ${
-                            !draftCoverColor
-                              ? "border-[var(--accent)] bg-white text-[var(--ink)] ring-2 ring-[var(--accent)]"
-                              : "border-[var(--line)] bg-[var(--ink)] text-white hover:bg-white/5"
-                          }`}
-                          title="Usar a cor padrão do board"
-                        >
-                          Padrão
-                        </button>
-                        {CARD_COVER_OPTIONS.map((cover) => {
-                          const selected = draftCoverColor === cover.id;
-                          const checkColor =
-                            resolveCardCover(cover.id)?.text ?? "#ffffff";
-                          return (
-                            <button
-                              key={cover.id}
-                              type="button"
-                              title={cover.name}
-                              aria-pressed={selected}
-                              onClick={() =>
-                                setDraftCoverColor(selected ? null : cover.id)
-                              }
-                              className={`relative h-8 w-8 rounded-lg border ${
-                                selected
-                                  ? "border-white ring-2 ring-[var(--accent)]"
-                                  : "border-black/20 hover:scale-105"
-                              }`}
-                              style={{ background: cover.bg }}
-                            >
-                              {selected ? (
-                                <Check
-                                  className="mx-auto h-4 w-4 drop-shadow"
-                                  style={{ color: checkColor }}
-                                />
-                              ) : null}
-                              <span className="sr-only">{cover.name}</span>
-                            </button>
-                          );
-                        })}
-                        <label
-                          className={`relative h-8 w-8 cursor-pointer overflow-hidden rounded-lg border ${
-                            HEX_COVER_RE.test(draftCoverColor || "")
-                              ? "border-white ring-2 ring-[var(--accent)]"
-                              : "border-[var(--line)]"
-                          }`}
-                          title="Cor personalizada"
-                        >
-                          <span
-                            className="absolute inset-0"
-                            style={{
-                              background:
-                                resolveCardCover(draftCoverColor)?.bg ??
-                                "conic-gradient(red, yellow, lime, aqua, blue, magenta, red)",
-                            }}
-                          />
-                          <input
-                            type="color"
-                            className="absolute inset-0 cursor-pointer opacity-0"
-                            value={
-                              resolveCardCover(draftCoverColor)?.bg ?? "#0079bf"
-                            }
-                            onChange={(e) => setDraftCoverColor(e.target.value)}
-                            aria-label="Cor personalizada do card"
-                          />
-                        </label>
+                      <p className="mt-0.5 text-[11px] text-[var(--muted)]">
+                        A cor é aplicada na hora, sem precisar salvar.
+                      </p>
+                      <div className="mt-1.5 rounded-2xl border border-[var(--line)] bg-white/10 p-3">
+                        <CardCoverSwatches
+                          value={draftCoverColor}
+                          onChange={applyCover}
+                        />
                       </div>
                     </div>
                     <label className="block text-xs text-[var(--muted)] sm:text-sm">
@@ -664,19 +609,56 @@ export function CardItem({
             ) : null}
           </div>
 
-          <button
-            type="button"
-            className="shrink-0 rounded p-1 board-card-muted opacity-100 transition hover:bg-black/5 hover:text-[var(--accent)] sm:opacity-0 sm:group-hover/card:opacity-100"
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpen(true);
-            }}
-            aria-label="Editar card"
-            title="Editar"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            {!overlay ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wide board-card-muted hover:bg-black/5 hover:text-[var(--board-card-text)]"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPickingCover((open) => !open);
+                }}
+                aria-expanded={pickingCover}
+                aria-label="Trocar fundo do card"
+                title="Trocar fundo do card"
+              >
+                <Palette className="h-3.5 w-3.5" />
+                Fundo
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="shrink-0 rounded p-1 board-card-muted opacity-100 transition hover:bg-black/5 hover:text-[var(--accent)] sm:opacity-0 sm:group-hover/card:opacity-100"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(true);
+              }}
+              aria-label="Editar card"
+              title="Editar"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
+
+        {pickingCover && !overlay ? (
+          <div
+            className="mb-2 rounded-lg border border-black/10 bg-black/5 p-2"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide board-card-muted">
+              Fundo do card
+            </p>
+            <CardCoverSwatches
+              value={card.coverColor}
+              onChange={(next) => {
+                applyCover(next);
+                setPickingCover(false);
+              }}
+            />
+          </div>
+        ) : null}
 
         <div className="mt-3 flex items-center justify-between gap-2 pl-0 sm:pl-5">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
