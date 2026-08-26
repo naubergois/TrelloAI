@@ -28,6 +28,27 @@ export function mayaChatRequestsBoardChange(text: string) {
   );
 }
 
+const STANDUP_QUICK_REPLIES =
+  /^(sem bloqueios|conclui a tarefa principal|continuo no mesmo card|preciso de review)$/;
+
+/** Conversa com a Maya (não é resposta de check-in da daily). */
+export function isMayaConversationalTurn(text: string) {
+  if (isMayaChatSmallTalk(text)) return true;
+  if (mayaChatRequestsBoardChange(text)) return false;
+  const t = normalizeMayaChatText(text);
+  if (STANDUP_QUICK_REPLIES.test(t)) return false;
+  if (text.trim().includes("?")) return true;
+  return /^(como|qual|quais|quem|o que|oque|por que|porque|voce|vc )\b/.test(t);
+}
+
+/** Daily só consome a mensagem se for check-in; senão vai para o chat LLM. */
+export function shouldUseStandupTurn(text: string, dailyAwaiting: boolean) {
+  if (!dailyAwaiting) return false;
+  if (mayaChatRequestsBoardChange(text)) return false;
+  if (isMayaConversationalTurn(text)) return false;
+  return true;
+}
+
 /** Texto da Maya afirmando que já alterou o kanban. */
 export function mayaReplyLooksLikeBoardChange(text: string) {
   const t = normalizeMayaChatText(text);
@@ -40,16 +61,9 @@ export function resolveMayaChatReply(opts: {
   greeting: string;
 }): { message: string; allowActions: boolean } {
   const allowActions = mayaChatRequestsBoardChange(opts.userMessage);
-  if (isMayaChatSmallTalk(opts.userMessage)) {
-    return { message: opts.greeting, allowActions: false };
-  }
   const api = (opts.apiMessage || "").trim();
   if (!allowActions && api && mayaReplyLooksLikeBoardChange(api)) {
-    return {
-      message:
-        "Li o board e o histórico, mas não mexi em card nenhum. Manda o comando se quiser criar, atribuir ou mover.",
-      allowActions: false,
-    };
+    return { message: opts.greeting, allowActions: false };
   }
   return { message: api || opts.greeting, allowActions };
 }

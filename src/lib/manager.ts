@@ -267,10 +267,6 @@ export async function deepSeekManagerProcess(
   const mode = opts?.mode || "daily";
   const userMessage = (opts?.userMessage || "").trim();
 
-  if (mode === "chat" && isMayaChatSmallTalk(userMessage)) {
-    return mayaChatGreeting(context);
-  }
-
   const { memoryBrief, recentChat, ...liveContext } = context;
   const memoryBlock = (memoryBrief || "").trim();
   const system = managerSystemPrompt(context, mode, liveContext, memoryBlock);
@@ -564,7 +560,8 @@ Retorne SOMENTE JSON:
 
 Regras:
 - Nunca ignore a mensagem do usuário.
-- Se for só saudação/vaga, advanceQuestion=false e completeMember=false.
+- Se for só saudação, pergunta social ("como está seu dia?") ou papo que não responde a daily: advanceQuestion=false, completeMember=false, extract vazio. Responda como conversa nerd usando o board; NÃO finja que houve check-in.
+- Se for só saudação/vaga de check-in, advanceQuestion=false e completeMember=false.
 - Ao avançar, preencha extract no campo correspondente (yesterday=perg0, today=perg1, blockers=perg2).
 - Se for a última pergunta e a resposta for útil: completeMember=true e agradeça.
 - Próxima pergunta (se houver): "${nextQ || ""}"

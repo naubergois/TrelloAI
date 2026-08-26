@@ -36,7 +36,7 @@ import {
   mayaChatFileName,
 } from "@/lib/maya-chat";
 import { buildMayaBoardMemory, formatMayaMemoryPrompt } from "@/lib/maya-board-memory";
-import { isMayaChatSmallTalk, resolveMayaChatReply } from "@/lib/maya-chat-intent";
+import { resolveMayaChatReply, shouldUseStandupTurn } from "@/lib/maya-chat-intent";
 import { buildMayaGreetingMessage } from "@/lib/maya-voice";
 
 type Tab = "chat" | "calendar" | "settings";
@@ -445,7 +445,7 @@ export function ManagerPanel({
 
   const onSend = (e: FormEvent) => {
     e.preventDefault();
-    if (awaitingId) {
+    if (shouldUseStandupTurn(draft, Boolean(awaitingId))) {
       void sendStandupWithAi(draft);
       return;
     }
@@ -469,10 +469,6 @@ export function ManagerPanel({
       lists: ctx.lists,
       recentChat: ctx.recentChat,
     });
-    if (isMayaChatSmallTalk(prompt)) {
-      appendMayaDayChat(boardId, { role: "manager", content: greeting });
-      return;
-    }
     setProcessing(true);
     try {
       const res = await fetch("/api/manager", {
