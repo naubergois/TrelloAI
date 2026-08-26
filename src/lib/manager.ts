@@ -1,9 +1,16 @@
 import type { AiAction, Card, StandupCheckIn } from "./types";
 import type { AiRequestContext, AiResponse } from "./ai";
 import { deepSeekChatCompletions } from "./deepseek";
+import { mayaHistoryForModel } from "./maya-board-memory";
 
 export interface ManagerContext extends AiRequestContext {
   managerName: string;
+  boardId?: string;
+  boardDescription?: string;
+  executiveSummary?: string;
+  /** Texto compacto: carteira, resumo e chat anterior deste board. */
+  memoryBrief?: string;
+  recentChat?: { role: string; content: string; who?: string }[];
   members: { id: string; name: string; email?: string }[];
   checkIns: StandupCheckIn[];
   memberNames: Record<string, string>;
@@ -34,6 +41,7 @@ export type StandupTurnInput = {
   checkIn: StandupCheckIn;
   recentChat: { role: string; content: string }[];
   boardTitle: string;
+  boardMemory?: string;
 };
 
 export type StandupTurnResult = {
@@ -198,9 +206,12 @@ export async function deepSeekManagerProcess(
 ): Promise<ManagerAiResponse> {
   const mode = opts?.mode || "daily";
 
+  const { memoryBrief, recentChat, ...liveContext } = context;
+  const memoryBlock = (memoryBrief || "").trim();
   const system = `Você é ${context.managerName}, gestor(a) virtual do kanban "${context.boardTitle}".
 Fala português (Brasil). Você GERENCIA o projeto de verdade: cria listas/cards, move, prioriza, atribui responsáveis e define prazos.
 Você TAMBÉM analisa riscos e, quando houver Git no contexto, compara cards/requisitos com os arquivos do repositório (o que já está implementado vs o que falta).
+Leia a MEMÓRIA E O CONTEXTO DOS BOARDS abaixo ANTES de responder. Não misture um projeto com outro. Não invente cards, prazos ou decisões que não estejam na memória ou no kanban ao vivo.
 Retorne SOMENTE JSON válido (sem markdown):
 {
   "message": string (resumo claro das decisões para a equipe),
@@ -222,21 +233,24 @@ Regras:
 - Mova cards entre listas conforme progresso (backlog → andamento → revisão → concluído).
 - Crie listas só se o fluxo do projeto precisar.
 - Max 8 creates / 8 updates / 4 listas novas.
-Contexto:
-${JSON.stringify(context, null, 2)}`;
+${memoryBlock ? `\nMEMÓRIA E CONTEXTO DOS BOARDS:\n${memoryBlock}\n` : ""}
+Kanban ao vivo (ids reais para actions):
+${JSON.stringify(liveContext, null, 2)}`;
 
   const userContent =
     mode === "chat"
       ? opts?.userMessage || "Ajude a organizar o projeto."
       : "Processe a daily: aplique ações concretas no board com base nos check-ins.";
 
+  const history =
+    mode === "chat"
+      ? mayaHistoryForModel(recentChat || [], userContent)
+      : [{ role: "user" as const, content: userContent }];
+
   const cleaned = await deepSeekChatCompletions({
     apiKey,
     temperature: 0.3,
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: userContent },
-    ],
+    messages: [{ role: "system", content: system }, ...history],
   });
   const parsed = JSON.parse(cleaned) as {
     message?: string;
@@ -266,6 +280,27 @@ export function localManagerChat(
   context: ManagerContext,
 ): ManagerAiResponse {
   const lower = prompt.toLowerCase();
+  if (
+    context.memoryBrief &&
+    /resumo|situação|situacao|contexto|o que (tem|está|esta)|lembra|memória|memoria|carteira/i.test(
+      lower,
+    )
+  ) {
+    const excerpt = (context.executiveSummary || context.boardDescription || "")
+      .trim()
+      .slice(0, 280);
+    return {
+      message: [
+        `${context.managerName} no board "${context.boardTitle}".`,
+        excerpt,
+        context.memoryBrief.split("\n").slice(0, 14).join("\n"),
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+      action: { type: "none" },
+      provider: "local",
+    };
+  }
   const maya = context.lists.find((l) => /riscos maya/i.test(l.title));
   const todo = maya || context.lists[0];
   const doing = context.lists[1] ?? todo;
@@ -464,8 +499,11 @@ export async function deepSeekStandupTurn(
       ? input.questions[input.questionIndex + 1]
       : null;
 
+  const memoryBlock = (input.boardMemory || "").trim();
   const system = `Você é ${input.managerName}, gestora virtual do board "${input.boardTitle}".
 Conduza a daily em português do Brasil de forma NATURAL e conversacional (não robótica).
+Leia a memória e o contexto dos boards ANTES de responder. Use o que já foi dito neste board e o estado da carteira; não invente.
+${memoryBlock ? `\nMEMÓRIA E CONTEXTO DOS BOARDS:\n${memoryBlock}\n` : ""}
 Pergunta atual (${input.questionIndex + 1}/${input.questions.length}): "${currentQ}"
 Membro: ${input.memberName}
 Check-in parcial: ${JSON.stringify(input.checkIn)}

@@ -54,4 +54,18 @@ describe("Maya local risk/git chat", () => {
     const result = localManagerChat("Compare o que está implementado", context({ git: [], risks: [] }));
     expect(result.message).toMatch(/Ligue um repositório Git/);
   });
+
+  it("answers from board memory before inventing work", () => {
+    const result = localManagerChat(
+      "Qual a situação deste board?",
+      context({
+        executiveSummary: "Piloto Jangada.",
+        memoryBrief: "Board atual: ASESI (time).\nIndicadores deste board: 40% concluído · 10 cards.",
+      }),
+    );
+    expect(result.action.type).toBe("none");
+    expect(result.message).toMatch(/ASESI/);
+    expect(result.message).toMatch(/Piloto Jangada/);
+    expect(result.message).toMatch(/40%/);
+  });
 });

@@ -35,6 +35,7 @@ import {
   listMayaChatDays,
   mayaChatFileName,
 } from "@/lib/maya-chat";
+import { buildMayaBoardMemory, formatMayaMemoryPrompt } from "@/lib/maya-board-memory";
 
 type Tab = "chat" | "calendar" | "settings";
 
@@ -84,6 +85,7 @@ export function ManagerPanel({
   onClose: () => void;
 }) {
   const board = useBoardStore((s) => s.boards[boardId]);
+  const boards = useBoardStore((s) => s.boards);
   const managers = useBoardStore((s) => s.managers);
   const standups = useBoardStore((s) => s.standups);
   const members = useBoardStore((s) => s.members);
@@ -255,6 +257,7 @@ export function ManagerPanel({
               content: m.content,
             })),
             boardTitle: board.title,
+            boardMemory: buildManagerContext().memoryBrief,
           },
         }),
       });
@@ -299,8 +302,28 @@ export function ManagerPanel({
   const buildManagerContext = (report?: BoardRiskReport | null) => {
     const boardReqs = Object.values(requirements || {}).filter((r) => r.boardId === boardId);
     const latest = report ?? board.riskReport;
+    const memory = buildMayaBoardMemory({
+      boardId,
+      boards,
+      lists,
+      cards,
+      requirements,
+      members,
+      managerName: manager.name,
+      logs: mayaLogs,
+      standups,
+    });
     return {
       boardTitle: board.title,
+      boardId,
+      boardDescription: board.description || "",
+      executiveSummary: board.executiveSummary || "",
+      memoryBrief: memory ? formatMayaMemoryPrompt(memory) : "",
+      recentChat: (memory?.chat || []).map((turn) => ({
+        role: turn.role,
+        content: turn.content,
+        who: turn.who,
+      })),
       managerName: manager.name,
       members: team.map((m) => ({ id: m.id, name: m.name, email: m.email })),
       memberNames: Object.fromEntries(team.map((m) => [m.id, m.name])),
