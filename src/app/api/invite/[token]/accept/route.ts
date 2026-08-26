@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getInvite, isInviteValid, recordInviteAcceptance } from "@/lib/invites";
-import { addMembership, getSharedBoard } from "@/lib/shared-boards";
+import { applyInviteJoin } from "@/lib/team-invite-server";
 
 export async function POST(
   _request: Request,
@@ -24,21 +24,25 @@ export async function POST(
     return NextResponse.json({ error: validity.error }, { status: 400 });
   }
 
-  const snapshot = await getSharedBoard(invite.boardId);
-  if (!snapshot) {
-    return NextResponse.json(
-      { error: "Board do convite não está disponível no servidor. Peça um novo convite." },
-      { status: 404 },
-    );
+  const joined = await applyInviteJoin(invite, {
+    name: session.user.name || email.split("@")[0],
+    email,
+    image: session.user.image ?? null,
+  });
+  if (!joined.ok) {
+    return NextResponse.json({ error: joined.error }, { status: 404 });
   }
 
-  await addMembership(email, invite.boardId);
   await recordInviteAcceptance(token, email);
 
   return NextResponse.json({
-    boardId: invite.boardId,
-    boardTitle: invite.boardTitle,
-    snapshot,
+    boardId: joined.boardId,
+    boardIds: joined.boardIds,
+    boardTitle: invite.kind === "team" ? invite.teamName || invite.boardTitle : invite.boardTitle,
+    teamId: invite.teamId,
+    teamName: invite.teamName,
+    snapshots: joined.snapshots,
+    snapshot: joined.snapshots.find((s) => s.board.id === joined.boardId) || joined.snapshots[0],
     profile: {
       name: session.user.name || email.split("@")[0],
       email,

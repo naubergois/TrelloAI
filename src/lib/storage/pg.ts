@@ -101,10 +101,17 @@ function ddl(schema: string) {
       expires_at TIMESTAMPTZ NOT NULL,
       used_at TIMESTAMPTZ,
       used_by_email TEXT,
-      accepted_emails JSONB NOT NULL DEFAULT '[]'::jsonb
+      accepted_emails JSONB NOT NULL DEFAULT '[]'::jsonb,
+      kind TEXT NOT NULL DEFAULT 'board',
+      team_id TEXT,
+      team_name TEXT
     );
 
+    ALTER TABLE ${s}.invites ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'board';
+    ALTER TABLE ${s}.invites ADD COLUMN IF NOT EXISTS team_id TEXT;
+    ALTER TABLE ${s}.invites ADD COLUMN IF NOT EXISTS team_name TEXT;
     CREATE INDEX IF NOT EXISTS invites_board_id_idx ON ${s}.invites (board_id);
+    CREATE INDEX IF NOT EXISTS invites_team_id_idx ON ${s}.invites (team_id);
     CREATE INDEX IF NOT EXISTS memberships_board_id_idx ON ${s}.board_memberships (board_id);
   `;
 }
@@ -192,6 +199,15 @@ export async function pgDeleteBoard(boardId: string) {
   await p.query("DELETE FROM board_memberships WHERE board_id = $1", [boardId]);
   await p.query("DELETE FROM board_snapshots WHERE board_id = $1", [boardId]);
   return true;
+}
+
+export async function pgListAllBoards(): Promise<BoardSnapshot[]> {
+  const p = await getPool();
+  if (!p) return [];
+  const res = await p.query<{ snapshot: BoardSnapshot }>(
+    "SELECT snapshot FROM board_snapshots ORDER BY updated_at DESC",
+  );
+  return res.rows.map((r) => r.snapshot);
 }
 
 export async function pgListBoardsForEmail(email: string): Promise<BoardSnapshot[]> {
@@ -340,6 +356,9 @@ type InviteRow = {
   used_at: Date | string | null;
   used_by_email: string | null;
   accepted_emails: string[] | string | null;
+  kind?: string | null;
+  team_id?: string | null;
+  team_name?: string | null;
 };
 
 function mapInvite(row: InviteRow): BoardInvite {
@@ -360,11 +379,15 @@ function mapInvite(row: InviteRow): BoardInvite {
     usedAt: row.used_at ? iso(row.used_at) : null,
     usedByEmail: row.used_by_email,
     acceptedEmails: accepted,
+    kind: row.kind === "team" ? "team" : "board",
+    teamId: row.team_id ?? null,
+    teamName: row.team_name ?? null,
   };
 }
 
 const INVITE_SELECT = `token, board_id, board_title, created_by_email, created_by_name,
-            invitee_email, created_at, expires_at, used_at, used_by_email, accepted_emails`;
+            invitee_email, created_at, expires_at, used_at, used_by_email, accepted_emails,
+            kind, team_id, team_name`;
 
 export async function pgInsertInvite(invite: BoardInvite) {
   const p = await getPool();
@@ -372,8 +395,9 @@ export async function pgInsertInvite(invite: BoardInvite) {
   await p.query(
     `INSERT INTO invites (
       token, board_id, board_title, created_by_email, created_by_name,
-      invitee_email, created_at, expires_at, used_at, used_by_email, accepted_emails
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7::timestamptz,$8::timestamptz,$9::timestamptz,$10,$11::jsonb)`,
+      invitee_email, created_at, expires_at, used_at, used_by_email, accepted_emails,
+      kind, team_id, team_name
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7::timestamptz,$8::timestamptz,$9::timestamptz,$10,$11::jsonb,$12,$13,$14)`,
     [
       invite.token,
       invite.boardId,
@@ -386,6 +410,9 @@ export async function pgInsertInvite(invite: BoardInvite) {
       invite.usedAt,
       invite.usedByEmail,
       JSON.stringify(invite.acceptedEmails),
+      invite.kind || "board",
+      invite.teamId,
+      invite.teamName,
     ],
   );
   return true;

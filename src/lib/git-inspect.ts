@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import type { GitInspectSummary } from "./types";
 import { analyzeGitCoverage } from "./risk-analysis";
+import { cloneGitRepo } from "./git-clone";
+import { analyzeClonedSource } from "./source-risks";
 
 const SKIP_DIR = new Set([
   "node_modules",
@@ -50,7 +52,7 @@ export function parseGitUrl(raw: string): {
   return { url: parsed.toString(), kind: "generic", host: parsed.host, project };
 }
 
-function walkLocal(root: string, limit = 250): string[] {
+function walkLocal(root: string, limit = 400): string[] {
   const out: string[] = [];
   function walk(dir: string) {
     if (out.length >= limit) return;
@@ -81,6 +83,23 @@ function readReadme(root: string) {
     }
   }
   return "";
+}
+
+function sampleSourceHaystack(root: string, files: string[], maxChars = 280_000) {
+  const interesting = files.filter((f) =>
+    /\.(ts|tsx|js|jsx|mjs|cjs|py|md|yml|yaml|json|java|go|rb|php)$/i.test(f),
+  );
+  let out = "";
+  for (const rel of interesting.slice(0, 90)) {
+    if (out.length >= maxChars) break;
+    try {
+      const text = fs.readFileSync(path.join(root, rel), "utf8").slice(0, 3500);
+      out += `\nFILE ${rel}\n${text}`;
+    } catch {
+      /* ignore unreadable */
+    }
+  }
+  return out.slice(0, maxChars);
 }
 
 function hintsFrom(files: string[], readme: string) {
@@ -174,44 +193,68 @@ export async function inspectGitRepo(
     cards: { id: string; title: string }[];
     requirements: { id: string; title: string; code?: string }[];
   },
+  opts?: { preferClone?: boolean },
 ): Promise<GitInspectSummary> {
   const parsed = parseGitUrl(rawUrl);
   let files: string[] = [];
   let readme = "";
+  let sourceSample = "";
   let error: string | undefined;
   let kind = parsed.kind;
+  let cloned = false;
+  let clonedAt: string | undefined;
+  let cleanup: (() => void) | undefined;
 
   try {
-    if (parsed.kind === "local" && parsed.localPath) {
-      files = walkLocal(parsed.localPath);
-      readme = readReadme(parsed.localPath);
-    } else if (parsed.kind === "github" && parsed.project) {
-      const gh = await inspectGithub(parsed.project);
-      files = gh.files;
-      readme = gh.readme;
-    } else if (parsed.kind === "gitlab" && parsed.host && parsed.project) {
+    if (opts?.preferClone && parsed.kind !== "local") {
       try {
-        const gl = await inspectGitlab(parsed.host, parsed.project);
-        files = gl.files;
-        readme = gl.readme;
-      } catch (err) {
-        const fallback = parsed.localPath || localWorkspaceFallback(parsed.url);
+        const copy = await cloneGitRepo(parsed.url);
+        cleanup = copy.cleanup;
+        files = walkLocal(copy.root);
+        readme = readReadme(copy.root);
+        sourceSample = sampleSourceHaystack(copy.root, files);
+        cloned = files.length > 0;
+        clonedAt = new Date().toISOString();
+      } catch {
+        cleanup = undefined;
+      }
+    }
+
+    if (!cloned) {
+      if (parsed.kind === "local" && parsed.localPath) {
+        files = walkLocal(parsed.localPath);
+        readme = readReadme(parsed.localPath);
+        sourceSample = sampleSourceHaystack(parsed.localPath, files);
+      } else if (parsed.kind === "github" && parsed.project) {
+        const gh = await inspectGithub(parsed.project);
+        files = gh.files;
+        readme = gh.readme;
+      } else if (parsed.kind === "gitlab" && parsed.host && parsed.project) {
+        try {
+          const gl = await inspectGitlab(parsed.host, parsed.project);
+          files = gl.files;
+          readme = gl.readme;
+        } catch (err) {
+          const fallback = parsed.localPath || localWorkspaceFallback(parsed.url);
+          if (fallback) {
+            kind = "local";
+            files = walkLocal(fallback);
+            readme = readReadme(fallback);
+            sourceSample = sampleSourceHaystack(fallback, files);
+          } else {
+            throw err;
+          }
+        }
+      } else {
+        const fallback = localWorkspaceFallback(parsed.url);
         if (fallback) {
           kind = "local";
           files = walkLocal(fallback);
           readme = readReadme(fallback);
+          sourceSample = sampleSourceHaystack(fallback, files);
         } else {
-          throw err;
+          throw new Error("Não foi possível listar os arquivos deste Git.");
         }
-      }
-    } else {
-      const fallback = localWorkspaceFallback(parsed.url);
-      if (fallback) {
-        kind = "local";
-        files = walkLocal(fallback);
-        readme = readReadme(fallback);
-      } else {
-        throw new Error("Não foi possível listar os arquivos deste Git.");
       }
     }
   } catch (err) {
@@ -220,17 +263,28 @@ export async function inspectGitRepo(
       kind = "local";
       files = walkLocal(fallback);
       readme = readReadme(fallback);
+      sourceSample = sampleSourceHaystack(fallback, files);
     } else {
       error = err instanceof Error ? err.message : String(err);
     }
+  } finally {
+    cleanup?.();
   }
 
   const coverage = analyzeGitCoverage({
     cards: boardItems.cards,
     requirements: boardItems.requirements,
     files,
-    readmeExcerpt: readme,
+    readmeExcerpt: `${readme}\n${sourceSample}`,
   });
+
+  const sourceRisks = files.length
+    ? analyzeClonedSource({
+        url: parsed.url,
+        files,
+        haystack: `${files.join("\n")}\n${readme}\n${sourceSample}`,
+      })
+    : [];
 
   return {
     url: parsed.url,
@@ -242,5 +296,8 @@ export async function inspectGitRepo(
     readmeExcerpt: readme.slice(0, 2500) || undefined,
     hints: hintsFrom(files, readme),
     coverage,
+    cloned,
+    clonedAt,
+    sourceRisks,
   };
 }

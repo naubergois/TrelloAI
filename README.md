@@ -97,4 +97,4 @@ Reinicie o MCP nas duas IDEs depois do `npm install`. Tools principais: `jangada
 
 Opcional no `.env.local`: `MCP_ACTOR_EMAIL` (default `admin@cge.ce.gov.br`) — e-mail associado às alterações.
 
-A Maya analisa **riscos** do kanban e, quando o board tem um Git (Ajustes da Maya), compara cards/requisitos com os arquivos do repositório (o que já está implementado vs o que falta). Token opcional: `GITLAB_TOKEN` / `GITHUB_TOKEN`.
+A Maya analisa **riscos** do kanban e do código. Cada board ganha a coluna **Riscos Maya**; uma vez por semana o servidor clona os GitLabs ligados ao board (`GITLAB_TOKEN`) e atualiza os cards. Token opcional: `GITLAB_TOKEN` / `GITHUB_TOKEN`. Job manual: `POST /api/cron/maya-git` (admin ou `CRON_SECRET`).

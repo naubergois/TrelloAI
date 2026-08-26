@@ -47,6 +47,8 @@ import {
   cardMatchesFilter,
   type BoardCardFilter,
 } from "@/lib/board-filters";
+import { extractBoardIndicators } from "@/lib/board-indicators";
+import { BoardIndicators } from "@/components/BoardIndicators";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -75,6 +77,7 @@ export function BoardShell({
   const requirements = useBoardStore((s) => s.requirements);
   const calendarEvents = useBoardStore((s) => s.calendarEvents);
   const setActiveBoard = useBoardStore((s) => s.setActiveBoard);
+  const ensureMayaRisksColumn = useBoardStore((s) => s.ensureMayaRisksColumn);
   const renameBoard = useBoardStore((s) => s.renameBoard);
   const updateBoardDescription = useBoardStore((s) => s.updateBoardDescription);
   const resetDemo = useBoardStore((s) => s.resetDemo);
@@ -95,7 +98,8 @@ export function BoardShell({
 
   useEffect(() => {
     setActiveBoard(boardId);
-  }, [boardId, setActiveBoard]);
+    ensureMayaRisksColumn(boardId);
+  }, [boardId, setActiveBoard, ensureMayaRisksColumn]);
 
   useEffect(() => {
     if (!editingTitle) return;
@@ -156,6 +160,19 @@ export function BoardShell({
       matchCount: pool.filter((c) => cardMatchesFilter(c, cardFilter)).length,
     };
   }, [board, lists, cards, cardFilter, descendantIds, boards, canvasView]);
+
+  const boardIndicators = useMemo(() => {
+    if (!board) return null;
+    const boardIds =
+      canvasView === "all" ? [board.id, ...descendantIds] : [board.id];
+    return extractBoardIndicators({
+      boardIds,
+      boards,
+      lists,
+      cards,
+      requirements,
+    });
+  }, [board, canvasView, descendantIds, boards, lists, cards, requirements]);
 
   const reqCount = useMemo(
     () =>
@@ -536,6 +553,33 @@ export function BoardShell({
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-2 sm:px-3">
+            {boardIndicators ? (
+              <div className="mb-2 shrink-0 rounded-2xl border border-white/15 bg-black/20 px-3 py-2 sm:mb-3">
+                <BoardIndicators
+                  stats={boardIndicators}
+                  variant="full"
+                  rolledUp={canvasView === "all" && descendantIds.length > 0}
+                  activeFilter={cardFilter}
+                  onChipClick={(chip) => {
+                    if (!chip.filter) return;
+                    setCardFilter((cur) => {
+                      const next = { ...cur };
+                      if (chip.filter?.due) {
+                        next.due =
+                          cur.due === chip.filter.due ? "" : chip.filter.due;
+                      }
+                      if (chip.filter?.priority) {
+                        next.priority =
+                          cur.priority === chip.filter.priority
+                            ? ""
+                            : chip.filter.priority;
+                      }
+                      return next;
+                    });
+                  }}
+                />
+              </div>
+            ) : null}
             <BoardFilterBar
               filter={cardFilter}
               onChange={setCardFilter}

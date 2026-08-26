@@ -12,5 +12,7 @@ export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { loadSecrets } = await import("@/lib/secrets");
     await loadSecrets();
+    const { startMayaGitScheduler } = await import("@/lib/maya-git-scheduler");
+    startMayaGitScheduler();
   }
 }

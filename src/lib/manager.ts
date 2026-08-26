@@ -265,7 +265,8 @@ export function localManagerChat(
   context: ManagerContext,
 ): ManagerAiResponse {
   const lower = prompt.toLowerCase();
-  const todo = context.lists[0];
+  const maya = context.lists.find((l) => /riscos maya/i.test(l.title));
+  const todo = maya || context.lists[0];
   const doing = context.lists[1] ?? todo;
   const done = context.lists[context.lists.length - 1] ?? todo;
 

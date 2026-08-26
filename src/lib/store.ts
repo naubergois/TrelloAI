@@ -25,9 +25,16 @@ import type {
 } from "./types";
 import { buildMeetingRoomSlug, createSampleWorkspace, defaultManagerQuestions } from "./sample-data";
 import { createAsesiBoardSeed } from "./asesi-seed";
-import { ASESI_BOARD_ID } from "./constants";
+import { ASESI_BOARD_ID, MAYA_RISKS_LIST_KEY, MAYA_RISKS_LIST_TITLE } from "./constants";
 import type { BoardSnapshot } from "./board-snapshot";
 import type { AiAction } from "./types";
+import {
+  cloneBoardPieces,
+  ensureMayaRisksList,
+  isMayaRisksList,
+  mergePiecesInto,
+  syncMayaRiskCards,
+} from "./maya-risk-column";
 import {
   buildRequirementPrompts,
   withRequirementPrompts,
@@ -65,6 +72,8 @@ function normalizeCard(card: Card): Card {
     archived: card.archived ?? false,
     labels: Array.isArray(card.labels) ? card.labels : [],
     coverColor: card.coverColor ?? null,
+    origin: card.origin ?? null,
+    originKey: card.originKey ?? null,
     dueDate: card.dueDate ?? null,
     priority: card.priority ?? null,
   };
@@ -110,6 +119,7 @@ interface BoardState {
   addBoardGitRepo: (boardId: string, url: string, label?: string) => string | null;
   removeBoardGitRepo: (boardId: string, repoId: string) => void;
   setBoardRiskReport: (boardId: string, report: Board["riskReport"]) => void;
+  ensureMayaRisksColumn: (boardId: string) => void;
   assignBoardParent: (boardId: string, parentBoardId: string | null) => void;
   setBoardLevel: (boardId: string, level: BoardLevel) => void;
   updateBoardAppearance: (
@@ -155,6 +165,8 @@ interface BoardState {
         | "dueDate"
         | "labels"
         | "coverColor"
+        | "origin"
+        | "originKey"
         | "assigneeId"
         | "requirementId"
         | "acceptanceCriteria"
@@ -264,6 +276,7 @@ interface BoardState {
   addBoardMemberFromProfile: (
     boardId: string,
     profile: { name: string; email: string; image?: string | null },
+    opts?: { teamId?: string | null; extraBoardIds?: string[] },
   ) => string;
   recordActivity: (input: {
     boardId: string;
@@ -312,7 +325,12 @@ export const useBoardStore = create<BoardState>()(
 
       createBoard: (title, description = "", appearance) => {
         const boardId = nanoid();
-        const listDefs = ["A fazer", "Em progresso", "Concluído"];
+        const listDefs = [
+          { title: "A fazer" },
+          { title: "Em progresso" },
+          { title: "Concluído" },
+          { title: MAYA_RISKS_LIST_TITLE, systemKey: MAYA_RISKS_LIST_KEY },
+        ];
         const now = new Date().toISOString();
         const listIds: string[] = [];
         const lists: Record<string, List> = {};
@@ -336,14 +354,15 @@ export const useBoardStore = create<BoardState>()(
         }
         if (level === "organization") parentBoardId = null;
 
-        for (const listTitle of listDefs) {
+        for (const listDef of listDefs) {
           const listId = nanoid();
           listIds.push(listId);
           lists[listId] = {
             id: listId,
             boardId,
-            title: listTitle,
+            title: listDef.title,
             cardIds: [],
+            systemKey: listDef.systemKey,
           };
         }
 
@@ -466,16 +485,31 @@ export const useBoardStore = create<BoardState>()(
         set((state) => {
           const board = state.boards[boardId];
           if (!board) return state;
-          return {
-            boards: {
-              ...state.boards,
-              [boardId]: {
-                ...ensureBoardMembers(board),
-                riskReport: report,
-                updatedAt: new Date().toISOString(),
-              },
-            },
+          const pieces = cloneBoardPieces(board, state.lists, state.cards);
+          syncMayaRiskCards(pieces, report);
+          const next = {
+            boards: { ...state.boards },
+            lists: { ...state.lists },
+            cards: { ...state.cards },
           };
+          mergePiecesInto(next, pieces);
+          return next;
+        }),
+
+      ensureMayaRisksColumn: (boardId) =>
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+          const pieces = cloneBoardPieces(board, state.lists, state.cards);
+          ensureMayaRisksList(pieces);
+          if (board.riskReport) syncMayaRiskCards(pieces, board.riskReport);
+          const next = {
+            boards: { ...state.boards },
+            lists: { ...state.lists },
+            cards: { ...state.cards },
+          };
+          mergePiecesInto(next, pieces);
+          return next;
         }),
 
       assignBoardParent: (boardId, parentBoardId) =>
@@ -847,7 +881,7 @@ export const useBoardStore = create<BoardState>()(
       deleteList: (listId) => {
         set((state) => {
           const list = state.lists[listId];
-          if (!list) return state;
+          if (!list || isMayaRisksList(list)) return state;
           const board = state.boards[list.boardId];
           if (!board) return state;
 
@@ -888,6 +922,8 @@ export const useBoardStore = create<BoardState>()(
             description: extras.description ?? "",
             labels: extras.labels ?? [],
             coverColor: extras.coverColor ?? null,
+            origin: extras.origin ?? null,
+            originKey: extras.originKey ?? null,
             dueDate: extras.dueDate ?? null,
             priority: extras.priority ?? null,
             assigneeId: extras.assigneeId ?? null,
@@ -2283,6 +2319,9 @@ export const useBoardStore = create<BoardState>()(
         const teams: Record<string, Team> = {};
         if (board.teamId && state.teams[board.teamId]) {
           teams[board.teamId] = state.teams[board.teamId];
+          for (const memberId of state.teams[board.teamId].memberIds) {
+            if (state.members[memberId]) members[memberId] = state.members[memberId];
+          }
         }
 
         const meetings: Record<string, Meeting> = {};
@@ -2331,14 +2370,19 @@ export const useBoardStore = create<BoardState>()(
 
       mergeBoardSnapshot: (snapshot, opts) => {
         set((state) => {
-          const board = ensureBoardMembers(snapshot.board);
-          const cards = { ...state.cards };
-          for (const [id, card] of Object.entries(snapshot.cards)) {
-            cards[id] = normalizeCard(card);
-          }
+          const pieces = cloneBoardPieces(
+            ensureBoardMembers(snapshot.board),
+            snapshot.lists,
+            Object.fromEntries(
+              Object.entries(snapshot.cards).map(([id, card]) => [id, normalizeCard(card)]),
+            ),
+          );
+          ensureMayaRisksList(pieces);
+          if (pieces.board.riskReport) syncMayaRiskCards(pieces, pieces.board.riskReport);
+          const cards = { ...state.cards, ...pieces.cards };
           return {
-            boards: { ...state.boards, [board.id]: board },
-            lists: { ...state.lists, ...snapshot.lists },
+            boards: { ...state.boards, [pieces.board.id]: pieces.board },
+            lists: { ...state.lists, ...pieces.lists },
             cards,
             members: { ...state.members, ...snapshot.members },
             teams: { ...state.teams, ...snapshot.teams },
@@ -2354,16 +2398,18 @@ export const useBoardStore = create<BoardState>()(
               ...(state.calendarEvents || {}),
               ...(snapshot.calendarEvents || {}),
             },
-            activeBoardId: opts?.setActive ? board.id : state.activeBoardId,
+            activeBoardId: opts?.setActive ? pieces.board.id : state.activeBoardId,
           };
         });
       },
 
-      addBoardMemberFromProfile: (boardId, profile) => {
+      addBoardMemberFromProfile: (boardId, profile, opts) => {
         const email = profile.email.trim().toLowerCase();
         const name = profile.name.trim() || "Membro";
         const now = new Date().toISOString();
         let memberId = "";
+        const extraBoardIds = opts?.extraBoardIds ?? [];
+        const teamId = opts?.teamId;
 
         set((state) => {
           const board = state.boards[boardId];
@@ -2391,10 +2437,10 @@ export const useBoardStore = create<BoardState>()(
                 createdAt: now,
               };
 
-          const memberIds = Array.from(new Set([...(board.memberIds || []), memberId]));
+          const targetTeamId = teamId || board.teamId;
           let teams = state.teams;
-          if (board.teamId && state.teams[board.teamId]) {
-            const team = state.teams[board.teamId];
+          if (targetTeamId && state.teams[targetTeamId]) {
+            const team = state.teams[targetTeamId];
             teams = {
               ...state.teams,
               [team.id]: {
@@ -2405,16 +2451,21 @@ export const useBoardStore = create<BoardState>()(
             };
           }
 
+          const boardIds = Array.from(new Set([boardId, ...extraBoardIds]));
+          const boards = { ...state.boards };
+          for (const id of boardIds) {
+            const current = boards[id];
+            if (!current) continue;
+            boards[id] = {
+              ...ensureBoardMembers(current),
+              memberIds: Array.from(new Set([...(current.memberIds || []), memberId])),
+              updatedAt: now,
+            };
+          }
+
           return {
             members: { ...state.members, [memberId]: member },
-            boards: {
-              ...state.boards,
-              [boardId]: {
-                ...ensureBoardMembers(board),
-                memberIds,
-                updatedAt: now,
-              },
-            },
+            boards,
             teams,
             currentUserId: state.currentUserId || memberId,
           };

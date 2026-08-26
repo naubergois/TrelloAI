@@ -9,6 +9,8 @@ import {
   pgRecordInviteAcceptance,
 } from "@/lib/storage/pg";
 
+export type InviteKind = "board" | "team";
+
 export type BoardInvite = {
   token: string;
   boardId: string;
@@ -24,7 +26,20 @@ export type BoardInvite = {
   usedByEmail: string | null;
   /** emails that accepted via this link (team invites are reusable) */
   acceptedEmails: string[];
+  kind: InviteKind;
+  teamId: string | null;
+  teamName: string | null;
 };
+
+function withInviteDefaults(inv: BoardInvite): BoardInvite {
+  return {
+    ...inv,
+    acceptedEmails: inv.acceptedEmails ?? (inv.usedByEmail ? [inv.usedByEmail] : []),
+    kind: inv.kind === "team" ? "team" : "board",
+    teamId: inv.teamId ?? null,
+    teamName: inv.teamName ?? null,
+  };
+}
 
 type InviteStore = { invites: BoardInvite[] };
 
@@ -42,11 +57,9 @@ function readStore(): InviteStore {
   try {
     const parsed = JSON.parse(readFileSync(file, "utf8")) as InviteStore;
     return {
-      invites: (Array.isArray(parsed.invites) ? parsed.invites : []).map((inv) => ({
-        ...inv,
-        acceptedEmails:
-          inv.acceptedEmails ?? (inv.usedByEmail ? [inv.usedByEmail] : []),
-      })),
+      invites: (Array.isArray(parsed.invites) ? parsed.invites : []).map((inv) =>
+        withInviteDefaults(inv),
+      ),
     };
   } catch {
     return { invites: [] };
@@ -65,6 +78,9 @@ export async function createInvite(input: {
   createdByName: string;
   inviteeEmail?: string | null;
   daysValid?: number;
+  kind?: InviteKind;
+  teamId?: string | null;
+  teamName?: string | null;
 }): Promise<BoardInvite> {
   const token = createHash("sha256")
     .update(`${randomBytes(24).toString("hex")}:${Date.now()}`)
@@ -73,6 +89,7 @@ export async function createInvite(input: {
 
   const now = new Date();
   const expires = new Date(now.getTime() + (input.daysValid ?? 14) * 24 * 60 * 60 * 1000);
+  const kind: InviteKind = input.kind === "team" ? "team" : "board";
 
   const invite: BoardInvite = {
     token,
@@ -86,6 +103,9 @@ export async function createInvite(input: {
     usedAt: null,
     usedByEmail: null,
     acceptedEmails: [],
+    kind,
+    teamId: kind === "team" ? input.teamId || null : null,
+    teamName: kind === "team" ? input.teamName?.trim() || null : null,
   };
 
   if (isPgConfigured()) {
@@ -103,7 +123,8 @@ export async function createInvite(input: {
 
 export async function getInvite(token: string): Promise<BoardInvite | null> {
   if (isPgConfigured()) {
-    return pgGetInvite(token);
+    const invite = await pgGetInvite(token);
+    return invite ? withInviteDefaults(invite) : null;
   }
   return readStore().invites.find((i) => i.token === token) ?? null;
 }

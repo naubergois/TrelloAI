@@ -3,13 +3,14 @@
 import { useMemo, useState } from "react";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, ShieldAlert, Trash2 } from "lucide-react";
 import { useBoardStore } from "@/lib/store";
 import { SortableCard } from "@/components/SortableCard";
 import {
   cardMatchesFilter,
   type BoardCardFilter,
 } from "@/lib/board-filters";
+import { isMayaRisksList } from "@/lib/maya-risk-column";
 
 export function ListColumn({
   listId,
@@ -38,13 +39,14 @@ export function ListColumn({
   const visibleIds = useMemo(() => cardItems.map((c) => c.id), [cardItems]);
 
   if (!list) return null;
+  const systemList = isMayaRisksList(list);
 
   return (
     <section
       ref={setNodeRef}
       className={`board-list-column flex h-full shrink-0 flex-col border ${
         isOver ? "border-[var(--accent)]/60" : ""
-      }`}
+      } ${systemList ? "border-[var(--accent)]/35" : ""}`}
       style={{
         borderRadius: "var(--board-list-radius, 1rem)",
         width: "min(var(--board-list-width, 18rem), 78vw)",
@@ -56,12 +58,19 @@ export function ListColumn({
           onChange={(e) => renameList(listId, e.target.value)}
           className="w-full bg-transparent text-sm font-semibold tracking-wide text-white outline-none placeholder:text-white/60"
         />
+        {systemList ? (
+          <span className="inline-flex items-center gap-1 rounded-md bg-[var(--accent)]/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--accent)]">
+            <ShieldAlert className="h-3 w-3" />
+            Maya
+          </span>
+        ) : null}
         <span className="rounded-md bg-white/15 px-2 py-0.5 text-xs text-white/80">
           {cardItems.length}
           {cardItems.length !== list.cardIds.length
             ? `/${list.cardIds.length}`
             : ""}
         </span>
+        {systemList ? null : (
         <button
           type="button"
           title="Excluir lista"
@@ -78,6 +87,7 @@ export function ListColumn({
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
+        )}
       </header>
 
       <div
@@ -91,7 +101,9 @@ export function ListColumn({
         </SortableContext>
         {cardItems.length === 0 ? (
           <p className="px-1 py-4 text-center text-xs text-white/65">
-            Nenhum card neste filtro
+            {systemList
+              ? "A Maya preenche esta coluna com riscos do board e do código."
+              : "Nenhum card neste filtro"}
           </p>
         ) : null}
       </div>

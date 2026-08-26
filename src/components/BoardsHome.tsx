@@ -28,15 +28,17 @@ import {
   BOARD_LEVEL_LABELS,
   BOARD_LEVEL_STYLES,
   BOARD_LEVELS,
+  getDescendantBoardIds,
   parentLevelFor,
 } from "@/lib/board-hierarchy";
+import { extractBoardIndicators } from "@/lib/board-indicators";
+import { BoardIndicators } from "@/components/BoardIndicators";
 import {
   DEFAULT_BACKGROUND_ID,
   DEFAULT_BACKGROUND_TINT,
   DEFAULT_CARD_THEME_ID,
   DEFAULT_DESIGN_ID,
   getBackground,
-  getDesign,
   type BoardBackgroundId,
   type BoardCardThemeId,
   type BoardDesignId,
@@ -50,6 +52,8 @@ export function BoardsHome() {
   const boards = useBoardStore((s) => s.boards);
   const teams = useBoardStore((s) => s.teams);
   const lists = useBoardStore((s) => s.lists);
+  const cards = useBoardStore((s) => s.cards);
+  const requirements = useBoardStore((s) => s.requirements);
   const members = useBoardStore((s) => s.members);
   const currentUserId = useBoardStore((s) => s.currentUserId);
   const hydrated = useBoardStore((s) => s.hydrated);
@@ -129,6 +133,21 @@ export function BoardsHome() {
     if (!parentLevel) return [];
     return boardList.filter((b) => b.level === parentLevel);
   }, [boardList, boardLevel]);
+
+  const indicatorsByBoard = useMemo(() => {
+    const map: Record<string, ReturnType<typeof extractBoardIndicators>> = {};
+    for (const b of boardList) {
+      const descendantIds = getDescendantBoardIds(b.id, boards);
+      map[b.id] = extractBoardIndicators({
+        boardIds: [b.id, ...descendantIds],
+        boards,
+        lists,
+        cards,
+        requirements,
+      });
+    }
+    return map;
+  }, [boardList, boards, lists, cards, requirements]);
 
   const openBoard = (boardId: string) => {
     setActiveBoard(boardId);
@@ -278,6 +297,17 @@ export function BoardsHome() {
                 <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
                   {asesiBoard.description}
                 </p>
+                {indicatorsByBoard[ASESI_BOARD_ID] ? (
+                  <div className="mt-4 max-w-lg">
+                    <BoardIndicators
+                      stats={indicatorsByBoard[ASESI_BOARD_ID]}
+                      variant="full"
+                      rolledUp={
+                        getDescendantBoardIds(ASESI_BOARD_ID, boards).length > 0
+                      }
+                    />
+                  </div>
+                ) : null}
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
@@ -319,7 +349,7 @@ export function BoardsHome() {
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="flex min-h-[132px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/35 bg-white/10 p-6 text-white/80 transition hover:border-white/55 hover:bg-white/15 hover:text-white"
+            className="flex min-h-[168px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/35 bg-white/10 p-6 text-white/80 transition hover:border-white/55 hover:bg-white/15 hover:text-white"
           >
             <Plus className="h-8 w-8 text-[var(--accent)]" />
             <span className="text-sm font-medium">Criar board</span>
@@ -327,7 +357,6 @@ export function BoardsHome() {
 
           {filteredBoards.map((board) => {
             const bg = getBackground(board.backgroundId);
-            const design = getDesign(board.designId);
             const team = board.teamId ? teams[board.teamId] : null;
             const listCount = board.listIds.length;
             const cardCount = board.listIds.reduce(
@@ -339,12 +368,12 @@ export function BoardsHome() {
             return (
               <article
                 key={board.id}
-                className="group relative flex min-h-[132px] flex-col overflow-hidden rounded-xl border border-white/20 shadow-[0_8px_20px_rgba(9,30,66,0.22)] transition hover:border-white/40 hover:shadow-[0_12px_28px_rgba(9,30,66,0.28)]"
+                className="group relative flex min-h-[168px] flex-col overflow-hidden rounded-xl border border-white/20 shadow-[0_8px_20px_rgba(9,30,66,0.22)] transition hover:border-white/40 hover:shadow-[0_12px_28px_rgba(9,30,66,0.28)]"
               >
                 <button
                   type="button"
                   onClick={() => openBoard(board.id)}
-                  className="flex min-h-[132px] flex-1 flex-col text-left"
+                  className="flex min-h-[168px] flex-1 flex-col text-left"
                 >
                   <div
                     className="relative flex flex-1 flex-col justify-end p-4"
@@ -380,9 +409,15 @@ export function BoardsHome() {
                         {team ? `${team.name} · ` : ""}
                         {listCount} listas · {cardCount} cards · {memberCount} membros
                       </p>
-                      <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-white/65">
-                        {bg.name} · {design.name}
-                      </p>
+                      <div className="mt-2">
+                        <BoardIndicators
+                          stats={indicatorsByBoard[board.id]}
+                          variant="compact"
+                          rolledUp={
+                            getDescendantBoardIds(board.id, boards).length > 0
+                          }
+                        />
+                      </div>
                     </div>
                   </div>
                 </button>

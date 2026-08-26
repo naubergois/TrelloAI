@@ -319,7 +319,8 @@ export function ManagerPanel({
     };
   };
 
-  const collectAnalyzePayload = (extraUrls: string[] = []) => ({
+  const collectAnalyzePayload = (extraUrls: string[] = [], clone = false) => ({
+    clone,
     urls: [...new Set([...(board.gitRepos || []).map((r) => r.url), ...extraUrls])],
     requirements: Object.values(requirements || {})
       .filter((r) => r.boardId === boardId)
@@ -335,6 +336,7 @@ export function ManagerPanel({
       .map((list) => ({
         id: list.id,
         title: list.title,
+        systemKey: list.systemKey ?? null,
         cards: list.cardIds
           .map((cid) => cards[cid])
           .filter(Boolean)
@@ -344,6 +346,7 @@ export function ManagerPanel({
             priority: c.priority,
             dueDate: c.dueDate,
             assigneeId: c.assigneeId ?? null,
+            origin: c.origin ?? null,
           })),
       })),
   });
@@ -352,7 +355,7 @@ export function ManagerPanel({
     const res = await fetch("/api/board/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(collectAnalyzePayload(extraUrls)),
+      body: JSON.stringify(collectAnalyzePayload(extraUrls, true)),
     });
     const data = (await res.json()) as { report?: BoardRiskReport; error?: string };
     if (!res.ok || !data.report) {
@@ -960,7 +963,9 @@ export function ManagerPanel({
               Repositórios Git
             </p>
             <p className="text-[11px] text-[var(--muted)]">
-              Ao adicionar um Git, a Maya compara o código com os cards e aponta o que já está implementado ou não.
+              A Maya preenche a coluna <strong className="text-white">Riscos Maya</strong> com cada
+              risco do kanban e da análise do código. Uma vez por semana o servidor clona o GitLab
+              e atualiza essa coluna.
             </p>
             {(board.gitRepos || []).map((repo) => (
               <div
@@ -1033,7 +1038,7 @@ export function ManagerPanel({
               ) : (
                 <ShieldAlert className="h-3.5 w-3.5" />
               )}
-              Analisar riscos e Git agora
+              Clonar código e analisar agora
             </button>
             {board.riskReport?.risks?.length ? (
               <ul className="space-y-1 text-[11px] text-[var(--muted)]">

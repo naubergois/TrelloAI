@@ -20,6 +20,10 @@ export interface Card {
   labels: Label[];
   /** Cor própria do card (id da paleta ou #hex). Ausente usa o tema do board. */
   coverColor?: string | null;
+  /** Card gerado pela Maya (coluna de riscos) */
+  origin?: "maya" | null;
+  /** Chave estável do risco para a Maya atualizar em vez de duplicar */
+  originKey?: string | null;
   dueDate: string | null;
   priority: "low" | "medium" | "high" | null;
   /** Membro responsável (TeamMember.id) */
@@ -92,11 +96,15 @@ export interface TeamCalendarEvent {
   updatedAt: string;
 }
 
+export type ListSystemKey = "maya-risks";
+
 export interface List {
   id: string;
   boardId: string;
   title: string;
   cardIds: string[];
+  /** Coluna gerida pelo sistema (ex.: Riscos Maya) */
+  systemKey?: ListSystemKey | null;
 }
 
 export type BoardGitRepo = {
@@ -122,6 +130,7 @@ export type BoardRisk = {
   severity: "low" | "medium" | "high";
   reason: string;
   cardId?: string;
+  source?: "board" | "git";
 };
 
 export type GitInspectSummary = {
@@ -134,10 +143,16 @@ export type GitInspectSummary = {
   readmeExcerpt?: string;
   hints: string[];
   coverage: GitCoverageItem[];
+  clonedAt?: string;
+  cloned?: boolean;
+  sourceRisks?: BoardRisk[];
 };
 
 export type BoardRiskReport = {
   analyzedAt: string;
+  /** Último clone local do Git (análise semanal) */
+  clonedAt?: string | null;
+  cloneMode?: "clone" | "api" | "none";
   risks: BoardRisk[];
   git: GitInspectSummary[];
 };

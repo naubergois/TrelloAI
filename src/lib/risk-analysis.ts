@@ -1,4 +1,5 @@
 import type { BoardRisk, Card, GitCoverageItem, Requirement } from "./types";
+import { isMayaRisksList } from "./maya-risk-column";
 
 const STOP = new Set([
   "para",
@@ -66,12 +67,13 @@ export function analyzeBoardRisks(opts: {
   requirements?: Pick<Requirement, "id" | "title" | "code" | "status">[];
   today?: string;
 }): BoardRisk[] {
+  const lists = (opts.lists || []).filter((list) => !isMayaRisksList(list));
   const today = opts.today || new Date().toISOString().slice(0, 10);
   const risks: BoardRisk[] = [];
-  const allCards = opts.lists.flatMap((list) =>
+  const allCards = lists.flatMap((list) =>
     list.cards.map((c) => ({ ...c, listTitle: list.title })),
   );
-  const firstList = opts.lists[0]?.title || "";
+  const firstList = lists[0]?.title || "";
 
   for (const card of allCards) {
     if (card.dueDate && card.dueDate < today && !/conclu|done|feito/i.test(card.listTitle || "")) {
@@ -83,7 +85,7 @@ export function analyzeBoardRisks(opts: {
         cardId: card.id,
       });
     }
-    if (card.priority === "high" && /backlog|fazer|todo/i.test(card.listTitle || firstList) && card.listTitle === opts.lists[0]?.title) {
+    if (card.priority === "high" && /backlog|fazer|todo/i.test(card.listTitle || firstList) && card.listTitle === lists[0]?.title) {
       risks.push({
         id: `stuck-high-${card.id}`,
         title: `Alta prioridade parada: ${card.title}`,

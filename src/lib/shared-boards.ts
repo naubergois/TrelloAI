@@ -4,6 +4,7 @@ import {
   pgDeleteBoard,
   pgEmailHasAccess,
   pgGetBoard,
+  pgListAllBoards,
   pgListBoardsForEmail,
   pgSaveBoard,
 } from "@/lib/storage/pg";
@@ -71,6 +72,14 @@ export async function saveSharedBoard(snapshot: BoardSnapshot) {
   const store = readStore();
   store.boards[snapshot.board.id] = next;
   writeStore(store);
+}
+
+export async function listAllSharedBoards(): Promise<BoardSnapshot[]> {
+  if (isPgConfigured()) {
+    const pgBoards = await pgListAllBoards();
+    if (pgBoards.length > 0) return pgBoards;
+  }
+  return Object.values(readStore().boards);
 }
 
 export async function listBoardsForEmail(email: string): Promise<BoardSnapshot[]> {

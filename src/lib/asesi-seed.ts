@@ -10,7 +10,7 @@ import type {
   VirtualManager,
 } from "./types";
 import type { BoardSnapshot } from "./board-snapshot";
-import { ASESI_BOARD_ID, ASESI_LIST_IDS, ASESI_TEAM_ID } from "./constants";
+import { ASESI_BOARD_ID, ASESI_LIST_IDS, ASESI_TEAM_ID, MAYA_RISKS_LIST_KEY, MAYA_RISKS_LIST_TITLE } from "./constants";
 import { calendarDayKey, shiftCalendarDay } from "./calendar-report";
 import { withRequirementPrompts } from "./requirement-prompts";
 
@@ -112,6 +112,7 @@ export function createAsesiBoardSeed(owner?: {
     [ASESI_LIST_IDS.doing]: [],
     [ASESI_LIST_IDS.review]: [],
     [ASESI_LIST_IDS.done]: [],
+    [ASESI_LIST_IDS.risks]: [],
   };
 
   for (const seed of seedCards) {
@@ -152,6 +153,13 @@ export function createAsesiBoardSeed(owner?: {
       title: "Concluído",
       cardIds: cardIdsByList[ASESI_LIST_IDS.done],
     },
+    [ASESI_LIST_IDS.risks]: {
+      id: ASESI_LIST_IDS.risks,
+      boardId: ASESI_BOARD_ID,
+      title: MAYA_RISKS_LIST_TITLE,
+          cardIds: cardIdsByList[ASESI_LIST_IDS.risks],
+      systemKey: MAYA_RISKS_LIST_KEY,
+    },
   };
 
   const team: Team = {
@@ -174,6 +182,7 @@ export function createAsesiBoardSeed(owner?: {
       ASESI_LIST_IDS.doing,
       ASESI_LIST_IDS.review,
       ASESI_LIST_IDS.done,
+      ASESI_LIST_IDS.risks,
     ],
     memberIds: [ownerId],
     teamId: ASESI_TEAM_ID,
