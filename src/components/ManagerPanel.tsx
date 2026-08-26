@@ -36,7 +36,8 @@ import {
   mayaChatFileName,
 } from "@/lib/maya-chat";
 import { buildMayaBoardMemory, formatMayaMemoryPrompt } from "@/lib/maya-board-memory";
-import { mayaChatRequestsBoardChange } from "@/lib/maya-chat-intent";
+import { isMayaChatSmallTalk, resolveMayaChatReply } from "@/lib/maya-chat-intent";
+import { buildMayaGreetingMessage } from "@/lib/maya-voice";
 
 type Tab = "chat" | "calendar" | "settings";
 
@@ -459,9 +460,20 @@ export function ManagerPanel({
       memberId: currentUserId,
       content: prompt,
     });
-    setProcessing(true);
     setResultMsg("");
     setDraft("");
+    const ctx = buildManagerContext(report);
+    const greeting = buildMayaGreetingMessage({
+      managerName: manager.name,
+      boardTitle: board.title,
+      lists: ctx.lists,
+      recentChat: ctx.recentChat,
+    });
+    if (isMayaChatSmallTalk(prompt)) {
+      appendMayaDayChat(boardId, { role: "manager", content: greeting });
+      return;
+    }
+    setProcessing(true);
     try {
       const res = await fetch("/api/manager", {
         method: "POST",
@@ -469,7 +481,7 @@ export function ManagerPanel({
         body: JSON.stringify({
           mode: "chat",
           message: prompt,
-          context: buildManagerContext(report),
+          context: ctx,
         }),
       });
       const data = (await res.json()) as {
@@ -483,13 +495,17 @@ export function ManagerPanel({
         setResultMsg(data.error || "Falha ao consultar Maya.");
         return;
       }
-      const actions = mayaChatRequestsBoardChange(prompt)
-        ? ([data.action, data.extraAction].filter(Boolean) as AiAction[])
-        : [];
-      if (actions.length) applyManagerActions(actions, boardId);
-      const msg = data.message || "Pronto.";
-      appendMayaDayChat(boardId, { role: "manager", content: msg });
-      if (data.provider !== "deepseek" && msg.includes("DeepSeek falhou")) {
+      const reply = resolveMayaChatReply({
+        userMessage: prompt,
+        apiMessage: data.message,
+        greeting,
+      });
+      if (reply.allowActions) {
+        const actions = [data.action, data.extraAction].filter(Boolean) as AiAction[];
+        if (actions.length) applyManagerActions(actions, boardId);
+      }
+      appendMayaDayChat(boardId, { role: "manager", content: reply.message });
+      if (data.provider !== "deepseek" && (data.message || "").includes("DeepSeek falhou")) {
         setResultMsg("Maya respondeu em modo local (DeepSeek indisponível).");
       }
     } catch {

@@ -27,3 +27,29 @@ export function mayaChatRequestsBoardChange(text: string) {
     t,
   );
 }
+
+/** Texto da Maya afirmando que já alterou o kanban. */
+export function mayaReplyLooksLikeBoardChange(text: string) {
+  const t = normalizeMayaChatText(text);
+  return /\b(atribui|atualizei|criei|movimentei|movi o card|priorizei|definin o prazo)\b/.test(t);
+}
+
+export function resolveMayaChatReply(opts: {
+  userMessage: string;
+  apiMessage?: string;
+  greeting: string;
+}): { message: string; allowActions: boolean } {
+  const allowActions = mayaChatRequestsBoardChange(opts.userMessage);
+  if (isMayaChatSmallTalk(opts.userMessage)) {
+    return { message: opts.greeting, allowActions: false };
+  }
+  const api = (opts.apiMessage || "").trim();
+  if (!allowActions && api && mayaReplyLooksLikeBoardChange(api)) {
+    return {
+      message:
+        "Li o board e o histórico, mas não mexi em card nenhum. Manda o comando se quiser criar, atribuir ou mover.",
+      allowActions: false,
+    };
+  }
+  return { message: api || opts.greeting, allowActions };
+}
