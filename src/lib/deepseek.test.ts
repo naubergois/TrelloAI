@@ -6,6 +6,7 @@ import {
   extractJsonText,
   LITELLM_DEEPSEEK_FALLBACK_MODEL,
   messageText,
+  normalizeBedrockChatMessages,
   resolveDeepSeekModel,
   shouldDropBedrockParams,
   stripJsonFence,
@@ -115,6 +116,84 @@ describe("LiteLLM / Bedrock params", () => {
     expect(messageText({ content: "", reasoning_content: '{"a":1}' })).toBe(
       '{"a":1}',
     );
+  });
+
+  it("folds system into the first user message for Bedrock Converse", () => {
+    const body = buildDeepSeekChatBody({
+      model: "us.deepseek.r1-v1:0",
+      baseUrl: "https://litellm.cge.ce.gov.br",
+      messages: [
+        { role: "system", content: "Você é Maya." },
+        { role: "user", content: "oi" },
+      ],
+    });
+    expect(body.messages).toEqual([
+      { role: "user", content: "Você é Maya.\n\noi" },
+    ]);
+  });
+
+  it("does not let Maya history start with assistant on Bedrock", () => {
+    const messages = normalizeBedrockChatMessages([
+      { role: "system", content: "Você é Maya." },
+      { role: "assistant", content: "Oi, Ana." },
+      { role: "user", content: "E o Farol?" },
+    ]);
+    expect(messages).toEqual([
+      {
+        role: "user",
+        content: "Você é Maya.\n\nMaya: Oi, Ana.\n\nUsuário: E o Farol?",
+      },
+    ]);
+  });
+
+  it("collapses mixed history into one user message", () => {
+    expect(
+      normalizeBedrockChatMessages([
+        { role: "user", content: "a" },
+        { role: "user", content: "b" },
+        { role: "assistant", content: "c" },
+        { role: "assistant", content: "d" },
+        { role: "user", content: "e" },
+      ]),
+    ).toEqual([
+      {
+        role: "user",
+        content: "Usuário: a\n\nUsuário: b\n\nMaya: c\n\nMaya: d\n\nUsuário: e",
+      },
+    ]);
+  });
+
+  it("still flattens Maya history when DEEPSEEK_DROP_PARAMS is 0", () => {
+    process.env.DEEPSEEK_DROP_PARAMS = "0";
+    const body = buildDeepSeekChatBody({
+      model: "us.deepseek.r1-v1:0",
+      baseUrl: "https://litellm.cge.ce.gov.br",
+      messages: [
+        { role: "system", content: "Você é Maya." },
+        { role: "assistant", content: "Oi, Ana." },
+        { role: "user", content: "E o Farol?" },
+      ],
+      temperature: 0.3,
+    });
+    expect((body.messages as { role: string }[])[0].role).toBe("user");
+    expect(body.messages).toHaveLength(1);
+    expect(body.temperature).toBe(0.3);
+  });
+
+  it("keeps OpenAI-style system on native DeepSeek", () => {
+    delete process.env.DEEPSEEK_DROP_PARAMS;
+    const body = buildDeepSeekChatBody({
+      model: "deepseek-chat",
+      baseUrl: "https://api.deepseek.com",
+      messages: [
+        { role: "system", content: "Você é Maya." },
+        { role: "user", content: "oi" },
+      ],
+    });
+    expect(body.messages).toEqual([
+      { role: "system", content: "Você é Maya." },
+      { role: "user", content: "oi" },
+    ]);
   });
 });
 
