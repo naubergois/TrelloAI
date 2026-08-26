@@ -60,6 +60,20 @@ import {
   formatCalendarDayLabel,
   shiftCalendarDay,
 } from "./calendar-report";
+import { extractMeetingUrlFromText, sanitizeMeetingUrl } from "./meeting-links";
+
+function normalizeCalendarEvent(event: TeamCalendarEvent): TeamCalendarEvent {
+  const meetingUrl =
+    sanitizeMeetingUrl(event.meetingUrl) ||
+    extractMeetingUrlFromText(event.description) ||
+    null;
+  return {
+    ...event,
+    time: event.time ?? null,
+    meetingUrl,
+    memberIds: Array.isArray(event.memberIds) ? event.memberIds : [],
+  };
+}
 
 function normalizeCard(card: Card): Card {
   return {
@@ -203,6 +217,7 @@ interface BoardState {
     kind?: TeamEventKind;
     date: string;
     time?: string | null;
+    meetingUrl?: string | null;
     teamId?: string | null;
     memberIds?: string[];
   }) => string;
@@ -1296,6 +1311,10 @@ export const useBoardStore = create<BoardState>()(
           kind: input.kind ?? "other",
           date: input.date,
           time: input.time ?? null,
+          meetingUrl:
+            sanitizeMeetingUrl(input.meetingUrl) ||
+            extractMeetingUrlFromText(input.description) ||
+            null,
           memberIds: input.memberIds ?? [],
           createdAt: now,
           updatedAt: now,
@@ -1318,6 +1337,21 @@ export const useBoardStore = create<BoardState>()(
                 ...patch,
                 id: current.id,
                 boardId: current.boardId,
+                meetingUrl: (() => {
+                  const nextDescription =
+                    patch.description !== undefined
+                      ? patch.description
+                      : current.description;
+                  const explicit =
+                    patch.meetingUrl !== undefined
+                      ? sanitizeMeetingUrl(patch.meetingUrl)
+                      : sanitizeMeetingUrl(current.meetingUrl);
+                  return (
+                    explicit ||
+                    extractMeetingUrlFromText(nextDescription) ||
+                    null
+                  );
+                })(),
                 updatedAt: new Date().toISOString(),
               },
             },
@@ -2396,7 +2430,12 @@ export const useBoardStore = create<BoardState>()(
             },
             calendarEvents: {
               ...(state.calendarEvents || {}),
-              ...(snapshot.calendarEvents || {}),
+              ...Object.fromEntries(
+                Object.entries(snapshot.calendarEvents || {}).map(([id, ev]) => [
+                  id,
+                  normalizeCalendarEvent(ev),
+                ]),
+              ),
             },
             activeBoardId: opts?.setActive ? pieces.board.id : state.activeBoardId,
           };
@@ -2588,6 +2627,10 @@ export const useBoardStore = create<BoardState>()(
 
         for (const [id, card] of Object.entries(state.cards || {})) {
           if (card) state.cards[id] = normalizeCard(card as Card);
+        }
+
+        for (const [id, ev] of Object.entries(state.calendarEvents || {})) {
+          if (ev) state.calendarEvents[id] = normalizeCalendarEvent(ev);
         }
 
         for (const [id, req] of Object.entries(state.requirements || {})) {

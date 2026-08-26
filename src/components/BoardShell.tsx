@@ -10,7 +10,6 @@ import {
   Pencil,
   History,
   RotateCcw,
-  Sparkles,
   UserPlus,
   Users,
   Video,
@@ -20,7 +19,8 @@ import { useBoardStore } from "@/lib/store";
 import { boardThemeStyle } from "@/lib/board-themes";
 import { BoardCanvas } from "@/components/BoardCanvas";
 import { ConsolidatedBoardCanvas } from "@/components/ConsolidatedBoardCanvas";
-import { AiPanel } from "@/components/AiPanel";
+import { AiChatDialog } from "@/components/AiChatDialog";
+import { JangadaBuddy } from "@/components/JangadaBuddy";
 import { MeetingsPanel } from "@/components/MeetingsPanel";
 import { MeetingRoom } from "@/components/MeetingRoom";
 import { AuthButton } from "@/components/AuthButton";
@@ -56,7 +56,6 @@ import { useRouter } from "next/navigation";
 type SidePanel =
   | "manager"
   | "meetings"
-  | "ai"
   | "invite"
   | "requirements"
   | "calendar"
@@ -88,6 +87,7 @@ export function BoardShell({
   const managers = useBoardStore((s) => s.managers);
 
   const [panel, setPanel] = useState<SidePanel>("manager");
+  const [aiChatOpen, setAiChatOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [cardFilter, setCardFilter] = useState<BoardCardFilter>(EMPTY_BOARD_FILTER);
@@ -384,15 +384,16 @@ export function BoardShell({
               </button>
               <button
                 type="button"
-                onClick={() => toggle("ai")}
-                className={`inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm transition sm:rounded-xl sm:px-2.5 sm:py-2 ${
-                  panel === "ai"
+                onClick={() => setAiChatOpen((open) => !open)}
+                title="Jangadinha"
+                className={`inline-flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm transition sm:rounded-xl sm:px-2 sm:py-1.5 ${
+                  aiChatOpen
                     ? "bg-white font-semibold text-slate-900"
                     : "text-[var(--muted)] hover:text-white"
                 }`}
               >
-                <Sparkles className="h-4 w-4" />
-                <span className="hidden sm:inline">IA</span>
+                <JangadaBuddy size={22} mood={aiChatOpen ? "happy" : "idle"} />
+                <span className="hidden sm:inline">Jangadinha</span>
               </button>
             </div>
 
@@ -658,9 +659,6 @@ export function BoardShell({
               {panel === "meetings" ? (
                 <MeetingsPanel boardId={board.id} onClose={() => setPanel(null)} />
               ) : null}
-              {panel === "ai" ? (
-                <AiPanel boardId={board.id} onClose={() => setPanel(null)} />
-              ) : null}
               {panel === "invite" ? (
                 <aside className="anim-rise panel-glass flex h-full min-h-0 w-full flex-col overflow-hidden rounded-t-3xl p-4 sm:rounded-3xl">
                   <InvitePanel boardId={board.id} onClose={() => setPanel(null)} />
@@ -686,6 +684,10 @@ export function BoardShell({
           boardId={board.id}
           onClose={() => setAppearanceOpen(false)}
         />
+      ) : null}
+
+      {aiChatOpen ? (
+        <AiChatDialog boardId={board.id} onClose={() => setAiChatOpen(false)} />
       ) : null}
 
       {pendingDelete ? (

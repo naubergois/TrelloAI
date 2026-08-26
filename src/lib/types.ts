@@ -91,6 +91,8 @@ export interface TeamCalendarEvent {
   date: string;
   /** HH:mm opcional */
   time: string | null;
+  /** Link do Google Meet, Microsoft Teams ou outra sala */
+  meetingUrl?: string | null;
   memberIds: string[];
   createdAt: string;
   updatedAt: string;

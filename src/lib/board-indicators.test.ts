@@ -192,5 +192,32 @@ describe("extractBoardIndicators", () => {
     expect(chips.find((c) => c.key === "overdue")?.filter).toEqual({
       due: "overdue",
     });
+    expect(
+      boardIndicatorChips(
+        {
+          cards: 4,
+          backlog: 2,
+          doing: 1,
+          review: 0,
+          done: 1,
+          other: 0,
+          wip: 1,
+          progressPct: 25,
+          overdue: 2,
+          dueSoon: 1,
+          dueToday: 0,
+          highPriority: 1,
+          unassigned: 3,
+          blocked: 0,
+          risks: 3,
+          risksHigh: 1,
+          requirements: 2,
+          requirementsDone: 0,
+          checklistItems: 0,
+          checklistDone: 0,
+        },
+        { compact: true },
+      ).map((c) => c.key),
+    ).toEqual(["progress", "flow", "overdue", "high", "risks"]);
   });
 });
