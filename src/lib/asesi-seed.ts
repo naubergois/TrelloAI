@@ -177,6 +177,8 @@ export function createAsesiBoardSeed(owner?: {
     title: "ASESI",
     description:
       "Kanban do time ASESI (Assessoria de Sistemas e Inteligência), ligado à organização CGE. Projetos da carteira ficam em boards filhos.",
+    executiveSummary:
+      "ASESI — resumo executivo\n\nCarteira do time de sistemas e inteligência da CGE. Prioridade: mapear processos críticos, fechar o piloto do Jangada com a equipe e deixar indicadores de acompanhamento mensuráveis.\n\nAtenção da liderança: validação do kanban (convites e daily Maya) e preparação da migração para o ambiente CGE.",
     listIds: [
       ASESI_LIST_IDS.backlog,
       ASESI_LIST_IDS.doing,
@@ -362,6 +364,8 @@ export function createCgeBoardSeed(owner?: {
     title: "CGE",
     description:
       "Organização Controladoria e Ouvidoria Geral do Estado do Ceará. O time ASESI e os projetos ficam em boards abaixo deste.",
+    executiveSummary:
+      "CGE — resumo executivo\n\nVisão da organização: Controladoria e Ouvidoria Geral do Estado do Ceará. Os times e projetos (a partir da ASESI) ficam em boards abaixo desta carteira.\n\nUso: acompanhar andamento consolidado, riscos e pendências sem entrar em cada kanban operacional.",
     listIds: [
       CGE_LIST_IDS.backlog,
       CGE_LIST_IDS.doing,

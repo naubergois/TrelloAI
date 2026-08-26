@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyAdicionarGit,
+  applyAtualizarResumo,
   applyCriarCard,
   applyCriarLista,
   applyMoverCard,
@@ -62,5 +63,15 @@ describe("jangada MCP snapshot tools", () => {
     expect(again.repoId).toBe(first.repoId);
     expect(first.snapshot.board.gitRepos).toHaveLength(1);
     expect(compactBoard(first.snapshot).board.gitRepos[0].url).toContain("jangada.git");
+  });
+
+  it("stores and returns an executive summary on the board", () => {
+    const { snapshot: next, executiveSummary } = applyAtualizarResumo(snapshot(), {
+      resumo: "  Situação estável.\r\nPrioridade: piloto.  ",
+    });
+    expect(executiveSummary).toBe("Situação estável.\nPrioridade: piloto.");
+    expect(compactBoard(next).board.executiveSummary).toBe(
+      "Situação estável.\nPrioridade: piloto.",
+    );
   });
 });

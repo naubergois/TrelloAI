@@ -61,6 +61,7 @@ import {
   shiftCalendarDay,
 } from "./calendar-report";
 import { extractMeetingUrlFromText, sanitizeMeetingUrl } from "./meeting-links";
+import { sanitizeExecutiveSummary } from "./executive-summary";
 
 function normalizeCalendarEvent(event: TeamCalendarEvent): TeamCalendarEvent {
   const meetingUrl =
@@ -125,11 +126,13 @@ interface BoardState {
       cardThemeId?: BoardCardThemeId;
       backgroundImageUrl?: string | null;
       backgroundTint?: number;
+      executiveSummary?: string;
     },
   ) => string;
   setActiveBoard: (boardId: string) => void;
   renameBoard: (boardId: string, title: string) => void;
   updateBoardDescription: (boardId: string, description: string) => void;
+  updateBoardExecutiveSummary: (boardId: string, executiveSummary: string) => void;
   addBoardGitRepo: (boardId: string, url: string, label?: string) => string | null;
   removeBoardGitRepo: (boardId: string, repoId: string) => void;
   setBoardRiskReport: (boardId: string, report: Board["riskReport"]) => void;
@@ -386,6 +389,7 @@ export const useBoardStore = create<BoardState>()(
           id: boardId,
           title: title.trim() || "Novo board",
           description,
+          executiveSummary: sanitizeExecutiveSummary(appearance?.executiveSummary),
           listIds,
           memberIds,
           teamId: team ? team.id : null,
@@ -453,6 +457,22 @@ export const useBoardStore = create<BoardState>()(
               [boardId]: {
                 ...ensureBoardMembers(board),
                 description,
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          };
+        }),
+
+      updateBoardExecutiveSummary: (boardId, executiveSummary) =>
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+          return {
+            boards: {
+              ...state.boards,
+              [boardId]: {
+                ...ensureBoardMembers(board),
+                executiveSummary: sanitizeExecutiveSummary(executiveSummary),
                 updatedAt: new Date().toISOString(),
               },
             },

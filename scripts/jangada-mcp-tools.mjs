@@ -57,6 +57,7 @@ export function compactBoard(snapshot) {
       id: snapshot.board?.id,
       title: snapshot.board?.title,
       description: snapshot.board?.description,
+      executiveSummary: snapshot.board?.executiveSummary || "",
       updatedAt: snapshot.updatedAt,
       gitRepos: (snapshot.board?.gitRepos || []).map((repo) => ({
         id: repo.id,
@@ -233,6 +234,16 @@ export function applyAdicionarGit(snapshot, args) {
   return { snapshot: next, repoId: id };
 }
 
+export function applyAtualizarResumo(snapshot, args) {
+  const text = String(args.resumo ?? args.executive_summary ?? args.executiveSummary ?? "");
+  const next = clone(snapshot);
+  next.board.executiveSummary = text.replace(/\r\n/g, "\n").trim().slice(0, 8000);
+  const ts = nowIso();
+  next.board.updatedAt = ts;
+  next.updatedAt = ts;
+  return { snapshot: next, executiveSummary: next.board.executiveSummary };
+}
+
 export function listTools() {
   const boardId = { type: "string", description: "Id do board (default: asesi)" };
   const listId = { type: "string", description: "Id da lista" };
@@ -377,6 +388,22 @@ export function listTools() {
         required: ["url"],
       },
     },
+    {
+      name: "jangada_atualizar_resumo",
+      description:
+        "Guarda o resumo executivo do board (texto livre para a liderança: situação, prioridades e riscos).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          board_id: boardId,
+          resumo: {
+            type: "string",
+            description: "Texto do resumo executivo (máx. 8000 caracteres). Vazio apaga o resumo.",
+          },
+        },
+        required: ["resumo"],
+      },
+    },
   ];
 }
 
@@ -407,6 +434,7 @@ export async function callTool(name, args, store) {
     else if (name === "jangada_mover_card") result = applyMoverCard(snapshot, args);
     else if (name === "jangada_criar_requisito") result = applyCriarRequisito(snapshot, args);
     else if (name === "jangada_adicionar_git") result = applyAdicionarGit(snapshot, args);
+    else if (name === "jangada_atualizar_resumo") result = applyAtualizarResumo(snapshot, args);
     else return { status: "erro", erro: `Tool desconhecida: ${name}` };
 
     await store.saveBoard(result.snapshot);

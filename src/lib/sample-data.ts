@@ -178,6 +178,8 @@ export function createSampleWorkspace() {
     id: boardId,
     title: "Jangada — ASESI",
     description: "Kanban com gestor virtual diário, IA e reuniões da equipe.",
+    executiveSummary:
+      "Jangada — resumo executivo\n\nKanban colaborativo com Maya (gestor virtual), dailies e reuniões da equipe. Objetivo do piloto: cards, requisitos e acompanhamento diário no mesmo board.",
     listIds: [todoId, doingId, doneId],
     memberIds: [youId, anaId, leoId],
     teamId,

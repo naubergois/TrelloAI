@@ -35,6 +35,8 @@ import {
 } from "@/lib/board-hierarchy";
 import { extractBoardIndicators } from "@/lib/board-indicators";
 import { BoardIndicators } from "@/components/BoardIndicators";
+import { ExecutiveSummaryField } from "@/components/BoardExecutiveSummary";
+import { executiveSummaryExcerpt } from "@/lib/executive-summary";
 import { useVisibleBoards } from "@/lib/use-visible-boards";
 import {
   DEFAULT_BACKGROUND_ID,
@@ -65,6 +67,7 @@ export function BoardsHome() {
   const updateBoardAppearance = useBoardStore((s) => s.updateBoardAppearance);
   const renameBoard = useBoardStore((s) => s.renameBoard);
   const updateBoardDescription = useBoardStore((s) => s.updateBoardDescription);
+  const updateBoardExecutiveSummary = useBoardStore((s) => s.updateBoardExecutiveSummary);
   const assignTeamToBoard = useBoardStore((s) => s.assignTeamToBoard);
   const assignBoardParent = useBoardStore((s) => s.assignBoardParent);
   const setBoardLevel = useBoardStore((s) => s.setBoardLevel);
@@ -82,6 +85,7 @@ export function BoardsHome() {
   const [boardQuery, setBoardQuery] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [executiveSummary, setExecutiveSummary] = useState("");
   const [bgId, setBgId] = useState<BoardBackgroundId>(DEFAULT_BACKGROUND_ID);
   const [designId, setDesignId] = useState<BoardDesignId>(DEFAULT_DESIGN_ID);
   const [cardThemeId, setCardThemeId] = useState<BoardCardThemeId>(DEFAULT_CARD_THEME_ID);
@@ -111,6 +115,7 @@ export function BoardsHome() {
       return (
         b.title.toLowerCase().includes(q) ||
         (b.description || "").toLowerCase().includes(q) ||
+        (b.executiveSummary || "").toLowerCase().includes(q) ||
         teamName.toLowerCase().includes(q) ||
         parentTitle.toLowerCase().includes(q) ||
         BOARD_LEVEL_LABELS[b.level].toLowerCase().includes(q)
@@ -203,9 +208,11 @@ export function BoardsHome() {
       teamId: linkedTeamId,
       level: boardLevel,
       parentBoardId: parentBoardId || null,
+      executiveSummary,
     });
     setTitle("");
     setDescription("");
+    setExecutiveSummary("");
     setTeamId("");
     setBoardLevelState("project");
     setParentBoardId("");
@@ -306,6 +313,16 @@ export function BoardsHome() {
                 <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
                   {asesiBoard.description}
                 </p>
+                {asesiBoard.executiveSummary ? (
+                  <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-white/85">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--accent)]">
+                      Resumo executivo
+                    </span>
+                    <span className="mt-1 block">
+                      {executiveSummaryExcerpt(asesiBoard.executiveSummary, 360)}
+                    </span>
+                  </p>
+                ) : null}
                 {indicatorsByBoard[ASESI_BOARD_ID] ? (
                   <div className="mt-4 max-w-lg">
                     <BoardIndicators
@@ -426,6 +443,14 @@ export function BoardsHome() {
                       {board.description ? (
                         <p className="mt-1 line-clamp-2 text-xs text-white/85">
                           {board.description}
+                        </p>
+                      ) : null}
+                      {board.executiveSummary ? (
+                        <p className="mt-1.5 line-clamp-3 text-[11px] leading-snug text-white/80">
+                          <span className="font-semibold uppercase tracking-wide text-white/70">
+                            Resumo ·{" "}
+                          </span>
+                          {executiveSummaryExcerpt(board.executiveSummary, 180)}
                         </p>
                       ) : null}
                       <p className="mt-2 text-[11px] text-white/75">
@@ -560,9 +585,13 @@ export function BoardsHome() {
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="mt-1 w-full rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)]"
-                  placeholder="Opcional"
+                  placeholder="Opcional — frase curta"
                 />
               </label>
+              <ExecutiveSummaryField
+                value={executiveSummary}
+                onChange={setExecutiveSummary}
+              />
 
               <label className="block text-xs text-[var(--muted)]">
                 Nível hierárquico
@@ -712,6 +741,12 @@ export function BoardsHome() {
                   className="mt-1 w-full rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)]"
                 />
               </label>
+              <ExecutiveSummaryField
+                value={customizeBoard.executiveSummary || ""}
+                onChange={(value) =>
+                  updateBoardExecutiveSummary(customizeBoard.id, value)
+                }
+              />
 
               <label className="block text-xs text-[var(--muted)]">
                 Nível hierárquico

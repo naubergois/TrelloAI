@@ -49,6 +49,7 @@ import {
 } from "@/lib/board-filters";
 import { extractBoardIndicators } from "@/lib/board-indicators";
 import { BoardIndicators } from "@/components/BoardIndicators";
+import { BoardExecutiveSummary } from "@/components/BoardExecutiveSummary";
 import { useVisibleBoards } from "@/lib/use-visible-boards";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -587,6 +588,16 @@ export function BoardShell({
                   }}
                 />
               </div>
+            ) : null}
+            {boardIndicators ? (
+              <BoardExecutiveSummary
+                boardId={board.id}
+                title={board.title}
+                description={board.description}
+                summary={board.executiveSummary}
+                stats={boardIndicators}
+                descendantCount={descendantIds.length}
+              />
             ) : null}
             <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2">
               <div className="min-w-0 flex-1">

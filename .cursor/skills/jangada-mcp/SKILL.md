@@ -17,6 +17,7 @@ Qualquer pedido para criar/mover/atualizar cards, listas ou requisitos no Jangad
 - `jangada_listar_boards` / `jangada_ver_board` — leitura (`board_id` default `asesi`)
 - `jangada_criar_card` / `jangada_criar_cards` — escrita
 - `jangada_criar_lista`, `jangada_mover_card`, `jangada_atualizar_card`
+- `jangada_atualizar_resumo` — guarda o resumo executivo do board
 - `jangada_adicionar_git` — liga um repositório para a Maya comparar código vs kanban
 
 Liste o board antes de criar. Prefira `list_title` (ex.: Backlog) se não tiver o id da lista.

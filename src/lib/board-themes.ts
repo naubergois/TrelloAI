@@ -531,6 +531,8 @@ function clampTint(value?: number | null) {
 export function ensureBoardAppearance(board: Board): Board {
   return ensureBoardHierarchy({
     ...board,
+    executiveSummary:
+      typeof board.executiveSummary === "string" ? board.executiveSummary : "",
     memberIds: board.memberIds ?? [],
     teamId: board.teamId ?? null,
     gitRepos: Array.isArray(board.gitRepos) ? board.gitRepos : [],

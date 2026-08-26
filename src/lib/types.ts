@@ -163,6 +163,8 @@ export interface Board {
   id: string;
   title: string;
   description: string;
+  /** Texto livre para a liderança: situação, prioridades e riscos do board. */
+  executiveSummary?: string;
   listIds: string[];
   memberIds: string[];
   /** Equipe atribuída a este kanban (opcional) */
