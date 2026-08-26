@@ -5,6 +5,21 @@ export function mayaDayLogId(boardId: string, date: string) {
   return `${boardId}:${date}`;
 }
 
+/** Garante que a próxima mensagem fique depois da última, mesmo no mesmo milissegundo. */
+export function mayaMessageTimestamp(after?: string | null) {
+  const now = Date.now();
+  const prev = after ? Date.parse(after) : Number.NaN;
+  const ms = Number.isFinite(prev) && prev >= now ? prev + 1 : now;
+  return new Date(ms).toISOString();
+}
+
+export function compareMayaChatMessages(a: StandupChatMessage, b: StandupChatMessage) {
+  const byTime = a.createdAt.localeCompare(b.createdAt);
+  if (byTime !== 0) return byTime;
+  if (a.role !== b.role) return a.role === "member" ? -1 : 1;
+  return a.id.localeCompare(b.id);
+}
+
 export function mergeMayaMessages(
   existing: StandupChatMessage[],
   incoming: StandupChatMessage[],
@@ -16,10 +31,7 @@ export function mergeMayaMessages(
   for (const msg of incoming) {
     if (msg?.id && msg.content?.trim()) byId.set(msg.id, msg);
   }
-  return [...byId.values()].sort((a, b) => {
-    const byTime = a.createdAt.localeCompare(b.createdAt);
-    return byTime !== 0 ? byTime : a.id.localeCompare(b.id);
-  });
+  return [...byId.values()].sort(compareMayaChatMessages);
 }
 
 export function upsertMayaDayLog(

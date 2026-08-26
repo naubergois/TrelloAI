@@ -6,6 +6,7 @@ import { nanoid } from "nanoid";
 import type {
   Board,
   Card,
+  CardAttachment,
   KanbanActivity,
   LabelColor,
   List,
@@ -77,7 +78,7 @@ import {
   membersForSnapshot,
   syncCardAssignees,
 } from "./members";
-import { mergeMayaMessages, upsertMayaDayLog } from "./maya-chat";
+import { mergeMayaMessages, mayaDayLogId, mayaMessageTimestamp, upsertMayaDayLog } from "./maya-chat";
 
 function normalizeCalendarEvent(event: TeamCalendarEvent): TeamCalendarEvent {
   const meetingUrl =
@@ -246,6 +247,7 @@ interface BoardState {
         | "acceptanceCriteria"
         | "checklist"
         | "comments"
+        | "attachments"
         | "archived"
       >
     >,
@@ -255,6 +257,8 @@ interface BoardState {
   archiveCard: (cardId: string) => void;
   restoreCard: (cardId: string, listId?: string) => void;
   addCardComment: (cardId: string, body: string) => void;
+  addCardAttachment: (cardId: string, attachment: CardAttachment) => void;
+  removeCardAttachment: (cardId: string, attachmentId: string) => void;
   createRequirement: (input: {
     boardId: string;
     title: string;
@@ -436,6 +440,15 @@ function withStandupAndMayaLog(
       standup.chat ?? [],
     ),
   };
+}
+
+function pushMayaChat(
+  chat: StandupChatMessage[],
+  msg: Omit<StandupChatMessage, "createdAt">,
+) {
+  const createdAt = mayaMessageTimestamp(chat.at(-1)?.createdAt);
+  chat.push({ ...msg, createdAt });
+  return createdAt;
 }
 
 export const useBoardStore = create<BoardState>()(
@@ -1312,6 +1325,7 @@ export const useBoardStore = create<BoardState>()(
             acceptanceCriteria: extras.acceptanceCriteria ?? "",
             checklist: extras.checklist ?? [],
             comments: extras.comments ?? [],
+            attachments: extras.attachments ?? [],
             archived: extras.archived ?? false,
             createdAt: now,
             updatedAt: now,
@@ -1496,6 +1510,64 @@ export const useBoardStore = create<BoardState>()(
             kind: "card_comment",
             cardId,
             note: text.slice(0, 80),
+          });
+        }
+      },
+
+      addCardAttachment: (cardId, attachment) => {
+        let boardId: string | null = null;
+        set((state) => {
+          const card = state.cards[cardId];
+          if (!card) return state;
+          boardId = state.lists[card.listId]?.boardId ?? null;
+          const current = card.attachments || [];
+          if (current.some((item) => item.id === attachment.id)) return state;
+          return {
+            cards: {
+              ...state.cards,
+              [cardId]: {
+                ...card,
+                attachments: [...current, attachment],
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          };
+        });
+        if (boardId) {
+          get().recordActivity({
+            boardId,
+            kind: "card_update",
+            cardId,
+            note: `anexo ${attachment.name}`,
+          });
+        }
+      },
+
+      removeCardAttachment: (cardId, attachmentId) => {
+        let boardId: string | null = null;
+        set((state) => {
+          const card = state.cards[cardId];
+          if (!card) return state;
+          boardId = state.lists[card.listId]?.boardId ?? null;
+          const current = card.attachments || [];
+          if (!current.some((item) => item.id === attachmentId)) return state;
+          return {
+            cards: {
+              ...state.cards,
+              [cardId]: {
+                ...card,
+                attachments: current.filter((item) => item.id !== attachmentId),
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          };
+        });
+        if (boardId) {
+          get().recordActivity({
+            boardId,
+            kind: "card_update",
+            cardId,
+            note: "anexo removido",
           });
         }
       },
@@ -2120,7 +2192,7 @@ export const useBoardStore = create<BoardState>()(
                 role: "manager",
                 memberId: firstId,
                 content: `${memberName}, ${questions[0]}`,
-                createdAt: nowFix,
+                createdAt: mayaMessageTimestamp(nowFix),
               });
             }
             const migrated: StandupSession = {
@@ -2185,7 +2257,7 @@ export const useBoardStore = create<BoardState>()(
             role: "manager",
             memberId: firstMemberId,
             content: `${firstName}, ${questions[0]}`,
-            createdAt: now,
+            createdAt: mayaMessageTimestamp(now),
           });
         }
 
@@ -2280,14 +2352,12 @@ export const useBoardStore = create<BoardState>()(
           boardIdForActivity = standup.boardId;
           memberForActivity = targetMemberId;
 
-          const now = new Date().toISOString();
           const chat = [...(standup.chat ?? [])];
-          chat.push({
+          const now = pushMayaChat(chat, {
             id: nanoid(),
             role: "member",
             memberId: targetMemberId,
             content: trimmed,
-            createdAt: now,
           });
 
           const field =
@@ -2313,12 +2383,11 @@ export const useBoardStore = create<BoardState>()(
                 : c,
             );
             const memberName = state.members[targetMemberId]?.name || "você";
-            chat.push({
+            pushMayaChat(chat, {
               id: nanoid(),
               role: "manager",
               memberId: targetMemberId,
               content: `Obrigado, ${memberName}! Anotei seu status.`,
-              createdAt: now,
             });
 
             nextMemberIndex = memberIndex + 1;
@@ -2328,31 +2397,28 @@ export const useBoardStore = create<BoardState>()(
               const nextId = memberIds[nextMemberIndex];
               const nextName = state.members[nextId]?.name || "próximo";
               awaitingReplyFrom = nextId;
-              chat.push({
+              pushMayaChat(chat, {
                 id: nanoid(),
                 role: "manager",
                 memberId: nextId,
                 content: `${nextName}, ${questions[0]}`,
-                createdAt: now,
               });
             } else {
               awaitingReplyFrom = null;
-              chat.push({
+              pushMayaChat(chat, {
                 id: nanoid(),
                 role: "manager",
                 memberId: null,
                 content: `Pronto — falei com todo o time. Quando quiser, peço para processar a daily e eu crio/atualizo os cards no board.`,
-                createdAt: now,
               });
             }
           } else {
             const memberName = state.members[targetMemberId]?.name || "você";
-            chat.push({
+            pushMayaChat(chat, {
               id: nanoid(),
               role: "manager",
               memberId: targetMemberId,
               content: `${memberName}, ${questions[nextQuestionIndex]}`,
-              createdAt: now,
             });
             awaitingReplyFrom = targetMemberId;
           }
@@ -2400,21 +2466,18 @@ export const useBoardStore = create<BoardState>()(
           const targetMemberId = input.memberId;
           boardIdForActivity = standup.boardId;
 
-          const now = new Date().toISOString();
           const chat = [...(standup.chat ?? [])];
-          chat.push({
+          const now = pushMayaChat(chat, {
             id: nanoid(),
             role: "member",
             memberId: targetMemberId,
             content: trimmed,
-            createdAt: now,
           });
-          chat.push({
+          pushMayaChat(chat, {
             id: nanoid(),
             role: "manager",
             memberId: targetMemberId,
             content: input.managerMessage,
-            createdAt: now,
           });
 
           let checkIns = standup.checkIns.map((c) => {
@@ -2447,22 +2510,20 @@ export const useBoardStore = create<BoardState>()(
               const nextId = memberIds[nextMemberIndex];
               const nextName = state.members[nextId]?.name || "próximo";
               awaitingReplyFrom = nextId;
-              chat.push({
+              pushMayaChat(chat, {
                 id: nanoid(),
                 role: "manager",
                 memberId: nextId,
                 content: `${nextName}, ${questions[0]}`,
-                createdAt: now,
               });
             } else {
               awaitingReplyFrom = null;
-              chat.push({
+              pushMayaChat(chat, {
                 id: nanoid(),
                 role: "manager",
                 memberId: null,
                 content:
                   "Pronto — falei com todo o time. Quando quiser, peço para processar a daily e eu crio/atualizo os cards no board com a IA.",
-                createdAt: now,
               });
             }
           } else if (input.advanceQuestion) {
@@ -2499,19 +2560,16 @@ export const useBoardStore = create<BoardState>()(
         set((state) => {
           const standup = state.standups[standupId];
           if (!standup) return state;
-          const now = new Date().toISOString();
+          const chat = [...(standup.chat ?? [])];
+          const now = pushMayaChat(chat, {
+            id: nanoid(),
+            role: "manager",
+            memberId,
+            content: text,
+          });
           const nextStandup: StandupSession = {
             ...standup,
-            chat: [
-              ...(standup.chat ?? []),
-              {
-                id: nanoid(),
-                role: "manager" as const,
-                memberId,
-                content: text,
-                createdAt: now,
-              },
-            ],
+            chat,
             updatedAt: now,
           };
           return withStandupAndMayaLog(state, nextStandup);
@@ -2522,19 +2580,22 @@ export const useBoardStore = create<BoardState>()(
         const text = input.content.trim();
         if (!text) return;
         const date = calendarDayKey();
-        const now = new Date().toISOString();
-        const msg: StandupChatMessage = {
-          id: nanoid(),
-          role: input.role,
-          memberId: input.memberId ?? null,
-          content: text,
-          createdAt: now,
-        };
         set((state) => {
-          const logs = upsertMayaDayLog(state.mayaLogs || {}, boardId, date, [msg]);
+          const log = state.mayaLogs?.[mayaDayLogId(boardId, date)];
           const openStandup = Object.values(state.standups).find(
             (s) => s.boardId === boardId && s.date === date && s.status === "open",
           );
+          const last =
+            log?.messages?.at(-1)?.createdAt || openStandup?.chat?.at(-1)?.createdAt || null;
+          const now = mayaMessageTimestamp(last);
+          const msg: StandupChatMessage = {
+            id: nanoid(),
+            role: input.role,
+            memberId: input.memberId ?? null,
+            content: text,
+            createdAt: now,
+          };
+          const logs = upsertMayaDayLog(state.mayaLogs || {}, boardId, date, [msg]);
           if (!openStandup) return { mayaLogs: logs };
           return {
             mayaLogs: logs,

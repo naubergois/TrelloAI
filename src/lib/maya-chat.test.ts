@@ -5,6 +5,7 @@ import {
   formatMayaChatTranscript,
   listMayaChatDays,
   mayaChatFileName,
+  mayaMessageTimestamp,
   mergeMayaMessages,
   upsertMayaDayLog,
 } from "./maya-chat";
@@ -122,5 +123,30 @@ describe("Maya day chat history", () => {
     expect(text).toMatch(/Maya · Ana Costa/);
     expect(text).toMatch(/Fechei o convite/);
     expect(mayaChatFileName("ASESI / CGE", "2026-08-25")).toBe("maya-asesi-cge-2026-08-25.txt");
+  });
+
+  it("keeps the member question before Maya when timestamps collide", () => {
+    const merged = mergeMayaMessages(
+      [],
+      [
+        msg({
+          id: "z-maya",
+          role: "manager",
+          content: "Atribuí o card ao Charles.",
+          createdAt: "2026-08-26T12:01:00.000Z",
+        }),
+        msg({
+          id: "a-user",
+          content: "oi",
+          createdAt: "2026-08-26T12:01:00.000Z",
+        }),
+      ],
+    );
+    expect(merged.map((m) => m.role)).toEqual(["member", "manager"]);
+  });
+
+  it("stamps the next message after the previous one", () => {
+    const first = "2026-08-26T12:01:00.000Z";
+    expect(mayaMessageTimestamp(first) > first).toBe(true);
   });
 });
