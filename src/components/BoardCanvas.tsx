@@ -17,6 +17,7 @@ import { Plus } from "lucide-react";
 import { useBoardStore } from "@/lib/store";
 import { ListColumn } from "@/components/ListColumn";
 import { CardItem } from "@/components/CardItem";
+import { BoardHScroll } from "@/components/BoardHScroll";
 import type { BoardCardFilter } from "@/lib/board-filters";
 
 export function BoardCanvas({
@@ -107,8 +108,8 @@ export function BoardCanvas({
         onDragOver={onDragOver}
         onDragEnd={onDragEnd}
       >
-        <div
-          className="board-h-scroll board-canvas-scroll flex items-start overflow-x-auto"
+        <BoardHScroll
+          className="board-canvas-scroll items-start"
           style={{ gap: "var(--board-gap, 0.75rem)" }}
           onWheel={(event) => {
             if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
@@ -153,7 +154,7 @@ export function BoardCanvas({
             </button>
           </form>
           <div className="board-h-scroll-end" aria-hidden="true" />
-        </div>
+        </BoardHScroll>
 
         <DragOverlay>
           {activeCard ? (

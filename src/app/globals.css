@@ -150,13 +150,22 @@ a,
   align-items: flex-start;
 }
 
-/* Horizontal scroller: breathing room after the last item + a usable track */
+/* Horizontal scroller: breathing room after the last item */
 .board-h-scroll {
-  padding-bottom: 0.9rem;
+  padding-bottom: 0.35rem;
   scroll-padding-inline: 1rem;
   overscroll-behavior-x: contain;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 209, 0, 0.55) rgba(255, 255, 255, 0.1);
+}
+
+.board-h-scroll-pane {
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.board-h-scroll-pane::-webkit-scrollbar {
+  display: none;
 }
 
 .board-h-scroll-end {
@@ -166,28 +175,6 @@ a,
   pointer-events: none;
 }
 
-.board-h-scroll::-webkit-scrollbar {
-  height: 10px;
-}
-
-.board-h-scroll::-webkit-scrollbar-track {
-  margin-inline: 0.35rem;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 999px;
-}
-
-.board-h-scroll::-webkit-scrollbar-thumb {
-  background: linear-gradient(90deg, rgba(255, 209, 0, 0.45), rgba(255, 255, 255, 0.4));
-  border-radius: 999px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-
-.board-h-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 209, 0, 0.85);
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
 
 .board-theme .board-list-column header {
   border-color: var(--board-list-header-border);
