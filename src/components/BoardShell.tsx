@@ -49,7 +49,6 @@ import {
 } from "@/lib/board-filters";
 import { extractBoardIndicators } from "@/lib/board-indicators";
 import { BoardIndicators } from "@/components/BoardIndicators";
-import { ChildBoardMetrics } from "@/components/ChildBoardMetrics";
 import { useVisibleBoards } from "@/lib/use-visible-boards";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -470,15 +469,20 @@ export function BoardShell({
                   </p>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => setEditingTitle(true)}
-                  className="group/title flex max-w-full items-start gap-2 rounded-xl text-left transition hover:bg-white/5"
-                >
+                <div className="flex max-w-full items-start gap-2">
                   <div className="min-w-0">
-                    <p className="truncate font-[family-name:var(--font-display)] text-xl text-white sm:text-2xl">
-                      {board.title}
-                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setEditingTitle(true)}
+                      className="group/title flex max-w-full items-start gap-2 rounded-xl text-left transition hover:bg-white/5"
+                    >
+                      <p className="truncate font-[family-name:var(--font-display)] text-xl text-white sm:text-2xl">
+                        {board.title}
+                      </p>
+                      <span className="mt-1.5 shrink-0 rounded-lg border border-[var(--line)] p-1.5 text-[var(--muted)] opacity-100 transition group-hover/title:border-[var(--accent)]/40 group-hover/title:text-[var(--accent)] sm:opacity-70">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </span>
+                    </button>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <span
                         className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${BOARD_LEVEL_STYLES[board.level]}`}
@@ -486,17 +490,13 @@ export function BoardShell({
                         {BOARD_LEVEL_LABELS[board.level]}
                       </span>
                       {ancestors.map((a) => (
-                        <button
+                        <Link
                           key={a.id}
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/board/${a.id}`);
-                          }}
+                          href={`/board/${a.id}`}
                           className="truncate text-[11px] text-white/70 hover:text-white hover:underline"
                         >
                           {a.title}
-                        </button>
+                        </Link>
                       ))}
                       {childBoards.length > 0 ? (
                         <span className="text-[11px] text-white/55">
@@ -511,10 +511,7 @@ export function BoardShell({
                       </p>
                     ) : null}
                   </div>
-                  <span className="mt-1.5 shrink-0 rounded-lg border border-[var(--line)] p-1.5 text-[var(--muted)] opacity-100 transition group-hover/title:border-[var(--accent)]/40 group-hover/title:text-[var(--accent)] sm:opacity-70">
-                    <Pencil className="h-3.5 w-3.5" />
-                  </span>
-                </button>
+                </div>
               )}
             </div>
 
@@ -589,9 +586,6 @@ export function BoardShell({
                     });
                   }}
                 />
-                {childBoards.length > 0 ? (
-                  <ChildBoardMetrics parentId={board.id} />
-                ) : null}
               </div>
             ) : null}
             <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2">
