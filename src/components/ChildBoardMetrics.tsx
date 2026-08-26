@@ -51,7 +51,7 @@ function ChildRow({
   return (
     <Link
       href={`/board/${board.id}`}
-      className="grid grid-cols-[minmax(0,1.4fr)_minmax(5.5rem,1fr)_repeat(4,minmax(2.4rem,auto))] items-center gap-2 rounded-xl px-2 py-1.5 transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+      className="grid grid-cols-[minmax(0,1.4fr)_minmax(5.5rem,1fr)_repeat(4,minmax(2.4rem,auto))] items-center gap-2 rounded-lg px-2 py-1 transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
     >
       <span className="flex min-w-0 items-center gap-1.5">
         <span className="truncate text-sm font-medium text-white">
@@ -114,14 +114,14 @@ export function ChildBoardMetrics({ parentId }: { parentId: string }) {
   if (rows.length === 0) return null;
 
   return (
-    <div className="mt-3 border-t border-white/10 pt-2.5">
-      <div className="mb-1.5 flex items-baseline justify-between gap-2 px-1">
+    <div className="mt-2 border-t border-white/10 pt-2">
+      <div className="mb-1 flex items-baseline justify-between gap-2 px-1">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-white/60">
           Métricas dos boards filhos
         </p>
-        <p className="text-[10px] text-white/45">Clique na linha para abrir</p>
+        <p className="text-[10px] text-white/45">Clique para abrir</p>
       </div>
-      <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(5.5rem,1fr)_repeat(4,minmax(2.4rem,auto))] gap-2 px-2 pb-1 text-[9px] font-semibold uppercase tracking-wide text-white/40">
+      <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(5.5rem,1fr)_repeat(4,minmax(2.4rem,auto))] gap-2 px-2 pb-0.5 text-[9px] font-semibold uppercase tracking-wide text-white/40">
         <span>Projeto</span>
         <span>Progresso</span>
         <span>Curso</span>
@@ -129,7 +129,7 @@ export function ChildBoardMetrics({ parentId }: { parentId: string }) {
         <span>Bloq.</span>
         <span>Alta</span>
       </div>
-      <div className="board-scroll max-h-44 overflow-y-auto pr-0.5">
+      <div>
         {rows.map(({ child, stats }) => (
           <ChildRow key={child.id} board={child} stats={stats} />
         ))}

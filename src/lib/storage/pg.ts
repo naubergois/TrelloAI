@@ -242,42 +242,6 @@ export async function pgAddMembership(email: string, boardId: string) {
   return true;
 }
 
-export async function pgListMembershipIds(email: string): Promise<string[]> {
-  const p = await getPool();
-  if (!p) return [];
-  const key = email.trim().toLowerCase();
-  const res = await p.query<{ board_id: string }>(
-    "SELECT board_id FROM board_memberships WHERE email = $1 ORDER BY created_at ASC",
-    [key],
-  );
-  return res.rows.map((row) => row.board_id);
-}
-
-export async function pgSetMemberships(email: string, boardIds: string[]) {
-  const p = await getPool();
-  if (!p) return false;
-  const key = email.trim().toLowerCase();
-  const client = await p.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query("DELETE FROM board_memberships WHERE email = $1", [key]);
-    for (const boardId of boardIds) {
-      await client.query(
-        `INSERT INTO board_memberships (email, board_id) VALUES ($1, $2)
-         ON CONFLICT DO NOTHING`,
-        [key, boardId],
-      );
-    }
-    await client.query("COMMIT");
-  } catch (err) {
-    await client.query("ROLLBACK");
-    throw err;
-  } finally {
-    client.release();
-  }
-  return true;
-}
-
 export async function pgGetVisibility(email: string): Promise<string[] | null> {
   const p = await getPool();
   if (!p) return null;

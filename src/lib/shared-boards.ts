@@ -8,7 +8,6 @@ import {
   pgGetVisibility,
   pgListAllBoards,
   pgListBoardsForEmail,
-  pgListMembershipIds,
   pgSaveBoard,
   pgSetVisibility,
 } from "@/lib/storage/pg";
@@ -94,14 +93,6 @@ export async function listAllSharedBoards(): Promise<BoardSnapshot[]> {
     if (pgBoards.length > 0) return pgBoards;
   }
   return Object.values(readStore().boards);
-}
-
-export async function listMembershipIds(email: string): Promise<string[]> {
-  const key = email.trim().toLowerCase();
-  if (isPgConfigured()) {
-    return pgListMembershipIds(key);
-  }
-  return readStore().memberships[key] || [];
 }
 
 export async function listBoardsForEmail(email: string): Promise<BoardSnapshot[]> {
@@ -202,8 +193,7 @@ export async function listBoardsVisibleToUser(
   );
   return all.filter((snapshot) => {
     if (snapshotVisibleToEmail(snapshot, email)) return true;
-    if (snapshot.board.teamId) return false;
-    return membershipIds.has(snapshot.board.id);
+    return membershipIds.has(snapshot.board.id) && !snapshot.board.teamId;
   });
 }
 

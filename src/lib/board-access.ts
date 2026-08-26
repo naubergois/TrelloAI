@@ -16,7 +16,7 @@ export function findMemberByEmail(
   );
 }
 
-/** Boards with a team are visible only to that team's members. */
+/** Team members see every board of that team; direct board members see that board. */
 export function memberCanSeeBoard(
   board: Board,
   memberId: string | null | undefined,
@@ -27,7 +27,7 @@ export function memberCanSeeBoard(
   if (!memberId) return false;
   if (board.teamId) {
     const team = teams[board.teamId];
-    return Boolean(team?.memberIds.includes(memberId));
+    if (team?.memberIds.includes(memberId)) return true;
   }
   return (board.memberIds || []).includes(memberId);
 }
@@ -72,10 +72,9 @@ export function emailIsBoardMember(snapshot: BoardSnapshot, email: string): bool
 }
 
 /**
- * Team-linked boards: only that team's people.
- * Boards without a team: board members (membership row is a fallback at the caller).
+ * Team members see every board linked to that team.
+ * Direct board members (invite) see that board even if they are not on the team.
  */
 export function snapshotVisibleToEmail(snapshot: BoardSnapshot, email: string): boolean {
-  if (snapshot.board.teamId) return emailIsOnBoardTeam(snapshot, email);
-  return emailIsBoardMember(snapshot, email);
+  return emailIsOnBoardTeam(snapshot, email) || emailIsBoardMember(snapshot, email);
 }

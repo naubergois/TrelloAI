@@ -115,9 +115,9 @@ describe("snapshotVisibleToEmail", () => {
     expect(emailIsOnBoardTeam(snapshot, "ANA@cge.ce.gov.br")).toBe(true);
   });
 
-  it("does not leak a board just because the person is in members of another team", () => {
+  it("does not show another team's board unless the person is a member of that board", () => {
     const other = snap({
-      board: board({ id: "jangada", teamId: "team-jangada", memberIds: ["bia", "ana"] }),
+      board: board({ id: "jangada", teamId: "team-jangada", memberIds: ["bia"] }),
       teams: { "team-jangada": jangada },
       members: {
         ana: member({ id: "ana", email: "ana@cge.ce.gov.br" }),
@@ -125,5 +125,18 @@ describe("snapshotVisibleToEmail", () => {
       },
     });
     expect(snapshotVisibleToEmail(other, "ana@cge.ce.gov.br")).toBe(false);
+    expect(snapshotVisibleToEmail(other, "bia@cge.ce.gov.br")).toBe(true);
+  });
+
+  it("keeps a direct board invite even when the person is not on the team", () => {
+    const invited = snap({
+      board: board({ id: "jangada", teamId: "team-jangada", memberIds: ["bia", "ana"] }),
+      teams: { "team-jangada": jangada },
+      members: {
+        ana: member({ id: "ana", email: "ana@cge.ce.gov.br" }),
+        bia: member({ id: "bia", email: "bia@cge.ce.gov.br" }),
+      },
+    });
+    expect(snapshotVisibleToEmail(invited, "ana@cge.ce.gov.br")).toBe(true);
   });
 });

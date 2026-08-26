@@ -14,7 +14,6 @@ import {
   Users,
   Video,
   Trash2,
-  ArrowRight,
 } from "lucide-react";
 import { useBoardStore } from "@/lib/store";
 import { boardThemeStyle } from "@/lib/board-themes";
@@ -90,7 +89,7 @@ export function BoardShell({
   const standups = useBoardStore((s) => s.standups);
   const managers = useBoardStore((s) => s.managers);
 
-  const [panel, setPanel] = useState<SidePanel>("manager");
+  const [panel, setPanel] = useState<SidePanel>(null);
   const [aiChatOpen, setAiChatOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -505,10 +504,12 @@ export function BoardShell({
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-0.5 hidden truncate text-xs text-[var(--muted)] sm:block">
-                      {board.description || "Clique para editar nome e descrição"}
-                      {managers[board.id] ? ` · ${managers[board.id].name}` : ""}
-                    </p>
+                    {childBoards.length === 0 ? (
+                      <p className="mt-0.5 hidden truncate text-xs text-[var(--muted)] sm:block">
+                        {board.description || "Clique para editar nome e descrição"}
+                        {managers[board.id] ? ` · ${managers[board.id].name}` : ""}
+                      </p>
+                    ) : null}
                   </div>
                   <span className="mt-1.5 shrink-0 rounded-lg border border-[var(--line)] p-1.5 text-[var(--muted)] opacity-100 transition group-hover/title:border-[var(--accent)]/40 group-hover/title:text-[var(--accent)] sm:opacity-70">
                     <Pencil className="h-3.5 w-3.5" />
@@ -552,27 +553,18 @@ export function BoardShell({
             </select>
           </div>
 
-          {childBoards.length > 0 ? (
-            <div className="mb-2 flex shrink-0 items-center gap-1.5 overflow-x-auto px-1 pb-0.5">
-              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-white/50">
-                Abrir
-              </span>
-              {childBoards.map((child) => (
-                <Link
-                  key={child.id}
-                  href={`/board/${child.id}`}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/20 bg-black/25 px-2.5 py-1 text-[11px] font-medium text-white/90 transition hover:border-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--accent-on)]"
-                >
-                  {child.title}
-                  <ArrowRight className="h-3 w-3 opacity-70" />
-                </Link>
-              ))}
-            </div>
-          ) : null}
-
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-2 sm:px-3">
+          <div
+            data-board-page-scroll={
+              canvasView === "all" && descendantIds.length > 0 ? "true" : undefined
+            }
+            className={`flex min-h-0 flex-1 flex-col px-2 sm:px-3 ${
+              canvasView === "all" && descendantIds.length > 0
+                ? "overflow-y-auto overscroll-contain"
+                : "overflow-hidden"
+            }`}
+          >
             {boardIndicators ? (
-              <div className="mb-2 shrink-0 rounded-2xl border border-white/15 bg-black/20 px-3 py-2 sm:mb-3">
+              <div className="mb-2 shrink-0 rounded-2xl border border-white/15 bg-black/20 px-3 py-1.5">
                 <BoardIndicators
                   stats={boardIndicators}
                   variant="full"
@@ -602,56 +594,64 @@ export function BoardShell({
                 ) : null}
               </div>
             ) : null}
-            <BoardFilterBar
-              filter={cardFilter}
-              onChange={setCardFilter}
-              members={boardMembers}
-              matchCount={matchCount}
-              totalCount={totalCount}
-            />
-            {descendantIds.length > 0 ? (
-              <div className="mb-2 flex shrink-0 gap-1 rounded-xl border border-white/15 bg-black/15 p-0.5">
-                <button
-                  type="button"
-                  onClick={() => setCanvasView("all")}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                    canvasView === "all"
-                      ? "bg-white text-[#0079bf]"
-                      : "text-white/70 hover:text-white"
-                  }`}
-                >
-                  Local + inferiores
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCanvasView("local")}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                    canvasView === "local"
-                      ? "bg-white text-[#0079bf]"
-                      : "text-white/70 hover:text-white"
-                  }`}
-                >
-                  Só este board
-                </button>
+            <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <BoardFilterBar
+                  filter={cardFilter}
+                  onChange={setCardFilter}
+                  members={boardMembers}
+                  matchCount={matchCount}
+                  totalCount={totalCount}
+                />
               </div>
-            ) : null}
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              {descendantIds.length > 0 ? (
+                <div className="flex shrink-0 gap-1 rounded-xl border border-white/15 bg-black/15 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setCanvasView("all")}
+                    className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
+                      canvasView === "all"
+                        ? "bg-white text-[#0079bf]"
+                        : "text-white/70 hover:text-white"
+                    }`}
+                  >
+                    Local + inferiores
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCanvasView("local")}
+                    className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
+                      canvasView === "local"
+                        ? "bg-white text-[#0079bf]"
+                        : "text-white/70 hover:text-white"
+                    }`}
+                  >
+                    Só este board
+                  </button>
+                </div>
+              ) : null}
+            </div>
+            <div
+              className={
+                canvasView === "all" && descendantIds.length > 0
+                  ? "flex flex-col pb-8"
+                  : "flex min-h-0 flex-1 flex-col overflow-hidden"
+              }
+            >
               <div
                 className={
                   canvasView === "all" && descendantIds.length > 0
-                    ? "min-h-[11rem] max-h-[38%] shrink-0 overflow-hidden"
+                    ? "h-[min(58vh,36rem)] shrink-0 overflow-hidden"
                     : "min-h-0 flex-1 overflow-hidden"
                 }
               >
                 <BoardCanvas boardId={board.id} filter={cardFilter} />
               </div>
               {canvasView === "all" && descendantIds.length > 0 ? (
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                  <ConsolidatedBoardCanvas
-                    boardId={board.id}
-                    filter={cardFilter}
-                  />
-                </div>
+                <ConsolidatedBoardCanvas
+                  boardId={board.id}
+                  filter={cardFilter}
+                />
               ) : null}
             </div>
           </div>

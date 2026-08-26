@@ -112,7 +112,7 @@ export function BoardIndicators({
   }
 
   return (
-    <div className={variant === "full" ? "space-y-2" : "space-y-1.5"}>
+    <div className={variant === "full" ? "space-y-1.5" : "space-y-1"}>
       <div className="flex items-center gap-2">
         <StageBar stats={stats} />
         {stats.cards > 0 ? (
