@@ -19,7 +19,10 @@
  *   "PG_SCHEMA": "trelloai",
  *   "PG_SSL": "0",
  *   "AUTH_SECRET": "...",
- *   "DEEPSEEK_API_KEY": "..."
+ *   "DEEPSEEK_API_KEY": "...",
+ *   "ADMIN_EMAIL": "admin@cge.ce.gov.br",
+ *   "ADMIN_PASSWORD": "...",
+ *   "ADMIN_USERNAME": "admin"
  * }
  *
  * Campos que já estiverem definidos em process.env NÃO serão sobrescritos,

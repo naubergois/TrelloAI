@@ -19,9 +19,25 @@ export type BoardBackgroundId =
   | "graphite"
   | "aurora"
   | "ember"
-  | "slate";
+  | "slate"
+  | "sand"
+  | "lagoon"
+  | "grape"
+  | "coral";
 
 export type BoardDesignId = "classic" | "soft" | "compact" | "dense";
+
+export type BoardCardThemeId =
+  | "white"
+  | "cream"
+  | "dark"
+  | "green"
+  | "gold"
+  | "sky"
+  | "rose"
+  | "navy"
+  | "mint"
+  | "glass";
 
 export interface BoardBackground {
   id: BoardBackgroundId;
@@ -46,17 +62,6 @@ export interface BoardDesign {
     "--board-list-width": string;
   };
 }
-
-const BOARD_SURFACE_VARS = {
-  "--board-list-bg": "rgba(255, 255, 255, 0.14)",
-  "--board-list-border": "rgba(255, 255, 255, 0.22)",
-  "--board-list-header-border": "rgba(255, 255, 255, 0.14)",
-  "--board-card-bg": "#ffffff",
-  "--board-card-text": "#172b4d",
-  "--board-card-muted": "#5e6c84",
-  "--board-card-border": "rgba(9, 30, 66, 0.08)",
-  "--board-header-bar": "rgba(0, 0, 0, 0.15)",
-} as const;
 
 export const BOARD_BACKGROUNDS: BoardBackground[] = [
   {
@@ -212,6 +217,229 @@ export const BOARD_BACKGROUNDS: BoardBackground[] = [
     surface:
       "radial-gradient(900px 500px at 70% 0%, rgba(148,163,184,0.12), transparent 55%), linear-gradient(160deg,#0f172a 0%,#1e293b 48%,#0f172a 100%)",
   },
+  {
+    id: "sand",
+    name: "Areia",
+    description: "Bege quente do sertão",
+    preview: "linear-gradient(155deg,#8a6a3a,#c4a35a 50%,#6b4c2f)",
+    surface:
+      "radial-gradient(800px 420px at 80% 0%, rgba(255,209,0,0.18), transparent 55%), linear-gradient(165deg,#5c4324 0%,#c4a35a 48%,#6b4c2f 100%)",
+  },
+  {
+    id: "lagoon",
+    name: "Lagoa",
+    description: "Turquesa do litoral",
+    preview: "linear-gradient(155deg,#0e7490,#22d3ee 50%,#155e75)",
+    surface:
+      "radial-gradient(900px 480px at 20% 0%, rgba(255,255,255,0.14), transparent 55%), linear-gradient(165deg,#083344 0%,#0e7490 48%,#155e75 100%)",
+  },
+  {
+    id: "grape",
+    name: "Uva",
+    description: "Roxo profundo",
+    preview: "linear-gradient(155deg,#4c1d95,#7c3aed 50%,#5b21b6)",
+    surface:
+      "radial-gradient(800px 420px at 85% 0%, rgba(255,255,255,0.1), transparent 55%), linear-gradient(165deg,#2e1065 0%,#6d28d9 48%,#4c1d95 100%)",
+  },
+  {
+    id: "coral",
+    name: "Coral",
+    description: "Salmão e terracota",
+    preview: "linear-gradient(155deg,#9a3412,#fb7185 50%,#c2410c)",
+    surface:
+      "radial-gradient(800px 420px at 15% 0%, rgba(255,255,255,0.1), transparent 55%), linear-gradient(165deg,#7c2d12 0%,#ea580c 48%,#9a3412 100%)",
+  },
+];
+
+export type BoardCardTheme = {
+  id: BoardCardThemeId;
+  name: string;
+  swatch: string;
+  vars: {
+    "--board-list-bg": string;
+    "--board-list-border": string;
+    "--board-list-header-border": string;
+    "--board-card-bg": string;
+    "--board-card-text": string;
+    "--board-card-muted": string;
+    "--board-card-border": string;
+    "--board-card-border-hover": string;
+    "--board-card-shadow": string;
+    "--board-header-bar": string;
+  };
+};
+
+export const BOARD_CARD_THEMES: BoardCardTheme[] = [
+  {
+    id: "white",
+    name: "Branco",
+    swatch: "#ffffff",
+    vars: {
+      "--board-list-bg": "rgba(255, 255, 255, 0.14)",
+      "--board-list-border": "rgba(255, 255, 255, 0.22)",
+      "--board-list-header-border": "rgba(255, 255, 255, 0.14)",
+      "--board-card-bg": "#ffffff",
+      "--board-card-text": "#172b4d",
+      "--board-card-muted": "#5e6c84",
+      "--board-card-border": "rgba(9, 30, 66, 0.08)",
+      "--board-card-border-hover": "rgba(9, 30, 66, 0.16)",
+      "--board-card-shadow": "0 1px 1px rgba(9, 30, 66, 0.25)",
+      "--board-header-bar": "rgba(0, 0, 0, 0.15)",
+    },
+  },
+  {
+    id: "cream",
+    name: "Areia",
+    swatch: "#f4e6c3",
+    vars: {
+      "--board-list-bg": "rgba(244, 230, 195, 0.18)",
+      "--board-list-border": "rgba(255, 255, 255, 0.22)",
+      "--board-list-header-border": "rgba(255, 255, 255, 0.14)",
+      "--board-card-bg": "#f7f0dc",
+      "--board-card-text": "#3d2a18",
+      "--board-card-muted": "#6b4c2f",
+      "--board-card-border": "rgba(107, 76, 47, 0.16)",
+      "--board-card-border-hover": "rgba(107, 76, 47, 0.28)",
+      "--board-card-shadow": "0 1px 2px rgba(61, 42, 24, 0.18)",
+      "--board-header-bar": "rgba(0, 0, 0, 0.18)",
+    },
+  },
+  {
+    id: "dark",
+    name: "Escuro",
+    swatch: "#1e293b",
+    vars: {
+      "--board-list-bg": "rgba(15, 23, 42, 0.55)",
+      "--board-list-border": "rgba(255, 255, 255, 0.12)",
+      "--board-list-header-border": "rgba(255, 255, 255, 0.1)",
+      "--board-card-bg": "#1e293b",
+      "--board-card-text": "#f8fafc",
+      "--board-card-muted": "#94a3b8",
+      "--board-card-border": "rgba(255, 255, 255, 0.1)",
+      "--board-card-border-hover": "rgba(255, 255, 255, 0.22)",
+      "--board-card-shadow": "0 1px 3px rgba(0, 0, 0, 0.35)",
+      "--board-header-bar": "rgba(0, 0, 0, 0.28)",
+    },
+  },
+  {
+    id: "green",
+    name: "Verde",
+    swatch: "#dcfce7",
+    vars: {
+      "--board-list-bg": "rgba(4, 102, 46, 0.28)",
+      "--board-list-border": "rgba(255, 255, 255, 0.18)",
+      "--board-list-header-border": "rgba(255, 255, 255, 0.14)",
+      "--board-card-bg": "#ecfdf3",
+      "--board-card-text": "#14532d",
+      "--board-card-muted": "#3f6f21",
+      "--board-card-border": "rgba(4, 102, 46, 0.16)",
+      "--board-card-border-hover": "rgba(4, 102, 46, 0.3)",
+      "--board-card-shadow": "0 1px 2px rgba(4, 102, 46, 0.2)",
+      "--board-header-bar": "rgba(0, 0, 0, 0.18)",
+    },
+  },
+  {
+    id: "gold",
+    name: "Ouro",
+    swatch: "#fde68a",
+    vars: {
+      "--board-list-bg": "rgba(255, 209, 0, 0.16)",
+      "--board-list-border": "rgba(255, 255, 255, 0.2)",
+      "--board-list-header-border": "rgba(255, 255, 255, 0.14)",
+      "--board-card-bg": "#fff7cc",
+      "--board-card-text": "#422006",
+      "--board-card-muted": "#854d0e",
+      "--board-card-border": "rgba(133, 77, 14, 0.18)",
+      "--board-card-border-hover": "rgba(133, 77, 14, 0.32)",
+      "--board-card-shadow": "0 1px 2px rgba(66, 32, 6, 0.16)",
+      "--board-header-bar": "rgba(0, 0, 0, 0.18)",
+    },
+  },
+  {
+    id: "sky",
+    name: "Céu",
+    swatch: "#bae6fd",
+    vars: {
+      "--board-list-bg": "rgba(14, 116, 144, 0.28)",
+      "--board-list-border": "rgba(255, 255, 255, 0.2)",
+      "--board-list-header-border": "rgba(255, 255, 255, 0.14)",
+      "--board-card-bg": "#e0f2fe",
+      "--board-card-text": "#0c4a6e",
+      "--board-card-muted": "#0369a1",
+      "--board-card-border": "rgba(3, 105, 161, 0.16)",
+      "--board-card-border-hover": "rgba(3, 105, 161, 0.3)",
+      "--board-card-shadow": "0 1px 2px rgba(12, 74, 110, 0.18)",
+      "--board-header-bar": "rgba(0, 0, 0, 0.18)",
+    },
+  },
+  {
+    id: "rose",
+    name: "Rosa",
+    swatch: "#fecdd3",
+    vars: {
+      "--board-list-bg": "rgba(190, 24, 93, 0.22)",
+      "--board-list-border": "rgba(255, 255, 255, 0.2)",
+      "--board-list-header-border": "rgba(255, 255, 255, 0.14)",
+      "--board-card-bg": "#ffe4e6",
+      "--board-card-text": "#881337",
+      "--board-card-muted": "#9f1239",
+      "--board-card-border": "rgba(159, 18, 57, 0.16)",
+      "--board-card-border-hover": "rgba(159, 18, 57, 0.3)",
+      "--board-card-shadow": "0 1px 2px rgba(136, 19, 55, 0.16)",
+      "--board-header-bar": "rgba(0, 0, 0, 0.18)",
+    },
+  },
+  {
+    id: "navy",
+    name: "Marinho",
+    swatch: "#1e3a5f",
+    vars: {
+      "--board-list-bg": "rgba(15, 23, 42, 0.45)",
+      "--board-list-border": "rgba(255, 255, 255, 0.14)",
+      "--board-list-header-border": "rgba(255, 255, 255, 0.1)",
+      "--board-card-bg": "#172554",
+      "--board-card-text": "#dbeafe",
+      "--board-card-muted": "#93c5fd",
+      "--board-card-border": "rgba(147, 197, 253, 0.16)",
+      "--board-card-border-hover": "rgba(147, 197, 253, 0.32)",
+      "--board-card-shadow": "0 1px 3px rgba(0, 0, 0, 0.35)",
+      "--board-header-bar": "rgba(0, 0, 0, 0.28)",
+    },
+  },
+  {
+    id: "mint",
+    name: "Menta",
+    swatch: "#a7f3d0",
+    vars: {
+      "--board-list-bg": "rgba(16, 185, 129, 0.18)",
+      "--board-list-border": "rgba(255, 255, 255, 0.2)",
+      "--board-list-header-border": "rgba(255, 255, 255, 0.14)",
+      "--board-card-bg": "#d1fae5",
+      "--board-card-text": "#064e3b",
+      "--board-card-muted": "#047857",
+      "--board-card-border": "rgba(4, 120, 87, 0.16)",
+      "--board-card-border-hover": "rgba(4, 120, 87, 0.3)",
+      "--board-card-shadow": "0 1px 2px rgba(6, 78, 59, 0.16)",
+      "--board-header-bar": "rgba(0, 0, 0, 0.16)",
+    },
+  },
+  {
+    id: "glass",
+    name: "Vidro",
+    swatch: "rgba(255,255,255,0.35)",
+    vars: {
+      "--board-list-bg": "rgba(255, 255, 255, 0.12)",
+      "--board-list-border": "rgba(255, 255, 255, 0.28)",
+      "--board-list-header-border": "rgba(255, 255, 255, 0.18)",
+      "--board-card-bg": "rgba(255, 255, 255, 0.78)",
+      "--board-card-text": "#172b4d",
+      "--board-card-muted": "#5e6c84",
+      "--board-card-border": "rgba(255, 255, 255, 0.4)",
+      "--board-card-border-hover": "rgba(255, 255, 255, 0.7)",
+      "--board-card-shadow": "0 8px 24px rgba(0, 0, 0, 0.18)",
+      "--board-header-bar": "rgba(0, 0, 0, 0.22)",
+    },
+  },
 ];
 
 export const BOARD_DESIGNS: BoardDesign[] = [
@@ -271,6 +499,8 @@ export const BOARD_DESIGNS: BoardDesign[] = [
 
 export const DEFAULT_BACKGROUND_ID: BoardBackgroundId = "ceara";
 export const DEFAULT_DESIGN_ID: BoardDesignId = "classic";
+export const DEFAULT_CARD_THEME_ID: BoardCardThemeId = "white";
+export const DEFAULT_BACKGROUND_TINT = 42;
 
 export function getBackground(id?: string | null): BoardBackground {
   return (
@@ -286,23 +516,53 @@ export function getDesign(id?: string | null): BoardDesign {
   );
 }
 
+export function getCardTheme(id?: string | null): BoardCardTheme {
+  return (
+    BOARD_CARD_THEMES.find((t) => t.id === id) ??
+    BOARD_CARD_THEMES.find((t) => t.id === DEFAULT_CARD_THEME_ID)!
+  );
+}
+
+function clampTint(value?: number | null) {
+  if (typeof value !== "number" || Number.isNaN(value)) return DEFAULT_BACKGROUND_TINT;
+  return Math.min(80, Math.max(0, Math.round(value)));
+}
+
 export function ensureBoardAppearance(board: Board): Board {
   return ensureBoardHierarchy({
     ...board,
     memberIds: board.memberIds ?? [],
     teamId: board.teamId ?? null,
+    gitRepos: Array.isArray(board.gitRepos) ? board.gitRepos : [],
+    riskReport: board.riskReport ?? null,
     backgroundId: (board.backgroundId as BoardBackgroundId) || DEFAULT_BACKGROUND_ID,
     designId: (board.designId as BoardDesignId) || DEFAULT_DESIGN_ID,
+    cardThemeId: (board.cardThemeId as BoardCardThemeId) || DEFAULT_CARD_THEME_ID,
+    backgroundImageUrl: board.backgroundImageUrl || null,
+    backgroundTint: clampTint(board.backgroundTint),
   });
 }
 
-export function boardThemeStyle(board: Pick<Board, "backgroundId" | "designId">) {
+export function boardThemeStyle(
+  board: Pick<Board, "backgroundId" | "designId" | "cardThemeId" | "backgroundImageUrl" | "backgroundTint">,
+) {
   const bg = getBackground(board.backgroundId);
   const design = getDesign(board.designId);
+  const cards = getCardTheme(board.cardThemeId);
+  const image = board.backgroundImageUrl?.trim() || "";
+  const tint = clampTint(board.backgroundTint) / 100;
+  const overlay = `linear-gradient(rgba(0,0,0,${tint}), rgba(0,0,0,${tint}))`;
+  const backgroundImage = image
+    ? `${overlay}, url("${image.replace(/"/g, "")}")`
+    : bg.surface;
+
   return {
-    backgroundImage: bg.surface,
+    backgroundImage,
+    backgroundSize: image ? "cover" : "auto",
+    backgroundPosition: "center",
+    backgroundRepeat: "no-repeat" as const,
     backgroundAttachment: "fixed" as const,
-    ...BOARD_SURFACE_VARS,
+    ...cards.vars,
     ...design.vars,
   };
 }

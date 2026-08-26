@@ -22,8 +22,15 @@ CREATE TABLE IF NOT EXISTS trelloai.users (
   name TEXT NOT NULL,
   password_hash TEXT NOT NULL,
   salt TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  role TEXT NOT NULL DEFAULT 'user',
+  username TEXT
 );
+
+ALTER TABLE trelloai.users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
+ALTER TABLE trelloai.users ADD COLUMN IF NOT EXISTS username TEXT;
+UPDATE trelloai.users SET username = split_part(email, '@', 1) WHERE username IS NULL OR btrim(username) = '';
+CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_idx ON trelloai.users (lower(username));
 
 CREATE TABLE IF NOT EXISTS trelloai.invites (
   token TEXT PRIMARY KEY,
@@ -41,3 +48,9 @@ CREATE TABLE IF NOT EXISTS trelloai.invites (
 
 CREATE INDEX IF NOT EXISTS invites_board_id_idx ON trelloai.invites (board_id);
 CREATE INDEX IF NOT EXISTS memberships_board_id_idx ON trelloai.board_memberships (board_id);
+
+CREATE TABLE IF NOT EXISTS trelloai.user_board_visibility (
+  email TEXT PRIMARY KEY,
+  board_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

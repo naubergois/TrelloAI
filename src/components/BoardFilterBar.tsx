@@ -24,7 +24,7 @@ export function BoardFilterBar({
   const active = isBoardFilterActive(filter);
 
   return (
-    <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2 rounded-2xl border px-2.5 py-2 sm:mb-3 sm:px-3 board-filter-bar">
+    <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-2xl border px-2.5 py-1.5 board-filter-bar">
       <div className="relative min-w-[10rem] flex-1 sm:max-w-xs">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" />
         <input

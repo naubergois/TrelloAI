@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { AuthActions } from "@/components/LoginActions";
 import { BrandMark } from "@/components/BrandMark";
 import { CredentialsAuthForm } from "@/components/CredentialsAuthForm";
+import { DEFAULT_ADMIN_USERNAME, ensureDefaultAdminSafe } from "@/lib/users";
 import { redirect } from "next/navigation";
 
 export default async function LoginPage({
@@ -9,6 +10,7 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ error?: string; callbackUrl?: string }>;
 }) {
+  await ensureDefaultAdminSafe();
   const session = await auth();
   const params = await searchParams;
   const callbackUrl = params.callbackUrl || "/";
@@ -27,10 +29,10 @@ export default async function LoginPage({
       <section className="anim-rise relative w-full max-w-md rounded-3xl border border-[var(--line)] bg-[var(--panel-strong)] p-8 shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
         <BrandMark size="lg" subtitle="Governo do Ceará · Terra da Luz" />
         <h1 className="mt-5 font-[family-name:var(--font-display)] text-xl text-white">
-          Entrar ou criar conta
+          Entrar
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">
-          Kanban da gestão cearense. Cadastre-se com e-mail e senha.
+          Use o usuário criado pelo administrador. Novos usuários não se cadastram sozinhos.
         </p>
 
         {params.error ? (
@@ -42,6 +44,11 @@ export default async function LoginPage({
         <div className="mt-6">
           <CredentialsAuthForm callbackUrl={callbackUrl} />
         </div>
+
+        <p className="mt-4 text-center text-[11px] leading-relaxed text-[var(--muted)]">
+          Conta inicial: usuário{" "}
+          <span className="text-white">{DEFAULT_ADMIN_USERNAME}</span>
+        </p>
 
         <div className="mt-6">
           <AuthActions />

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getInvite, isInviteValid } from "@/lib/invites";
-import { getSharedBoard } from "@/lib/shared-boards";
+import { snapshotsForInvite } from "@/lib/team-invite-server";
 
 export async function GET(
   _request: Request,
@@ -13,17 +13,21 @@ export async function GET(
   }
 
   const validity = isInviteValid(invite);
-  const snapshot = await getSharedBoard(invite.boardId);
+  const snapshots = await snapshotsForInvite(invite);
 
   return NextResponse.json({
     token: invite.token,
     boardId: invite.boardId,
-    boardTitle: invite.boardTitle,
+    boardTitle: invite.kind === "team" ? invite.teamName || invite.boardTitle : invite.boardTitle,
     createdByName: invite.createdByName,
     inviteeEmail: invite.inviteeEmail,
     expiresAt: invite.expiresAt,
+    kind: invite.kind || "board",
+    teamId: invite.teamId,
+    teamName: invite.teamName,
     valid: validity.ok,
     error: validity.ok ? null : validity.error,
-    hasSnapshot: Boolean(snapshot),
+    hasSnapshot: snapshots.length > 0,
+    canRegister: validity.ok,
   });
 }

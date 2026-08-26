@@ -18,6 +18,12 @@ export interface Card {
   title: string;
   description: string;
   labels: Label[];
+  /** Cor própria do card (id da paleta ou #hex). Ausente usa o tema do board. */
+  coverColor?: string | null;
+  /** Card gerado pela Maya (coluna de riscos) */
+  origin?: "maya" | null;
+  /** Chave estável do risco para a Maya atualizar em vez de duplicar */
+  originKey?: string | null;
   dueDate: string | null;
   priority: "low" | "medium" | "high" | null;
   /** Membro responsável (TeamMember.id) */
@@ -85,17 +91,73 @@ export interface TeamCalendarEvent {
   date: string;
   /** HH:mm opcional */
   time: string | null;
+  /** Link do Google Meet, Microsoft Teams ou outra sala */
+  meetingUrl?: string | null;
   memberIds: string[];
   createdAt: string;
   updatedAt: string;
 }
+
+export type ListSystemKey = "maya-risks";
 
 export interface List {
   id: string;
   boardId: string;
   title: string;
   cardIds: string[];
+  /** Coluna gerida pelo sistema (ex.: Riscos Maya) */
+  systemKey?: ListSystemKey | null;
 }
+
+export type BoardGitRepo = {
+  id: string;
+  url: string;
+  label?: string;
+  addedAt: string;
+};
+
+export type GitCoverageStatus = "implemented" | "partial" | "missing";
+
+export type GitCoverageItem = {
+  kind: "card" | "requirement";
+  id: string;
+  title: string;
+  status: GitCoverageStatus;
+  evidence?: string;
+};
+
+export type BoardRisk = {
+  id: string;
+  title: string;
+  severity: "low" | "medium" | "high";
+  reason: string;
+  cardId?: string;
+  source?: "board" | "git";
+};
+
+export type GitInspectSummary = {
+  url: string;
+  ok: boolean;
+  error?: string;
+  kind?: "local" | "gitlab" | "github" | "generic";
+  fileCount: number;
+  files: string[];
+  readmeExcerpt?: string;
+  hints: string[];
+  coverage: GitCoverageItem[];
+  clonedAt?: string;
+  cloned?: boolean;
+  sourceRisks?: BoardRisk[];
+};
+
+export type BoardRiskReport = {
+  analyzedAt: string;
+  /** Último clone local do Git (análise semanal) */
+  clonedAt?: string | null;
+  cloneMode?: "clone" | "api" | "none";
+  risks: BoardRisk[];
+  git: GitInspectSummary[];
+};
 
 export interface Board {
   id: string;
@@ -113,6 +175,16 @@ export interface Board {
   backgroundId: string;
   /** Estilo de listas/cards */
   designId: string;
+  /** Paleta de cor dos cards */
+  cardThemeId?: string;
+  /** Foto de fundo (URL https ou data URL). Sobrepõe o degradê. */
+  backgroundImageUrl?: string | null;
+  /** Escurecimento da foto (0–80) para o texto continuar legível */
+  backgroundTint?: number;
+  /** Repositórios Git ligados ao board (Maya analisa cobertura) */
+  gitRepos?: BoardGitRepo[];
+  /** Última análise de riscos + Git da Maya */
+  riskReport?: BoardRiskReport | null;
   createdAt: string;
   updatedAt: string;
 }

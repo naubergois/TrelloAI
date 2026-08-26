@@ -36,11 +36,23 @@ export function parentLevelFor(level: BoardLevel): BoardLevel | null {
   }
 }
 
+/** Pai imediato preferido, ou qualquer nível acima (ex.: time sob organização). */
 export function isValidParentLevel(
   parentLevel: BoardLevel,
   childLevel: BoardLevel,
 ): boolean {
-  return parentLevelFor(childLevel) === parentLevel;
+  return BOARD_LEVEL_ORDER[parentLevel] < BOARD_LEVEL_ORDER[childLevel];
+}
+
+export function eligibleParentBoards<T extends { id: string; level: BoardLevel }>(
+  childLevel: BoardLevel,
+  boards: T[],
+  childId?: string,
+): T[] {
+  return boards.filter(
+    (board) =>
+      board.id !== childId && isValidParentLevel(board.level, childLevel),
+  );
 }
 
 export function normalizeBoardLevel(level?: string | null): BoardLevel {

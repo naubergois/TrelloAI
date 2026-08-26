@@ -9,9 +9,21 @@ export async function loadServerBoards(): Promise<number> {
   if (!res.ok) return 0;
   const data = (await res.json()) as { snapshots?: BoardSnapshot[] };
   const snapshots = data.snapshots ?? [];
-  for (const snapshot of snapshots) {
-    useBoardStore.getState().mergeBoardSnapshot(snapshot, { setActive: false });
-  }
+  useBoardStore.getState().adoptServerSnapshots(snapshots);
+  return snapshots.length;
+}
+
+export async function saveVisibleBoards(boardIds: string[]): Promise<number> {
+  const res = await fetch("/api/boards/visibility", {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ boardIds }),
+  });
+  if (!res.ok) return -1;
+  const data = (await res.json()) as { snapshots?: BoardSnapshot[] };
+  const snapshots = data.snapshots ?? [];
+  useBoardStore.getState().adoptServerSnapshots(snapshots);
   return snapshots.length;
 }
 
@@ -37,8 +49,22 @@ export function scheduleBoardSync(boardId: string, delayMs = 2000) {
   }, delayMs);
 }
 
-export function flushBoardSync(boardId: string) {
+export function cancelBoardSync(boardId?: string) {
+  if (boardId && pendingBoardId && pendingBoardId !== boardId) return;
   if (pushTimer) clearTimeout(pushTimer);
+  pushTimer = null;
   pendingBoardId = null;
-  return pushBoardToServer(boardId);
+}
+
+export async function removeBoardFromServer(boardId: string): Promise<boolean> {
+  cancelBoardSync(boardId);
+  try {
+    const res = await fetch(`/api/boards/${boardId}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    return res.ok || res.status === 404 || res.status === 401;
+  } catch {
+    return false;
+  }
 }

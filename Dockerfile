@@ -16,7 +16,7 @@ ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV USERS_DATA_DIR=/tmp/jangada-data
 
-RUN apk add --no-cache wget \
+RUN apk add --no-cache wget git ca-certificates \
   && addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs
 

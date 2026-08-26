@@ -5,17 +5,20 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  GitBranch,
   Loader2,
   MessageCircle,
   Play,
   Send,
   Settings2,
+  ShieldAlert,
   Sparkles,
+  Trash2,
   Video,
   X,
 } from "lucide-react";
 import { useBoardStore } from "@/lib/store";
-import type { AiAction } from "@/lib/types";
+import type { AiAction, BoardRiskReport } from "@/lib/types";
 import { labelStyles } from "@/lib/utils";
 import {
   buildDayUpdateReport,
@@ -77,6 +80,7 @@ export function ManagerPanel({
   const members = useBoardStore((s) => s.members);
   const lists = useBoardStore((s) => s.lists);
   const cards = useBoardStore((s) => s.cards);
+  const requirements = useBoardStore((s) => s.requirements);
   const currentUserId = useBoardStore((s) => s.currentUserId);
   const activeStandupId = useBoardStore((s) => s.activeStandupId);
   const ensureManager = useBoardStore((s) => s.ensureManager);
@@ -88,6 +92,9 @@ export function ManagerPanel({
   const setActiveStandup = useBoardStore((s) => s.setActiveStandup);
   const closeStandup = useBoardStore((s) => s.closeStandup);
   const applyManagerActions = useBoardStore((s) => s.applyManagerActions);
+  const addBoardGitRepo = useBoardStore((s) => s.addBoardGitRepo);
+  const removeBoardGitRepo = useBoardStore((s) => s.removeBoardGitRepo);
+  const setBoardRiskReport = useBoardStore((s) => s.setBoardRiskReport);
   const joinMeeting = useBoardStore((s) => s.joinMeeting);
   const activities = useBoardStore((s) => s.activities);
   const postCalendarDayAlert = useBoardStore((s) => s.postCalendarDayAlert);
@@ -96,6 +103,7 @@ export function ManagerPanel({
   const [processing, setProcessing] = useState(false);
   const [resultMsg, setResultMsg] = useState("");
   const [draft, setDraft] = useState("");
+  const [gitDraft, setGitDraft] = useState("");
   const [calendarDay, setCalendarDay] = useState(calendarDayKey());
   const inputRef = useRef<HTMLInputElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
@@ -256,31 +264,122 @@ export function ManagerPanel({
     }
   };
 
-  const buildManagerContext = () => ({
-    boardTitle: board.title,
-    managerName: manager.name,
-    members: team.map((m) => ({ id: m.id, name: m.name, email: m.email })),
-    memberNames: Object.fromEntries(team.map((m) => [m.id, m.name])),
-    checkIns: standup?.checkIns ?? [],
+  const buildManagerContext = (report?: BoardRiskReport | null) => {
+    const boardReqs = Object.values(requirements || {}).filter((r) => r.boardId === boardId);
+    const latest = report ?? board.riskReport;
+    return {
+      boardTitle: board.title,
+      managerName: manager.name,
+      members: team.map((m) => ({ id: m.id, name: m.name, email: m.email })),
+      memberNames: Object.fromEntries(team.map((m) => [m.id, m.name])),
+      checkIns: standup?.checkIns ?? [],
+      requirements: boardReqs.map((r) => ({
+        id: r.id,
+        code: r.code,
+        title: r.title,
+        status: r.status,
+      })),
+      gitRepos: (board.gitRepos || []).map((r) => ({ url: r.url })),
+      risks: latest?.risks?.map((r) => ({
+        title: r.title,
+        severity: r.severity,
+        reason: r.reason,
+      })),
+      git: latest?.git?.map((g) => ({
+        url: g.url,
+        ok: g.ok,
+        error: g.error,
+        fileCount: g.fileCount,
+        files: g.files.slice(0, 80),
+        hints: g.hints,
+        coverage: g.coverage.map((c) => ({
+          title: c.title,
+          status: c.status,
+          evidence: c.evidence,
+        })),
+      })),
+      lists: board.listIds
+        .map((id) => lists[id])
+        .filter(Boolean)
+        .map((list) => ({
+          id: list.id,
+          title: list.title,
+          cards: list.cardIds
+            .map((cid) => cards[cid])
+            .filter(Boolean)
+            .map((c) => ({
+              id: c.id,
+              title: c.title,
+              description: c.description,
+              priority: c.priority,
+              assigneeId: c.assigneeId ?? null,
+              dueDate: c.dueDate,
+            })),
+        })),
+    };
+  };
+
+  const collectAnalyzePayload = (extraUrls: string[] = [], clone = false) => ({
+    clone,
+    urls: [...new Set([...(board.gitRepos || []).map((r) => r.url), ...extraUrls])],
+    requirements: Object.values(requirements || {})
+      .filter((r) => r.boardId === boardId)
+      .map((r) => ({
+        id: r.id,
+        title: r.title,
+        code: r.code,
+        status: r.status,
+      })),
     lists: board.listIds
       .map((id) => lists[id])
       .filter(Boolean)
       .map((list) => ({
         id: list.id,
         title: list.title,
+        systemKey: list.systemKey ?? null,
         cards: list.cardIds
           .map((cid) => cards[cid])
           .filter(Boolean)
           .map((c) => ({
             id: c.id,
             title: c.title,
-            description: c.description,
             priority: c.priority,
-            assigneeId: c.assigneeId ?? null,
             dueDate: c.dueDate,
+            assigneeId: c.assigneeId ?? null,
+            origin: c.origin ?? null,
           })),
       })),
   });
+
+  const runRiskAndGitAnalysis = async (extraUrls: string[] = []) => {
+    const res = await fetch("/api/board/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(collectAnalyzePayload(extraUrls, true)),
+    });
+    const data = (await res.json()) as { report?: BoardRiskReport; error?: string };
+    if (!res.ok || !data.report) {
+      throw new Error(data.error || "Falha na análise.");
+    }
+    setBoardRiskReport(boardId, data.report);
+    return data.report;
+  };
+
+  const askWithAnalysis = async (text: string) => {
+    const prompt = text.trim();
+    if (!prompt || processing) return;
+    let report = board.riskReport;
+    if (/risco|git\b|reposit|implementad|cobertura|analis/i.test(prompt)) {
+      setProcessing(true);
+      try {
+        report = await runRiskAndGitAnalysis();
+      } catch {
+        /* Maya usa o relatório anterior, se houver */
+      }
+      setProcessing(false);
+    }
+    await askManager(prompt, report);
+  };
 
   const onSend = (e: FormEvent) => {
     e.preventDefault();
@@ -288,10 +387,10 @@ export function ManagerPanel({
       void sendStandupWithAi(draft);
       return;
     }
-    void askManager(draft);
+    void askWithAnalysis(draft);
   };
 
-  const askManager = async (text: string) => {
+  const askManager = async (text: string, report?: BoardRiskReport | null) => {
     const prompt = text.trim();
     if (!prompt || processing) return;
     setProcessing(true);
@@ -304,7 +403,7 @@ export function ManagerPanel({
         body: JSON.stringify({
           mode: "chat",
           message: prompt,
-          context: buildManagerContext(),
+          context: buildManagerContext(report),
         }),
       });
       const data = (await res.json()) as {
@@ -455,8 +554,23 @@ export function ManagerPanel({
                     Maya gerencia o projeto
                   </p>
                   <p className="mt-1 text-sm text-[var(--muted)]">
-                    Peça ações no kanban ou inicie a daily da equipe.
+                    Peça análise de riscos, ligue um Git ou inicie a daily da equipe.
                   </p>
+                </div>
+                <div className="flex flex-wrap justify-center gap-1.5">
+                  {[
+                    "Analise os riscos do board",
+                    "Compare o Git com o que está implementado",
+                  ].map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => void askWithAnalysis(q)}
+                      className="rounded-full border border-[var(--line)] bg-white/5 px-2.5 py-1 text-[11px] text-[var(--muted)] hover:text-white"
+                    >
+                      {q}
+                    </button>
+                  ))}
                 </div>
                 <button
                   type="button"
@@ -842,6 +956,138 @@ export function ManagerPanel({
               className="mt-1 min-h-24 w-full rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)]"
             />
           </label>
+
+          <div className="space-y-2 rounded-2xl border border-[var(--line)] bg-[var(--ink)]/40 p-3">
+            <p className="flex items-center gap-1.5 text-sm text-white">
+              <GitBranch className="h-4 w-4 text-[var(--accent)]" />
+              Repositórios Git
+            </p>
+            <p className="text-[11px] text-[var(--muted)]">
+              A Maya preenche a coluna <strong className="text-white">Riscos Maya</strong> com cada
+              risco do kanban e da análise do código. Uma vez por semana o servidor clona o GitLab
+              e atualiza essa coluna.
+            </p>
+            {(board.gitRepos || []).map((repo) => (
+              <div
+                key={repo.id}
+                className="flex items-center gap-2 rounded-xl border border-[var(--line)] bg-black/20 px-2 py-1.5"
+              >
+                <span className="min-w-0 flex-1 truncate text-xs text-white">{repo.url}</span>
+                <button
+                  type="button"
+                  onClick={() => removeBoardGitRepo(boardId, repo.id)}
+                  className="rounded-lg p-1 text-[var(--muted)] hover:text-rose-300"
+                  aria-label="Remover git"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+            <form
+              className="flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const url = gitDraft.trim();
+                if (!url) return;
+                addBoardGitRepo(boardId, url);
+                setGitDraft("");
+                void (async () => {
+                  setProcessing(true);
+                  try {
+                    const report = await runRiskAndGitAnalysis([url]);
+                    setProcessing(false);
+                    await askManager(
+                      `Git adicionado: ${url}. Analise os riscos do board e o que já está implementado ou não neste repositório.`,
+                      report,
+                    );
+                  } catch (err) {
+                    setProcessing(false);
+                    setResultMsg(
+                      err instanceof Error ? err.message : "Não consegui inspecionar o Git.",
+                    );
+                  }
+                })();
+              }}
+            >
+              <input
+                value={gitDraft}
+                onChange={(e) => setGitDraft(e.target.value)}
+                placeholder="https://git.cge.local/g_asesi/jangada.git"
+                className="w-full rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2 text-xs text-white outline-none focus:border-[var(--accent)]"
+              />
+              <button
+                type="submit"
+                disabled={!gitDraft.trim() || processing}
+                className="shrink-0 rounded-xl bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-[var(--accent-on)] disabled:opacity-40"
+              >
+                Ligar
+              </button>
+            </form>
+            <button
+              type="button"
+              disabled={processing}
+              onClick={() =>
+                void askWithAnalysis(
+                  "Analise os riscos do board e compare o Git com o que está implementado ou não.",
+                )
+              }
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--line)] px-3 py-2.5 text-xs text-[var(--muted)] hover:text-white disabled:opacity-40"
+            >
+              {processing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ShieldAlert className="h-3.5 w-3.5" />
+              )}
+              Clonar código e analisar agora
+            </button>
+            {board.riskReport?.risks?.length ? (
+              <ul className="space-y-1 text-[11px] text-[var(--muted)]">
+                {board.riskReport.risks.slice(0, 5).map((risk) => (
+                  <li key={risk.id}>
+                    <span className="text-rose-300">{risk.severity}</span> · {risk.title}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {board.riskReport?.git?.some((g) => g.coverage?.length) ? (
+              <div className="space-y-2 border-t border-[var(--line)] pt-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+                  Cobertura no Git
+                </p>
+                {board.riskReport.git.map((repo) => {
+                  const implemented = repo.coverage.filter((c) => c.status === "implemented");
+                  const missing = repo.coverage.filter((c) => c.status === "missing");
+                  const partial = repo.coverage.filter((c) => c.status === "partial");
+                  return (
+                    <div key={repo.url} className="space-y-1 text-[11px]">
+                      <p className="truncate text-white/80">
+                        {repo.ok
+                          ? `${repo.fileCount} arquivo(s)${repo.hints.length ? ` · ${repo.hints.join(", ")}` : ""}`
+                          : repo.error || "Git inacessível"}
+                      </p>
+                      {implemented.length ? (
+                        <p className="text-emerald-300">
+                          Implementado: {implemented.slice(0, 4).map((i) => i.title).join("; ")}
+                          {implemented.length > 4 ? "…" : ""}
+                        </p>
+                      ) : null}
+                      {partial.length ? (
+                        <p className="text-amber-300">
+                          Parcial: {partial.slice(0, 3).map((i) => i.title).join("; ")}
+                        </p>
+                      ) : null}
+                      {missing.length ? (
+                        <p className="text-rose-300">
+                          Não encontrado: {missing.slice(0, 4).map((i) => i.title).join("; ")}
+                          {missing.length > 4 ? "…" : ""}
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
           <div className="flex items-center justify-between rounded-xl border border-[var(--line)] bg-[var(--ink)]/50 px-3 py-3">
             <span className="text-sm text-white">Maya ativa</span>
             <input

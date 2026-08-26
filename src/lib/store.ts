@@ -24,19 +24,29 @@ import type {
   BoardLevel,
 } from "./types";
 import { buildMeetingRoomSlug, createSampleWorkspace, defaultManagerQuestions } from "./sample-data";
-import { createAsesiBoardSeed } from "./asesi-seed";
-import { ASESI_BOARD_ID } from "./constants";
+import { createAsesiBoardSeed, createCgeBoardSeed } from "./asesi-seed";
+import { ASESI_BOARD_ID, CGE_BOARD_ID, MAYA_RISKS_LIST_KEY, MAYA_RISKS_LIST_TITLE } from "./constants";
 import type { BoardSnapshot } from "./board-snapshot";
 import type { AiAction } from "./types";
+import {
+  cloneBoardPieces,
+  ensureMayaRisksList,
+  isMayaRisksList,
+  mergePiecesInto,
+  syncMayaRiskCards,
+} from "./maya-risk-column";
 import {
   buildRequirementPrompts,
   withRequirementPrompts,
 } from "./requirement-prompts";
 import {
   DEFAULT_BACKGROUND_ID,
+  DEFAULT_CARD_THEME_ID,
   DEFAULT_DESIGN_ID,
+  DEFAULT_BACKGROUND_TINT,
   ensureBoardAppearance,
   type BoardBackgroundId,
+  type BoardCardThemeId,
   type BoardDesignId,
 } from "./board-themes";
 import {
@@ -50,6 +60,20 @@ import {
   formatCalendarDayLabel,
   shiftCalendarDay,
 } from "./calendar-report";
+import { extractMeetingUrlFromText, sanitizeMeetingUrl } from "./meeting-links";
+
+function normalizeCalendarEvent(event: TeamCalendarEvent): TeamCalendarEvent {
+  const meetingUrl =
+    sanitizeMeetingUrl(event.meetingUrl) ||
+    extractMeetingUrlFromText(event.description) ||
+    null;
+  return {
+    ...event,
+    time: event.time ?? null,
+    meetingUrl,
+    memberIds: Array.isArray(event.memberIds) ? event.memberIds : [],
+  };
+}
 
 function normalizeCard(card: Card): Card {
   return {
@@ -61,6 +85,9 @@ function normalizeCard(card: Card): Card {
     comments: Array.isArray(card.comments) ? card.comments : [],
     archived: card.archived ?? false,
     labels: Array.isArray(card.labels) ? card.labels : [],
+    coverColor: card.coverColor ?? null,
+    origin: card.origin ?? null,
+    originKey: card.originKey ?? null,
     dueDate: card.dueDate ?? null,
     priority: card.priority ?? null,
   };
@@ -83,6 +110,8 @@ interface BoardState {
   activeMeetingId: string | null;
   activeStandupId: string | null;
   hydrated: boolean;
+  /** Não recria o board oficial ASESI depois que o usuário o excluiu */
+  skipAsesiSeed: boolean;
   setHydrated: (value: boolean) => void;
   createBoard: (
     title: string,
@@ -93,16 +122,29 @@ interface BoardState {
       teamId?: string | null;
       level?: BoardLevel;
       parentBoardId?: string | null;
+      cardThemeId?: BoardCardThemeId;
+      backgroundImageUrl?: string | null;
+      backgroundTint?: number;
     },
   ) => string;
   setActiveBoard: (boardId: string) => void;
   renameBoard: (boardId: string, title: string) => void;
   updateBoardDescription: (boardId: string, description: string) => void;
+  addBoardGitRepo: (boardId: string, url: string, label?: string) => string | null;
+  removeBoardGitRepo: (boardId: string, repoId: string) => void;
+  setBoardRiskReport: (boardId: string, report: Board["riskReport"]) => void;
+  ensureMayaRisksColumn: (boardId: string) => void;
   assignBoardParent: (boardId: string, parentBoardId: string | null) => void;
   setBoardLevel: (boardId: string, level: BoardLevel) => void;
   updateBoardAppearance: (
     boardId: string,
-    appearance: { backgroundId?: BoardBackgroundId; designId?: BoardDesignId },
+    appearance: {
+      backgroundId?: BoardBackgroundId;
+      designId?: BoardDesignId;
+      cardThemeId?: BoardCardThemeId;
+      backgroundImageUrl?: string | null;
+      backgroundTint?: number;
+    },
   ) => void;
   assignTeamToBoard: (boardId: string, teamId: string | null) => void;
   deleteBoard: (boardId: string) => void;
@@ -136,6 +178,9 @@ interface BoardState {
         | "priority"
         | "dueDate"
         | "labels"
+        | "coverColor"
+        | "origin"
+        | "originKey"
         | "assigneeId"
         | "requirementId"
         | "acceptanceCriteria"
@@ -172,6 +217,7 @@ interface BoardState {
     kind?: TeamEventKind;
     date: string;
     time?: string | null;
+    meetingUrl?: string | null;
     teamId?: string | null;
     memberIds?: string[];
   }) => string;
@@ -241,10 +287,12 @@ interface BoardState {
   applyManagerActions: (actions: AiAction[], boardId?: string) => void;
   ensureAsesiBoard: () => string;
   mergeBoardSnapshot: (snapshot: BoardSnapshot, opts?: { setActive?: boolean }) => void;
+  adoptServerSnapshots: (snapshots: BoardSnapshot[]) => void;
   exportBoardSnapshot: (boardId: string) => BoardSnapshot | null;
   addBoardMemberFromProfile: (
     boardId: string,
     profile: { name: string; email: string; image?: string | null },
+    opts?: { teamId?: string | null; extraBoardIds?: string[] },
   ) => string;
   recordActivity: (input: {
     boardId: string;
@@ -288,23 +336,29 @@ export const useBoardStore = create<BoardState>()(
     (set, get) => ({
       ...sample,
       hydrated: false,
+      skipAsesiSeed: false,
       setHydrated: (value) => set({ hydrated: value }),
 
       createBoard: (title, description = "", appearance) => {
         const boardId = nanoid();
-        const listDefs = ["A fazer", "Em progresso", "Concluído"];
+        const listDefs = [
+          { title: "A fazer" },
+          { title: "Em progresso" },
+          { title: "Concluído" },
+          { title: MAYA_RISKS_LIST_TITLE, systemKey: MAYA_RISKS_LIST_KEY },
+        ];
         const now = new Date().toISOString();
         const listIds: string[] = [];
         const lists: Record<string, List> = {};
         const currentUserId = get().currentUserId;
         const teamId = appearance?.teamId ?? null;
         const team = teamId ? get().teams[teamId] : null;
-        const memberIds =
-          team?.memberIds?.length
-            ? [...team.memberIds]
-            : currentUserId
-              ? [currentUserId]
-              : [];
+        const memberIds = Array.from(
+          new Set([
+            ...(team?.memberIds ?? []),
+            ...(currentUserId ? [currentUserId] : []),
+          ]),
+        );
 
         const level = normalizeBoardLevel(appearance?.level ?? "project");
         let parentBoardId = appearance?.parentBoardId ?? null;
@@ -316,14 +370,15 @@ export const useBoardStore = create<BoardState>()(
         }
         if (level === "organization") parentBoardId = null;
 
-        for (const listTitle of listDefs) {
+        for (const listDef of listDefs) {
           const listId = nanoid();
           listIds.push(listId);
           lists[listId] = {
             id: listId,
             boardId,
-            title: listTitle,
+            title: listDef.title,
             cardIds: [],
+            systemKey: listDef.systemKey,
           };
         }
 
@@ -338,6 +393,11 @@ export const useBoardStore = create<BoardState>()(
           parentBoardId,
           backgroundId: appearance?.backgroundId ?? DEFAULT_BACKGROUND_ID,
           designId: appearance?.designId ?? DEFAULT_DESIGN_ID,
+          cardThemeId: appearance?.cardThemeId ?? DEFAULT_CARD_THEME_ID,
+          backgroundImageUrl: appearance?.backgroundImageUrl ?? null,
+          backgroundTint: appearance?.backgroundTint ?? DEFAULT_BACKGROUND_TINT,
+          gitRepos: [],
+          riskReport: null,
           createdAt: now,
           updatedAt: now,
         };
@@ -346,7 +406,7 @@ export const useBoardStore = create<BoardState>()(
           boardId,
           name: "Maya",
           persona:
-            "Gestor(a) virtual: reúne o time diariamente, pergunta o andamento e atualiza o kanban.",
+            "Gestor(a) virtual: analisa riscos, compara o Git com o kanban e atualiza cards.",
           enabled: true,
           autoStartDaily: false,
           dailyTime: "09:30",
@@ -397,6 +457,75 @@ export const useBoardStore = create<BoardState>()(
               },
             },
           };
+        }),
+
+      addBoardGitRepo: (boardId, url, label) => {
+        const trimmed = url.trim();
+        if (!trimmed) return null;
+        let repoId = "";
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+          const repos = [...(board.gitRepos || [])];
+          if (repos.some((r) => r.url === trimmed)) return state;
+          repoId = nanoid();
+          const now = new Date().toISOString();
+          repos.push({ id: repoId, url: trimmed, label: label?.trim() || undefined, addedAt: now });
+          return {
+            boards: {
+              ...state.boards,
+              [boardId]: { ...ensureBoardMembers(board), gitRepos: repos, updatedAt: now },
+            },
+          };
+        });
+        return repoId || null;
+      },
+
+      removeBoardGitRepo: (boardId, repoId) =>
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+          return {
+            boards: {
+              ...state.boards,
+              [boardId]: {
+                ...ensureBoardMembers(board),
+                gitRepos: (board.gitRepos || []).filter((r) => r.id !== repoId),
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          };
+        }),
+
+      setBoardRiskReport: (boardId, report) =>
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+          const pieces = cloneBoardPieces(board, state.lists, state.cards);
+          syncMayaRiskCards(pieces, report);
+          const next = {
+            boards: { ...state.boards },
+            lists: { ...state.lists },
+            cards: { ...state.cards },
+          };
+          mergePiecesInto(next, pieces);
+          return next;
+        }),
+
+      ensureMayaRisksColumn: (boardId) =>
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+          const pieces = cloneBoardPieces(board, state.lists, state.cards);
+          ensureMayaRisksList(pieces);
+          if (board.riskReport) syncMayaRiskCards(pieces, board.riskReport);
+          const next = {
+            boards: { ...state.boards },
+            lists: { ...state.lists },
+            cards: { ...state.cards },
+          };
+          mergePiecesInto(next, pieces);
+          return next;
         }),
 
       assignBoardParent: (boardId, parentBoardId) =>
@@ -463,17 +592,21 @@ export const useBoardStore = create<BoardState>()(
         set((state) => {
           const board = state.boards[boardId];
           if (!board) return state;
+          const next = { ...ensureBoardMembers(board) };
+          if (appearance.backgroundId) next.backgroundId = appearance.backgroundId;
+          if (appearance.designId) next.designId = appearance.designId;
+          if (appearance.cardThemeId) next.cardThemeId = appearance.cardThemeId;
+          if (appearance.backgroundImageUrl !== undefined) {
+            next.backgroundImageUrl = appearance.backgroundImageUrl;
+          }
+          if (appearance.backgroundTint !== undefined) {
+            next.backgroundTint = appearance.backgroundTint;
+          }
+          next.updatedAt = new Date().toISOString();
           return {
             boards: {
               ...state.boards,
-              [boardId]: {
-                ...ensureBoardMembers(board),
-                ...(appearance.backgroundId
-                  ? { backgroundId: appearance.backgroundId }
-                  : {}),
-                ...(appearance.designId ? { designId: appearance.designId } : {}),
-                updatedAt: new Date().toISOString(),
-              },
+              [boardId]: next,
             },
           };
         }),
@@ -687,6 +820,14 @@ export const useBoardStore = create<BoardState>()(
           }
 
           const remaining = Object.keys(boards);
+          const requirements = { ...(state.requirements || {}) };
+          for (const [id, req] of Object.entries(requirements)) {
+            if (req.boardId === boardId) delete requirements[id];
+          }
+          const calendarEvents = { ...(state.calendarEvents || {}) };
+          for (const [id, event] of Object.entries(calendarEvents)) {
+            if (event.boardId === boardId) delete calendarEvents[id];
+          }
           return {
             boards,
             lists,
@@ -695,6 +836,9 @@ export const useBoardStore = create<BoardState>()(
             meetings,
             standups,
             activities,
+            requirements,
+            calendarEvents,
+            skipAsesiSeed: boardId === ASESI_BOARD_ID ? true : state.skipAsesiSeed,
             activeBoardId:
               state.activeBoardId === boardId
                 ? remaining[0] ?? null
@@ -753,7 +897,7 @@ export const useBoardStore = create<BoardState>()(
       deleteList: (listId) => {
         set((state) => {
           const list = state.lists[listId];
-          if (!list) return state;
+          if (!list || isMayaRisksList(list)) return state;
           const board = state.boards[list.boardId];
           if (!board) return state;
 
@@ -793,6 +937,9 @@ export const useBoardStore = create<BoardState>()(
             title: title.trim() || "Novo card",
             description: extras.description ?? "",
             labels: extras.labels ?? [],
+            coverColor: extras.coverColor ?? null,
+            origin: extras.origin ?? null,
+            originKey: extras.originKey ?? null,
             dueDate: extras.dueDate ?? null,
             priority: extras.priority ?? null,
             assigneeId: extras.assigneeId ?? null,
@@ -1165,6 +1312,10 @@ export const useBoardStore = create<BoardState>()(
           kind: input.kind ?? "other",
           date: input.date,
           time: input.time ?? null,
+          meetingUrl:
+            sanitizeMeetingUrl(input.meetingUrl) ||
+            extractMeetingUrlFromText(input.description) ||
+            null,
           memberIds: input.memberIds ?? [],
           createdAt: now,
           updatedAt: now,
@@ -1187,6 +1338,21 @@ export const useBoardStore = create<BoardState>()(
                 ...patch,
                 id: current.id,
                 boardId: current.boardId,
+                meetingUrl: (() => {
+                  const nextDescription =
+                    patch.description !== undefined
+                      ? patch.description
+                      : current.description;
+                  const explicit =
+                    patch.meetingUrl !== undefined
+                      ? sanitizeMeetingUrl(patch.meetingUrl)
+                      : sanitizeMeetingUrl(current.meetingUrl);
+                  return (
+                    explicit ||
+                    extractMeetingUrlFromText(nextDescription) ||
+                    null
+                  );
+                })(),
                 updatedAt: new Date().toISOString(),
               },
             },
@@ -1305,17 +1471,6 @@ export const useBoardStore = create<BoardState>()(
 
           if (existing) {
             const memberId = existing.id;
-            const boards = { ...state.boards };
-            for (const [boardId, board] of Object.entries(boards)) {
-              const memberIds = board.memberIds ?? [];
-              if (!memberIds.includes(memberId)) {
-                boards[boardId] = {
-                  ...board,
-                  memberIds: [...memberIds, memberId],
-                  updatedAt: now,
-                };
-              }
-            }
             return {
               currentUserId: memberId,
               members: {
@@ -1328,7 +1483,6 @@ export const useBoardStore = create<BoardState>()(
                   role: existing.role === "owner" ? "owner" : existing.role,
                 },
               },
-              boards,
             };
           }
 
@@ -1343,18 +1497,6 @@ export const useBoardStore = create<BoardState>()(
             createdAt: now,
           };
 
-          const boards = { ...state.boards };
-          for (const [boardId, board] of Object.entries(boards)) {
-            const memberIds = (board.memberIds ?? []).filter(
-              (id) => id !== state.currentUserId,
-            );
-            boards[boardId] = {
-              ...board,
-              memberIds: [memberId, ...memberIds],
-              updatedAt: now,
-            };
-          }
-
           const nextMembers = { ...state.members, [memberId]: member };
           if (state.currentUserId && state.currentUserId !== memberId) {
             // demote previous local "Você" placeholder if unused
@@ -1367,7 +1509,6 @@ export const useBoardStore = create<BoardState>()(
           return {
             currentUserId: memberId,
             members: nextMembers,
-            boards,
           };
         }),
 
@@ -1545,7 +1686,7 @@ export const useBoardStore = create<BoardState>()(
               boardId,
               name: "Maya",
               persona:
-                "Gestor(a) virtual: reúne o time diariamente, pergunta o andamento e atualiza o kanban.",
+                "Gestor(a) virtual: analisa riscos, compara o Git com o kanban e atualiza cards.",
               enabled: true,
               autoStartDaily: false,
               dailyTime: "09:30",
@@ -2085,6 +2226,46 @@ export const useBoardStore = create<BoardState>()(
 
       ensureAsesiBoard: () => {
         const state = get();
+        if (state.skipAsesiSeed && !state.boards[ASESI_BOARD_ID]) {
+          return ASESI_BOARD_ID;
+        }
+
+        if (!state.boards[CGE_BOARD_ID]) {
+          const me = state.currentUserId ? state.members[state.currentUserId] : null;
+          const seed = createCgeBoardSeed(
+            me
+              ? { id: me.id, name: me.name, email: me.email, image: me.image }
+              : undefined,
+          );
+          set((s) => {
+            const memberIds = Array.from(
+              new Set([
+                seed.ownerId,
+                ...(s.currentUserId ? [s.currentUserId] : []),
+                ...(s.boards[ASESI_BOARD_ID]?.memberIds || []),
+              ]),
+            );
+            const team = s.teams[seed.team.id]
+              ? {
+                  ...s.teams[seed.team.id],
+                  memberIds: Array.from(
+                    new Set([...s.teams[seed.team.id].memberIds, ...memberIds]),
+                  ),
+                }
+              : { ...seed.team, memberIds };
+            return {
+              boards: {
+                ...s.boards,
+                [CGE_BOARD_ID]: { ...seed.board, memberIds, teamId: team.id },
+              },
+              lists: { ...s.lists, ...seed.lists },
+              members: { ...seed.members, ...s.members },
+              teams: { ...s.teams, [team.id]: team },
+              managers: { ...s.managers, [CGE_BOARD_ID]: seed.manager },
+            };
+          });
+        }
+
         if (state.boards[ASESI_BOARD_ID]) {
           const hasReq = Object.values(state.requirements || {}).some(
             (r) => r.boardId === ASESI_BOARD_ID,
@@ -2115,6 +2296,25 @@ export const useBoardStore = create<BoardState>()(
                 : { ...(s.calendarEvents || {}), ...seed.calendarEvents },
             }));
           }
+          set((s) => {
+            const board = s.boards[ASESI_BOARD_ID];
+            const cge = s.boards[CGE_BOARD_ID];
+            if (!board || !cge) return s;
+            if (board.parentBoardId === CGE_BOARD_ID && board.level === "team") {
+              return s;
+            }
+            return {
+              boards: {
+                ...s.boards,
+                [ASESI_BOARD_ID]: {
+                  ...ensureBoardMembers(board),
+                  level: "team",
+                  parentBoardId: CGE_BOARD_ID,
+                  updatedAt: new Date().toISOString(),
+                },
+              },
+            };
+          });
           return ASESI_BOARD_ID;
         }
 
@@ -2141,6 +2341,8 @@ export const useBoardStore = create<BoardState>()(
           const board = {
             ...seed.board,
             memberIds: [...team.memberIds],
+            level: "team" as const,
+            parentBoardId: s.boards[CGE_BOARD_ID] ? CGE_BOARD_ID : seed.board.parentBoardId,
           };
 
           return {
@@ -2185,6 +2387,9 @@ export const useBoardStore = create<BoardState>()(
         const teams: Record<string, Team> = {};
         if (board.teamId && state.teams[board.teamId]) {
           teams[board.teamId] = state.teams[board.teamId];
+          for (const memberId of state.teams[board.teamId].memberIds) {
+            if (state.members[memberId]) members[memberId] = state.members[memberId];
+          }
         }
 
         const meetings: Record<string, Meeting> = {};
@@ -2233,14 +2438,19 @@ export const useBoardStore = create<BoardState>()(
 
       mergeBoardSnapshot: (snapshot, opts) => {
         set((state) => {
-          const board = ensureBoardMembers(snapshot.board);
-          const cards = { ...state.cards };
-          for (const [id, card] of Object.entries(snapshot.cards)) {
-            cards[id] = normalizeCard(card);
-          }
+          const pieces = cloneBoardPieces(
+            ensureBoardMembers(snapshot.board),
+            snapshot.lists,
+            Object.fromEntries(
+              Object.entries(snapshot.cards).map(([id, card]) => [id, normalizeCard(card)]),
+            ),
+          );
+          ensureMayaRisksList(pieces);
+          if (pieces.board.riskReport) syncMayaRiskCards(pieces, pieces.board.riskReport);
+          const cards = { ...state.cards, ...pieces.cards };
           return {
-            boards: { ...state.boards, [board.id]: board },
-            lists: { ...state.lists, ...snapshot.lists },
+            boards: { ...state.boards, [pieces.board.id]: pieces.board },
+            lists: { ...state.lists, ...pieces.lists },
             cards,
             members: { ...state.members, ...snapshot.members },
             teams: { ...state.teams, ...snapshot.teams },
@@ -2254,18 +2464,88 @@ export const useBoardStore = create<BoardState>()(
             },
             calendarEvents: {
               ...(state.calendarEvents || {}),
-              ...(snapshot.calendarEvents || {}),
+              ...Object.fromEntries(
+                Object.entries(snapshot.calendarEvents || {}).map(([id, ev]) => [
+                  id,
+                  normalizeCalendarEvent(ev),
+                ]),
+              ),
             },
-            activeBoardId: opts?.setActive ? board.id : state.activeBoardId,
+            activeBoardId: opts?.setActive ? pieces.board.id : state.activeBoardId,
           };
         });
       },
 
-      addBoardMemberFromProfile: (boardId, profile) => {
+      adoptServerSnapshots: (snapshots) => {
+        const keep = new Set(snapshots.map((snap) => snap.board.id));
+        set((state) => {
+          const boards: Record<string, Board> = {};
+          const lists: Record<string, List> = {};
+          const cards: Record<string, Card> = {};
+          const meetings: Record<string, Meeting> = {};
+          const managers: Record<string, VirtualManager> = {};
+          const standups: Record<string, StandupSession> = {};
+          const activities: Record<string, KanbanActivity> = {};
+          const requirements: Record<string, Requirement> = {};
+          const calendarEvents: Record<string, TeamCalendarEvent> = {};
+
+          for (const [id, board] of Object.entries(state.boards)) {
+            if (keep.has(id)) boards[id] = board;
+          }
+          for (const [id, list] of Object.entries(state.lists)) {
+            if (keep.has(list.boardId)) lists[id] = list;
+          }
+          for (const [id, card] of Object.entries(state.cards)) {
+            const list = lists[card.listId] || state.lists[card.listId];
+            if (list && keep.has(list.boardId)) cards[id] = card;
+          }
+          for (const [id, meeting] of Object.entries(state.meetings)) {
+            if (keep.has(meeting.boardId)) meetings[id] = meeting;
+          }
+          for (const [id, manager] of Object.entries(state.managers)) {
+            if (keep.has(id) || keep.has(manager.boardId)) managers[id] = manager;
+          }
+          for (const [id, standup] of Object.entries(state.standups)) {
+            if (keep.has(standup.boardId)) standups[id] = standup;
+          }
+          for (const [id, activity] of Object.entries(state.activities || {})) {
+            if (keep.has(activity.boardId)) activities[id] = activity;
+          }
+          for (const [id, req] of Object.entries(state.requirements || {})) {
+            if (keep.has(req.boardId)) requirements[id] = req;
+          }
+          for (const [id, ev] of Object.entries(state.calendarEvents || {})) {
+            if (keep.has(ev.boardId)) calendarEvents[id] = ev;
+          }
+
+          return {
+            boards,
+            lists,
+            cards,
+            meetings,
+            managers,
+            standups,
+            activities,
+            requirements,
+            calendarEvents,
+            activeBoardId:
+              state.activeBoardId && keep.has(state.activeBoardId)
+                ? state.activeBoardId
+                : snapshots[0]?.board.id || null,
+          };
+        });
+        for (const snapshot of snapshots) {
+          get().mergeBoardSnapshot(snapshot, { setActive: false });
+        }
+      },
+
+      addBoardMemberFromProfile: (boardId, profile, opts) => {
         const email = profile.email.trim().toLowerCase();
         const name = profile.name.trim() || "Membro";
         const now = new Date().toISOString();
         let memberId = "";
+        const extraBoardIds = opts?.extraBoardIds ?? [];
+        const teamId = opts?.teamId;
 
         set((state) => {
           const board = state.boards[boardId];
@@ -2293,10 +2573,10 @@ export const useBoardStore = create<BoardState>()(
                 createdAt: now,
               };
 
-          const memberIds = Array.from(new Set([...(board.memberIds || []), memberId]));
+          const targetTeamId = teamId || board.teamId;
           let teams = state.teams;
-          if (board.teamId && state.teams[board.teamId]) {
-            const team = state.teams[board.teamId];
+          if (targetTeamId && state.teams[targetTeamId]) {
+            const team = state.teams[targetTeamId];
             teams = {
               ...state.teams,
               [team.id]: {
@@ -2307,16 +2587,21 @@ export const useBoardStore = create<BoardState>()(
             };
           }
 
+          const boardIds = Array.from(new Set([boardId, ...extraBoardIds]));
+          const boards = { ...state.boards };
+          for (const id of boardIds) {
+            const current = boards[id];
+            if (!current) continue;
+            boards[id] = {
+              ...ensureBoardMembers(current),
+              memberIds: Array.from(new Set([...(current.memberIds || []), memberId])),
+              updatedAt: now,
+            };
+          }
+
           return {
             members: { ...state.members, [memberId]: member },
-            boards: {
-              ...state.boards,
-              [boardId]: {
-                ...ensureBoardMembers(board),
-                memberIds,
-                updatedAt: now,
-              },
-            },
+            boards,
             teams,
             currentUserId: state.currentUserId || memberId,
           };
@@ -2399,7 +2684,7 @@ export const useBoardStore = create<BoardState>()(
 
       resetDemo: () => {
         const next = createSampleWorkspace();
-        set({ ...next, hydrated: true });
+        set({ ...next, hydrated: true, skipAsesiSeed: false });
       },
     }),
     {
@@ -2418,6 +2703,7 @@ export const useBoardStore = create<BoardState>()(
         calendarEvents: state.calendarEvents,
         currentUserId: state.currentUserId,
         activeBoardId: state.activeBoardId,
+        skipAsesiSeed: state.skipAsesiSeed,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
@@ -2434,9 +2720,14 @@ export const useBoardStore = create<BoardState>()(
         if (!state.activities) state.activities = {};
         if (!state.requirements) state.requirements = {};
         if (!state.calendarEvents) state.calendarEvents = {};
+        if (state.skipAsesiSeed === undefined) state.skipAsesiSeed = false;
 
         for (const [id, card] of Object.entries(state.cards || {})) {
           if (card) state.cards[id] = normalizeCard(card as Card);
+        }
+
+        for (const [id, ev] of Object.entries(state.calendarEvents || {})) {
+          if (ev) state.calendarEvents[id] = normalizeCalendarEvent(ev);
         }
 
         for (const [id, req] of Object.entries(state.requirements || {})) {
@@ -2469,15 +2760,6 @@ export const useBoardStore = create<BoardState>()(
             };
           }
         }
-
-        // inject ASESI board once for existing installs
-        queueMicrotask(() => {
-          try {
-            useBoardStore.getState().ensureAsesiBoard();
-          } catch {
-            /* ignore */
-          }
-        });
 
         state.setHydrated(true);
       },

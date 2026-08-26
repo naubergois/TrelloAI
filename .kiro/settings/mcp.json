@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "jangada": {
+      "command": "node",
+      "args": ["scripts/jangada-mcp.mjs"],
+      "env": {},
+      "disabled": false,
+      "autoApprove": [
+        "jangada_ping",
+        "jangada_listar_boards",
+        "jangada_ver_board",
+        "jangada_criar_lista",
+        "jangada_criar_card",
+        "jangada_criar_cards",
+        "jangada_atualizar_card",
+        "jangada_mover_card",
+        "jangada_criar_requisito",
+        "jangada_adicionar_git"
+      ]
+    }
+  }
+}

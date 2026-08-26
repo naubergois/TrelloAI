@@ -2,8 +2,7 @@ import type { Pool, PoolConfig } from "pg";
 import type { BoardSnapshot } from "@/lib/board-snapshot";
 import type { BoardInvite } from "@/lib/invites";
 import type { StoredUser } from "@/lib/users";
-import { createAsesiBoardSnapshot } from "@/lib/asesi-seed";
-import { ASESI_BOARD_ID } from "@/lib/constants";
+import { createOfficialHierarchySnapshots } from "@/lib/asesi-seed";
 import { isPgConfigured, readPgConfig } from "@/lib/storage/config";
 
 export { isPgConfigured, readPgConfig };
@@ -80,8 +79,15 @@ function ddl(schema: string) {
       name TEXT NOT NULL,
       password_hash TEXT NOT NULL,
       salt TEXT NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      role TEXT NOT NULL DEFAULT 'user',
+      username TEXT
     );
+
+    ALTER TABLE ${s}.users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
+    ALTER TABLE ${s}.users ADD COLUMN IF NOT EXISTS username TEXT;
+    UPDATE ${s}.users SET username = split_part(email, '@', 1) WHERE username IS NULL OR btrim(username) = '';
+    CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_idx ON ${s}.users (lower(username));
 
     CREATE TABLE IF NOT EXISTS ${s}.invites (
       token TEXT PRIMARY KEY,
@@ -94,11 +100,24 @@ function ddl(schema: string) {
       expires_at TIMESTAMPTZ NOT NULL,
       used_at TIMESTAMPTZ,
       used_by_email TEXT,
-      accepted_emails JSONB NOT NULL DEFAULT '[]'::jsonb
+      accepted_emails JSONB NOT NULL DEFAULT '[]'::jsonb,
+      kind TEXT NOT NULL DEFAULT 'board',
+      team_id TEXT,
+      team_name TEXT
     );
 
+    ALTER TABLE ${s}.invites ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'board';
+    ALTER TABLE ${s}.invites ADD COLUMN IF NOT EXISTS team_id TEXT;
+    ALTER TABLE ${s}.invites ADD COLUMN IF NOT EXISTS team_name TEXT;
     CREATE INDEX IF NOT EXISTS invites_board_id_idx ON ${s}.invites (board_id);
+    CREATE INDEX IF NOT EXISTS invites_team_id_idx ON ${s}.invites (team_id);
     CREATE INDEX IF NOT EXISTS memberships_board_id_idx ON ${s}.board_memberships (board_id);
+
+    CREATE TABLE IF NOT EXISTS ${s}.user_board_visibility (
+      email TEXT PRIMARY KEY,
+      board_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   `;
 }
 
@@ -106,17 +125,16 @@ async function ensureSchema(p: Pool) {
   const schema = readPgConfig()?.schema || activeSchema;
   await p.query(ddl(schema));
 
-  const existing = await p.query("SELECT 1 FROM board_snapshots WHERE board_id = $1", [
-    ASESI_BOARD_ID,
-  ]);
-  if ((existing.rowCount ?? 0) === 0) {
-    const snapshot = createAsesiBoardSnapshot();
-    await p.query(
-      `INSERT INTO board_snapshots (board_id, snapshot, updated_at)
-       VALUES ($1, $2::jsonb, NOW())
-       ON CONFLICT (board_id) DO NOTHING`,
-      [ASESI_BOARD_ID, JSON.stringify(snapshot)],
-    );
+  const existing = await p.query<{ n: number }>("SELECT COUNT(*)::int AS n FROM board_snapshots");
+  if ((existing.rows[0]?.n ?? 0) === 0) {
+    for (const snapshot of createOfficialHierarchySnapshots()) {
+      await p.query(
+        `INSERT INTO board_snapshots (board_id, snapshot, updated_at)
+         VALUES ($1, $2::jsonb, NOW())
+         ON CONFLICT (board_id) DO NOTHING`,
+        [snapshot.board.id, JSON.stringify(snapshot)],
+      );
+    }
   }
 }
 
@@ -180,6 +198,24 @@ export async function pgSaveBoard(snapshot: BoardSnapshot) {
   return true;
 }
 
+export async function pgDeleteBoard(boardId: string) {
+  const p = await getPool();
+  if (!p) return false;
+  await p.query("DELETE FROM invites WHERE board_id = $1", [boardId]);
+  await p.query("DELETE FROM board_memberships WHERE board_id = $1", [boardId]);
+  await p.query("DELETE FROM board_snapshots WHERE board_id = $1", [boardId]);
+  return true;
+}
+
+export async function pgListAllBoards(): Promise<BoardSnapshot[]> {
+  const p = await getPool();
+  if (!p) return [];
+  const res = await p.query<{ snapshot: BoardSnapshot }>(
+    "SELECT snapshot FROM board_snapshots ORDER BY updated_at DESC",
+  );
+  return res.rows.map((r) => r.snapshot);
+}
+
 export async function pgListBoardsForEmail(email: string): Promise<BoardSnapshot[]> {
   const p = await getPool();
   if (!p) return [];
@@ -206,6 +242,51 @@ export async function pgAddMembership(email: string, boardId: string) {
   return true;
 }
 
+export async function pgGetVisibility(email: string): Promise<string[] | null> {
+  const p = await getPool();
+  if (!p) return null;
+  const key = email.trim().toLowerCase();
+  const res = await p.query<{ board_ids: string[] | string }>(
+    "SELECT board_ids FROM user_board_visibility WHERE email = $1",
+    [key],
+  );
+  const row = res.rows[0];
+  if (!row) return null;
+  if (Array.isArray(row.board_ids)) return row.board_ids.map(String);
+  if (typeof row.board_ids === "string") {
+    try {
+      const parsed = JSON.parse(row.board_ids) as unknown;
+      return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+export async function pgSetVisibility(email: string, boardIds: string[]) {
+  const p = await getPool();
+  if (!p) return false;
+  const key = email.trim().toLowerCase();
+  await p.query(
+    `INSERT INTO user_board_visibility (email, board_ids, updated_at)
+     VALUES ($1, $2::jsonb, NOW())
+     ON CONFLICT (email) DO UPDATE SET board_ids = $2::jsonb, updated_at = NOW()`,
+    [key, JSON.stringify(boardIds)],
+  );
+  return true;
+}
+
+export async function pgAddVisibleBoard(email: string, boardId: string) {
+  const p = await getPool();
+  if (!p) return false;
+  const key = email.trim().toLowerCase();
+  const current = await pgGetVisibility(key);
+  if (current === null) return true;
+  if (current.includes(boardId)) return true;
+  return pgSetVisibility(key, [...current, boardId]);
+}
+
 export async function pgEmailHasAccess(email: string, boardId: string) {
   const p = await getPool();
   if (!p) return false;
@@ -217,39 +298,96 @@ export async function pgEmailHasAccess(email: string, boardId: string) {
   return (res.rowCount ?? 0) > 0;
 }
 
-export async function pgFindUserByEmail(email: string): Promise<StoredUser | undefined> {
-  const p = await getPool();
-  if (!p) return undefined;
-  const res = await p.query<{
-    id: string;
-    email: string;
-    name: string;
-    password_hash: string;
-    salt: string;
-    created_at: Date | string;
-  }>("SELECT id, email, name, password_hash, salt, created_at FROM users WHERE email = $1", [
-    email.trim().toLowerCase(),
-  ]);
-  const row = res.rows[0];
-  if (!row) return undefined;
+type UserRow = {
+  id: string;
+  email: string;
+  name: string;
+  password_hash: string;
+  salt: string;
+  created_at: Date | string;
+  role?: string | null;
+  username?: string | null;
+};
+
+function mapUser(row: UserRow): StoredUser {
+  const email = row.email;
+  const username = (row.username || email.split("@")[0] || email).trim().toLowerCase();
   return {
     id: row.id,
-    email: row.email,
+    email,
     name: row.name,
     passwordHash: row.password_hash,
     salt: row.salt,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+    role: row.role === "admin" ? "admin" : "user",
+    username,
   };
+}
+
+const USER_SELECT = "id, email, name, password_hash, salt, created_at, role, username";
+
+export async function pgFindUserByEmail(email: string): Promise<StoredUser | undefined> {
+  const p = await getPool();
+  if (!p) return undefined;
+  const res = await p.query<UserRow>(`SELECT ${USER_SELECT} FROM users WHERE lower(email) = $1`, [
+    email.trim().toLowerCase(),
+  ]);
+  const row = res.rows[0];
+  return row ? mapUser(row) : undefined;
+}
+
+export async function pgFindUserByLogin(login: string): Promise<StoredUser | undefined> {
+  const p = await getPool();
+  if (!p) return undefined;
+  const key = login.trim().toLowerCase();
+  if (!key) return undefined;
+  const res = await p.query<UserRow>(
+    `SELECT ${USER_SELECT}
+     FROM users
+     WHERE lower(email) = $1
+        OR lower(coalesce(username, '')) = $1
+        OR split_part(lower(email), '@', 1) = $1
+     LIMIT 1`,
+    [key],
+  );
+  const row = res.rows[0];
+  return row ? mapUser(row) : undefined;
+}
+
+export async function pgListUsers(): Promise<StoredUser[]> {
+  const p = await getPool();
+  if (!p) return [];
+  const res = await p.query<UserRow>(`SELECT ${USER_SELECT} FROM users ORDER BY created_at ASC`);
+  return res.rows.map(mapUser);
 }
 
 export async function pgInsertUser(user: StoredUser) {
   const p = await getPool();
   if (!p) return false;
   await p.query(
-    `INSERT INTO users (id, email, name, password_hash, salt, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6::timestamptz)`,
-    [user.id, user.email, user.name, user.passwordHash, user.salt, user.createdAt],
+    `INSERT INTO users (id, email, name, password_hash, salt, created_at, role, username)
+     VALUES ($1, $2, $3, $4, $5, $6::timestamptz, $7, $8)`,
+    [
+      user.id,
+      user.email,
+      user.name,
+      user.passwordHash,
+      user.salt,
+      user.createdAt,
+      user.role,
+      user.username,
+    ],
   );
+  return true;
+}
+
+export async function pgEnsureUsername(email: string, username: string) {
+  const p = await getPool();
+  if (!p) return false;
+  await p.query(`UPDATE users SET username = $2 WHERE lower(email) = $1 AND (username IS NULL OR btrim(username) = '')`, [
+    email.trim().toLowerCase(),
+    username.trim().toLowerCase(),
+  ]);
   return true;
 }
 
@@ -269,6 +407,9 @@ type InviteRow = {
   used_at: Date | string | null;
   used_by_email: string | null;
   accepted_emails: string[] | string | null;
+  kind?: string | null;
+  team_id?: string | null;
+  team_name?: string | null;
 };
 
 function mapInvite(row: InviteRow): BoardInvite {
@@ -289,11 +430,15 @@ function mapInvite(row: InviteRow): BoardInvite {
     usedAt: row.used_at ? iso(row.used_at) : null,
     usedByEmail: row.used_by_email,
     acceptedEmails: accepted,
+    kind: row.kind === "team" ? "team" : "board",
+    teamId: row.team_id ?? null,
+    teamName: row.team_name ?? null,
   };
 }
 
 const INVITE_SELECT = `token, board_id, board_title, created_by_email, created_by_name,
-            invitee_email, created_at, expires_at, used_at, used_by_email, accepted_emails`;
+            invitee_email, created_at, expires_at, used_at, used_by_email, accepted_emails,
+            kind, team_id, team_name`;
 
 export async function pgInsertInvite(invite: BoardInvite) {
   const p = await getPool();
@@ -301,8 +446,9 @@ export async function pgInsertInvite(invite: BoardInvite) {
   await p.query(
     `INSERT INTO invites (
       token, board_id, board_title, created_by_email, created_by_name,
-      invitee_email, created_at, expires_at, used_at, used_by_email, accepted_emails
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7::timestamptz,$8::timestamptz,$9::timestamptz,$10,$11::jsonb)`,
+      invitee_email, created_at, expires_at, used_at, used_by_email, accepted_emails,
+      kind, team_id, team_name
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7::timestamptz,$8::timestamptz,$9::timestamptz,$10,$11::jsonb,$12,$13,$14)`,
     [
       invite.token,
       invite.boardId,
@@ -315,6 +461,9 @@ export async function pgInsertInvite(invite: BoardInvite) {
       invite.usedAt,
       invite.usedByEmail,
       JSON.stringify(invite.acceptedEmails),
+      invite.kind || "board",
+      invite.teamId,
+      invite.teamName,
     ],
   );
   return true;

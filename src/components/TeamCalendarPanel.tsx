@@ -6,8 +6,10 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
   Plus,
   Trash2,
+  Video,
   X,
 } from "lucide-react";
 import { useBoardStore } from "@/lib/store";
@@ -21,6 +23,13 @@ import {
   formatCalendarDayLabel,
   shiftCalendarDay,
 } from "@/lib/calendar-report";
+import {
+  meetingJoinLabel,
+  meetingLinkKind,
+  meetingLinkLabel,
+  resolveEventMeetingUrl,
+  sanitizeMeetingUrl,
+} from "@/lib/meeting-links";
 import type { TeamEventKind } from "@/lib/types";
 
 const KINDS: TeamEventKind[] = [
@@ -32,6 +41,37 @@ const KINDS: TeamEventKind[] = [
 ];
 
 const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+
+function EventJoinButton({
+  url,
+  compact = false,
+}: {
+  url: string;
+  compact?: boolean;
+}) {
+  const kind = meetingLinkKind(url);
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className={
+        compact
+          ? "inline-flex shrink-0 items-center gap-1 text-[10px] font-semibold text-sky-200 hover:underline"
+          : "inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-white/25"
+      }
+      title={`${meetingLinkLabel(kind)} · ${url}`}
+    >
+      {compact ? (
+        <Video className="h-3 w-3" />
+      ) : (
+        <ExternalLink className="h-3.5 w-3.5" />
+      )}
+      {compact ? meetingLinkLabel(kind) : meetingJoinLabel(kind)}
+    </a>
+  );
+}
 
 function monthMatrix(anchor: string) {
   const [y, m] = anchor.split("-").map(Number);
@@ -70,6 +110,7 @@ export function TeamCalendarPanel({
   const cards = useBoardStore((s) => s.cards);
   const calendarEvents = useBoardStore((s) => s.calendarEvents);
   const createCalendarEvent = useBoardStore((s) => s.createCalendarEvent);
+  const updateCalendarEvent = useBoardStore((s) => s.updateCalendarEvent);
   const deleteCalendarEvent = useBoardStore((s) => s.deleteCalendarEvent);
 
   const today = calendarDayKey();
@@ -80,7 +121,11 @@ export function TeamCalendarPanel({
   const [description, setDescription] = useState("");
   const [kind, setKind] = useState<TeamEventKind>("meeting");
   const [time, setTime] = useState("09:00");
+  const [meetingUrl, setMeetingUrl] = useState("");
+  const [linkError, setLinkError] = useState("");
   const [formOpen, setFormOpen] = useState(false);
+  const [addingLinkId, setAddingLinkId] = useState<string | null>(null);
+  const [linkDraft, setLinkDraft] = useState("");
 
   useEffect(() => {
     setMounted(true);
@@ -165,6 +210,7 @@ export function TeamCalendarPanel({
       time?: string | null;
       kind: "event" | "card";
       eventKind?: TeamEventKind;
+      meetingUrl?: string | null;
     }[] = [];
     for (let i = 0; i < 21; i++) {
       const d = shiftCalendarDay(today, i);
@@ -178,6 +224,7 @@ export function TeamCalendarPanel({
           time: ev.time,
           kind: "event",
           eventKind: ev.kind,
+          meetingUrl: resolveEventMeetingUrl(ev),
         });
       }
       for (const due of entry.cardDues) {
@@ -208,6 +255,10 @@ export function TeamCalendarPanel({
   const onCreate = (e: FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
+    if (meetingUrl.trim() && !sanitizeMeetingUrl(meetingUrl)) {
+      setLinkError("Use um link https do Meet, Teams ou outra sala.");
+      return;
+    }
     createCalendarEvent({
       boardId,
       title,
@@ -215,13 +266,27 @@ export function TeamCalendarPanel({
       kind,
       date: selectedDay,
       time: time || null,
+      meetingUrl: meetingUrl.trim() || null,
       teamId: board?.teamId ?? null,
       memberIds: boardMembers.map((m) => m.id),
     });
     setTitle("");
     setDescription("");
+    setMeetingUrl("");
+    setLinkError("");
     setKind("meeting");
     setFormOpen(false);
+  };
+
+  const saveEventLink = (eventId: string) => {
+    if (linkDraft.trim() && !sanitizeMeetingUrl(linkDraft)) {
+      setLinkError("Use um link https do Meet, Teams ou outra sala.");
+      return;
+    }
+    updateCalendarEvent(eventId, { meetingUrl: linkDraft.trim() || null });
+    setAddingLinkId(null);
+    setLinkDraft("");
+    setLinkError("");
   };
 
   if (!mounted) return null;
@@ -334,6 +399,7 @@ export function TeamCalendarPanel({
                   ...dayList.slice(0, 2).map((ev) => ({
                     key: ev.id,
                     label: `${ev.time ? `${ev.time} ` : ""}${ev.title}`,
+                    hasLink: Boolean(resolveEventMeetingUrl(ev)),
                     style: isSelected
                       ? "bg-[var(--trello-navy)]/12 text-[var(--trello-navy)]"
                       : teamEventKindStyles[ev.kind],
@@ -342,6 +408,7 @@ export function TeamCalendarPanel({
                   ...dueList.slice(0, Math.max(0, 2 - dayList.length)).map((due) => ({
                     key: due.id,
                     label: `Prazo · ${due.title}`,
+                    hasLink: false,
                     style: isSelected
                       ? "bg-[var(--trello-navy)]/12 text-[var(--trello-navy)]"
                       : "bg-amber-100 text-amber-900",
@@ -379,6 +446,7 @@ export function TeamCalendarPanel({
                             key={item.key}
                             className={`truncate rounded px-1 py-0.5 text-[10px] leading-tight sm:text-[11px] ${item.style}`}
                           >
+                            {item.hasLink ? "● " : ""}
                             {item.label}
                           </p>
                         ))}
@@ -513,9 +581,27 @@ export function TeamCalendarPanel({
                     className="mt-1.5 min-h-20 w-full rounded-xl border border-white/15 bg-white/95 px-4 py-3 text-sm text-[var(--trello-navy)] outline-none focus:border-[#0079bf]"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Notas, sala, link…"
+                    placeholder="Notas, pauta, sala física…"
                   />
                 </label>
+                <label className="block text-xs text-white/70">
+                  Link do Meet ou Teams
+                  <input
+                    type="text"
+                    inputMode="url"
+                    autoComplete="off"
+                    className="mt-1.5 w-full rounded-xl border border-white/15 bg-white/95 px-4 py-3 text-sm text-[var(--trello-navy)] outline-none focus:border-[#0079bf]"
+                    value={meetingUrl}
+                    onChange={(e) => {
+                      setMeetingUrl(e.target.value);
+                      setLinkError("");
+                    }}
+                    placeholder="https://meet.google.com/… ou https://teams.microsoft.com/…"
+                  />
+                </label>
+                {linkError && formOpen ? (
+                  <p className="text-xs text-rose-200">{linkError}</p>
+                ) : null}
                 <button
                   type="submit"
                   className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#0079bf] px-4 py-3.5 text-sm font-semibold text-white"
@@ -550,7 +636,9 @@ export function TeamCalendarPanel({
                       </h3>
                     </article>
                   ))}
-                  {dayEvents.map((ev) => (
+                  {dayEvents.map((ev) => {
+                    const joinUrl = resolveEventMeetingUrl(ev);
+                    return (
                     <article
                       key={ev.id}
                       className="group rounded-2xl border border-white/12 bg-white/10 p-4 transition hover:border-white/25 hover:bg-white/14"
@@ -575,6 +663,65 @@ export function TeamCalendarPanel({
                               {ev.description}
                             </p>
                           ) : null}
+                          {joinUrl ? (
+                            <div className="mt-3">
+                              <EventJoinButton url={joinUrl} />
+                            </div>
+                          ) : addingLinkId === ev.id ? (
+                            <form
+                              className="mt-3 space-y-2"
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                saveEventLink(ev.id);
+                              }}
+                            >
+                              <input
+                                autoFocus
+                                value={linkDraft}
+                                onChange={(e) => {
+                                  setLinkDraft(e.target.value);
+                                  setLinkError("");
+                                }}
+                                placeholder="Cole o link do Meet ou Teams"
+                                className="w-full rounded-lg border border-white/15 bg-white/95 px-3 py-2 text-sm text-[var(--trello-navy)] outline-none focus:border-[#0079bf]"
+                              />
+                              {linkError && addingLinkId === ev.id ? (
+                                <p className="text-xs text-rose-200">{linkError}</p>
+                              ) : null}
+                              <div className="flex gap-2">
+                                <button
+                                  type="submit"
+                                  className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-[#0079bf]"
+                                >
+                                  Salvar link
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded-lg px-3 py-1.5 text-xs text-white/70 hover:text-white"
+                                  onClick={() => {
+                                    setAddingLinkId(null);
+                                    setLinkDraft("");
+                                    setLinkError("");
+                                  }}
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            </form>
+                          ) : (
+                            <button
+                              type="button"
+                              className="mt-3 inline-flex items-center gap-1.5 text-xs text-white/70 hover:text-white"
+                              onClick={() => {
+                                setAddingLinkId(ev.id);
+                                setLinkDraft("");
+                                setLinkError("");
+                              }}
+                            >
+                              <Video className="h-3.5 w-3.5" />
+                              Adicionar Meet ou Teams
+                            </button>
+                          )}
                         </div>
                         <button
                           type="button"
@@ -590,7 +737,8 @@ export function TeamCalendarPanel({
                         </button>
                       </div>
                     </article>
-                  ))}
+                    );
+                  })}
                 </>
               )}
             </div>
@@ -602,33 +750,40 @@ export function TeamCalendarPanel({
                 </p>
                 <div className="overflow-hidden rounded-2xl border border-white/12 bg-white/8">
                   {upcoming.map((item, i) => (
-                    <button
+                    <div
                       key={`soon-${item.id}`}
-                      type="button"
-                      className={`flex w-full items-center gap-3 px-3.5 py-3 text-left transition hover:bg-white/10 ${
+                      className={`flex w-full items-center gap-3 px-3.5 py-3 ${
                         i > 0 ? "border-t border-white/10" : ""
                       }`}
-                      onClick={() => {
-                        setSelectedDay(item._day);
-                        setMonthAnchor(item._day.slice(0, 7) + "-01");
-                        setFormOpen(false);
-                      }}
                     >
-                      <span
-                        className={`h-2 w-2 shrink-0 rounded-full ${
-                          item.kind === "card"
-                            ? "bg-amber-400"
-                            : teamEventKindDot[item.eventKind || "other"]
-                        }`}
-                      />
-                      <span className="min-w-0 flex-1 truncate text-sm text-white">
-                        {item.kind === "card" ? `Prazo · ${item.title}` : item.title}
-                      </span>
-                      <span className="shrink-0 text-xs text-white/55">
-                        {formatCalendarDayLabel(item._day)}
-                        {item.time ? ` · ${item.time}` : ""}
-                      </span>
-                    </button>
+                      <button
+                        type="button"
+                        className="flex min-w-0 flex-1 items-center gap-3 text-left transition hover:text-white"
+                        onClick={() => {
+                          setSelectedDay(item._day);
+                          setMonthAnchor(item._day.slice(0, 7) + "-01");
+                          setFormOpen(false);
+                        }}
+                      >
+                        <span
+                          className={`h-2 w-2 shrink-0 rounded-full ${
+                            item.kind === "card"
+                              ? "bg-amber-400"
+                              : teamEventKindDot[item.eventKind || "other"]
+                          }`}
+                        />
+                        <span className="min-w-0 flex-1 truncate text-sm text-white">
+                          {item.kind === "card" ? `Prazo · ${item.title}` : item.title}
+                        </span>
+                        <span className="shrink-0 text-xs text-white/55">
+                          {formatCalendarDayLabel(item._day)}
+                          {item.time ? ` · ${item.time}` : ""}
+                        </span>
+                      </button>
+                      {item.meetingUrl ? (
+                        <EventJoinButton url={item.meetingUrl} compact />
+                      ) : null}
+                    </div>
                   ))}
                 </div>
               </div>

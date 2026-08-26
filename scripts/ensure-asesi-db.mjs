@@ -70,6 +70,38 @@ try {
     `SELECT table_name FROM information_schema.tables WHERE table_schema = $1 ORDER BY 1`,
     [schema],
   );
+
+  const { createHash, randomBytes, scryptSync } = await import("node:crypto");
+  const adminEmail = (process.env.ADMIN_EMAIL || "admin@cge.ce.gov.br").trim().toLowerCase();
+  const adminPassword = process.env.ADMIN_PASSWORD || "Jangada@Admin";
+  const adminName = (process.env.ADMIN_NAME || "Administrador").trim() || "Administrador";
+  const adminUsername = (process.env.ADMIN_USERNAME || "admin").trim().toLowerCase() || "admin";
+  await client.query(
+    `UPDATE users SET username = split_part(email, '@', 1) WHERE username IS NULL OR btrim(username) = ''`,
+  );
+  const existingAdmin = await client.query("SELECT 1 FROM users WHERE email = $1 OR lower(coalesce(username,'')) = $2", [
+    adminEmail,
+    adminUsername,
+  ]);
+  let adminSeeded = false;
+  if ((existingAdmin.rowCount ?? 0) === 0) {
+    const salt = randomBytes(16).toString("hex");
+    const passwordHash = scryptSync(adminPassword, salt, 64).toString("hex");
+    const id = createHash("sha256").update(`jangada-admin:${adminEmail}`).digest("hex").slice(0, 24);
+    await client.query(
+      `INSERT INTO users (id, email, name, password_hash, salt, role, username)
+       VALUES ($1, $2, $3, $4, $5, 'admin', $6)
+       ON CONFLICT (email) DO NOTHING`,
+      [id, adminEmail, adminName, passwordHash, salt, adminUsername],
+    );
+    adminSeeded = true;
+  } else {
+    await client.query(
+      `UPDATE users SET username = $2 WHERE email = $1 AND (username IS NULL OR btrim(username) = '')`,
+      [adminEmail, adminUsername],
+    );
+  }
+
   console.log(
     JSON.stringify(
       {
@@ -77,6 +109,9 @@ try {
         database: ping.rows[0].db,
         schema: ping.rows[0].schema,
         tables: tables.rows.map((r) => r.table_name),
+        adminEmail,
+        adminUsername,
+        adminSeeded,
       },
       null,
       2,

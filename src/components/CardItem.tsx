@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  Check,
   CheckSquare,
   GripVertical,
+  Palette,
   Plus,
   Pencil,
   Trash2,
@@ -18,10 +20,16 @@ import {
   cardPriorityStyles,
   labelStyles,
   priorityLabel,
-  priorityStyles,
 } from "@/lib/utils";
+import {
+  cardCoverStyle,
+  labelColorName,
+  normalizeCoverColor,
+} from "@/lib/card-appearance";
 import { dueUrgency } from "@/lib/board-filters";
 import { useToast } from "@/components/Toast";
+import { CardLabelBars } from "@/components/CardLabelBars";
+import { CardCoverSwatches } from "@/components/CardCoverSwatches";
 
 export function CardItem({
   card,
@@ -61,11 +69,13 @@ export function CardItem({
     card.acceptanceCriteria ?? "",
   );
   const [draftLabels, setDraftLabels] = useState<Label[]>(card.labels ?? []);
+  const [draftCoverColor, setDraftCoverColor] = useState<string | null>(
+    card.coverColor ?? null,
+  );
+  const [pickingCover, setPickingCover] = useState(false);
   const [draftChecklist, setDraftChecklist] = useState<ChecklistItem[]>(
     card.checklist ?? [],
   );
-  const [newLabelName, setNewLabelName] = useState("");
-  const [newLabelColor, setNewLabelColor] = useState<LabelColor>("teal");
   const [newCheckText, setNewCheckText] = useState("");
   const [newComment, setNewComment] = useState("");
   const titleRef = useRef<HTMLInputElement | null>(null);
@@ -105,6 +115,7 @@ export function CardItem({
     setDraftRequirementId(card.requirementId ?? null);
     setDraftAcceptance(card.acceptanceCriteria ?? "");
     setDraftLabels(card.labels ?? []);
+    setDraftCoverColor(card.coverColor ?? null);
     setDraftChecklist(card.checklist ?? []);
     const t = window.setTimeout(() => titleRef.current?.focus(), 50);
     return () => window.clearTimeout(t);
@@ -120,6 +131,7 @@ export function CardItem({
     card.requirementId,
     card.acceptanceCriteria,
     card.labels,
+    card.coverColor,
     card.checklist,
   ]);
 
@@ -147,6 +159,7 @@ export function CardItem({
       requirementId: draftRequirementId,
       acceptanceCriteria: draftAcceptance,
       labels: draftLabels,
+      coverColor: normalizeCoverColor(draftCoverColor),
       checklist: draftChecklist,
     });
     if (draftListId && draftListId !== card.listId) {
@@ -157,14 +170,22 @@ export function CardItem({
     setOpen(false);
   };
 
-  const addLabel = () => {
-    const name = newLabelName.trim();
-    if (!name) return;
-    setDraftLabels((prev) => [
-      ...prev,
-      { id: nanoid(), name, color: newLabelColor },
-    ]);
-    setNewLabelName("");
+  const toggleLabelColor = (color: LabelColor) => {
+    setDraftLabels((prev) => {
+      if (prev.some((label) => label.color === color)) {
+        return prev.filter((label) => label.color !== color);
+      }
+      return [
+        ...prev,
+        { id: nanoid(), name: labelColorName(color), color },
+      ];
+    });
+  };
+
+  const applyCover = (next: string | null) => {
+    const color = normalizeCoverColor(next);
+    setDraftCoverColor(color);
+    updateCard(card.id, { coverColor: color });
   };
 
   const addCheckItem = () => {
@@ -215,6 +236,20 @@ export function CardItem({
                         onChange={(e) => setDraftTitle(e.target.value)}
                       />
                     </label>
+                    <div>
+                      <p className="text-xs text-[var(--muted)] sm:text-sm">
+                        Fundo do card
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-[var(--muted)]">
+                        A cor é aplicada na hora, sem precisar salvar.
+                      </p>
+                      <div className="mt-1.5 rounded-2xl border border-[var(--line)] bg-white/10 p-3">
+                        <CardCoverSwatches
+                          value={draftCoverColor}
+                          onChange={applyCover}
+                        />
+                      </div>
+                    </div>
                     <label className="block text-xs text-[var(--muted)] sm:text-sm">
                       Descrição
                       <textarea
@@ -321,63 +356,34 @@ export function CardItem({
                     <p className="mb-2 text-xs font-medium text-[var(--muted)] sm:text-sm">
                       Etiquetas
                     </p>
-                    <div className="mb-3 flex flex-wrap gap-1.5">
-                      {draftLabels.map((label) => (
-                        <button
-                          key={label.id}
-                          type="button"
-                          className={`inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold uppercase tracking-wide ${labelStyles[label.color]}`}
-                          onClick={() =>
-                            setDraftLabels((prev) =>
-                              prev.filter((l) => l.id !== label.id),
-                            )
-                          }
-                          title="Remover etiqueta"
-                        >
-                          {label.name}
-                          <X className="h-3 w-3 opacity-70" />
-                        </button>
-                      ))}
-                      {draftLabels.length === 0 ? (
-                        <span className="text-xs text-[var(--muted)]">
-                          Nenhuma etiqueta
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                      <input
-                        className="min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)]"
-                        value={newLabelName}
-                        onChange={(e) => setNewLabelName(e.target.value)}
-                        placeholder="Nome da etiqueta"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            addLabel();
-                          }
-                        }}
-                      />
-                      <select
-                        className="rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)]"
-                        value={newLabelColor}
-                        onChange={(e) =>
-                          setNewLabelColor(e.target.value as LabelColor)
-                        }
-                      >
-                        {LABEL_COLOR_OPTIONS.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={addLabel}
-                        className="inline-flex items-center justify-center gap-1 rounded-xl border border-[var(--line)] px-3 py-2.5 text-sm text-white hover:bg-white/5"
-                      >
-                        <Plus className="h-4 w-4" />
-                        Add
-                      </button>
+                    <p className="mb-3 text-xs text-[var(--muted)]">
+                      Só a cor aparece no card. Clique para marcar ou desmarcar.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {LABEL_COLOR_OPTIONS.map((option) => {
+                        const selected = draftLabels.some(
+                          (label) => label.color === option.id,
+                        );
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            title={option.name}
+                            aria-pressed={selected}
+                            onClick={() => toggleLabelColor(option.id)}
+                            className={`relative h-8 w-12 overflow-hidden rounded-md ${labelStyles[option.id]} ${
+                              selected
+                                ? "ring-2 ring-white ring-offset-2 ring-offset-[var(--ink-2)]"
+                                : "opacity-80 hover:opacity-100"
+                            }`}
+                          >
+                            {selected ? (
+                              <Check className="mx-auto h-4 w-4 drop-shadow" />
+                            ) : null}
+                            <span className="sr-only">{option.name}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -555,7 +561,10 @@ export function CardItem({
         } ${dragging ? "opacity-40" : "opacity-100"} ${
           overlay ? "ring-2 ring-[var(--accent)]" : "hover:border-[rgba(9,30,66,0.14)]"
         }`}
-        style={{ borderRadius: "var(--board-card-radius, 0.75rem)" }}
+        style={{
+          borderRadius: "var(--board-card-radius, 0.75rem)",
+          ...cardCoverStyle(card.coverColor),
+        }}
         onClick={() => {
           if (!overlay) setOpen(true);
         }}
@@ -581,18 +590,7 @@ export function CardItem({
           ) : null}
 
           <div className="min-w-0 flex-1">
-            {card.labels.length > 0 ? (
-              <div className="mb-2 flex flex-wrap gap-1">
-                {card.labels.map((label) => (
-                  <span
-                    key={label.id}
-                    className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${labelStyles[label.color]}`}
-                  >
-                    {label.name}
-                  </span>
-                ))}
-              </div>
-            ) : null}
+            <CardLabelBars labels={card.labels} />
 
             <h3 className="board-card-title text-sm font-medium leading-snug">
               {card.title}
@@ -611,19 +609,56 @@ export function CardItem({
             ) : null}
           </div>
 
-          <button
-            type="button"
-            className="shrink-0 rounded p-1 board-card-muted opacity-100 transition hover:bg-black/5 hover:text-[var(--accent)] sm:opacity-0 sm:group-hover/card:opacity-100"
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpen(true);
-            }}
-            aria-label="Editar card"
-            title="Editar"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            {!overlay ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wide board-card-muted hover:bg-black/5 hover:text-[var(--board-card-text)]"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPickingCover((open) => !open);
+                }}
+                aria-expanded={pickingCover}
+                aria-label="Trocar fundo do card"
+                title="Trocar fundo do card"
+              >
+                <Palette className="h-3.5 w-3.5" />
+                Fundo
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="shrink-0 rounded p-1 board-card-muted opacity-100 transition hover:bg-black/5 hover:text-[var(--accent)] sm:opacity-0 sm:group-hover/card:opacity-100"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(true);
+              }}
+              aria-label="Editar card"
+              title="Editar"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
+
+        {pickingCover && !overlay ? (
+          <div
+            className="mb-2 rounded-lg border border-black/10 bg-black/5 p-2"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide board-card-muted">
+              Fundo do card
+            </p>
+            <CardCoverSwatches
+              value={card.coverColor}
+              onChange={(next) => {
+                applyCover(next);
+                setPickingCover(false);
+              }}
+            />
+          </div>
+        ) : null}
 
         <div className="mt-3 flex items-center justify-between gap-2 pl-0 sm:pl-5">
           <div className="flex min-w-0 flex-wrap items-center gap-2">

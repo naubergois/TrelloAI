@@ -10,16 +10,17 @@ import {
   Pencil,
   History,
   RotateCcw,
-  Sparkles,
   UserPlus,
   Users,
   Video,
+  Trash2,
 } from "lucide-react";
 import { useBoardStore } from "@/lib/store";
 import { boardThemeStyle } from "@/lib/board-themes";
 import { BoardCanvas } from "@/components/BoardCanvas";
 import { ConsolidatedBoardCanvas } from "@/components/ConsolidatedBoardCanvas";
-import { AiPanel } from "@/components/AiPanel";
+import { AiChatDialog } from "@/components/AiChatDialog";
+import { JangadaBuddy } from "@/components/JangadaBuddy";
 import { MeetingsPanel } from "@/components/MeetingsPanel";
 import { MeetingRoom } from "@/components/MeetingRoom";
 import { AuthButton } from "@/components/AuthButton";
@@ -27,6 +28,9 @@ import { BrandMark } from "@/components/BrandMark";
 import { ManagerPanel } from "@/components/ManagerPanel";
 import { BoardAppearanceDrawer } from "@/components/BoardAppearanceDrawer";
 import { InvitePanel } from "@/components/InvitePanel";
+import { DeleteBoardDialog } from "@/components/DeleteBoardDialog";
+import { useToast } from "@/components/Toast";
+import { removeBoardFromServer } from "@/lib/board-sync";
 import { RequirementsPanel } from "@/components/RequirementsPanel";
 import { TeamCalendarPanel } from "@/components/TeamCalendarPanel";
 import { ActivityPanel } from "@/components/ActivityPanel";
@@ -43,6 +47,9 @@ import {
   cardMatchesFilter,
   type BoardCardFilter,
 } from "@/lib/board-filters";
+import { extractBoardIndicators } from "@/lib/board-indicators";
+import { BoardIndicators } from "@/components/BoardIndicators";
+import { useVisibleBoards } from "@/lib/use-visible-boards";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -50,7 +57,6 @@ import { useRouter } from "next/navigation";
 type SidePanel =
   | "manager"
   | "meetings"
-  | "ai"
   | "invite"
   | "requirements"
   | "calendar"
@@ -65,29 +71,37 @@ export function BoardShell({
   const router = useRouter();
   const boards = useBoardStore((s) => s.boards);
   const teams = useBoardStore((s) => s.teams);
+  const { boardList, visibleIds } = useVisibleBoards();
   const lists = useBoardStore((s) => s.lists);
   const cards = useBoardStore((s) => s.cards);
   const members = useBoardStore((s) => s.members);
   const requirements = useBoardStore((s) => s.requirements);
   const calendarEvents = useBoardStore((s) => s.calendarEvents);
   const setActiveBoard = useBoardStore((s) => s.setActiveBoard);
+  const ensureMayaRisksColumn = useBoardStore((s) => s.ensureMayaRisksColumn);
   const renameBoard = useBoardStore((s) => s.renameBoard);
   const updateBoardDescription = useBoardStore((s) => s.updateBoardDescription);
   const resetDemo = useBoardStore((s) => s.resetDemo);
+  const deleteBoard = useBoardStore((s) => s.deleteBoard);
   const meetings = useBoardStore((s) => s.meetings);
   const createMeeting = useBoardStore((s) => s.createMeeting);
   const standups = useBoardStore((s) => s.standups);
   const managers = useBoardStore((s) => s.managers);
 
-  const [panel, setPanel] = useState<SidePanel>("manager");
+  const [panel, setPanel] = useState<SidePanel>(null);
+  const [aiChatOpen, setAiChatOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [cardFilter, setCardFilter] = useState<BoardCardFilter>(EMPTY_BOARD_FILTER);
+  const [pendingDelete, setPendingDelete] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     setActiveBoard(boardId);
-  }, [boardId, setActiveBoard]);
+    ensureMayaRisksColumn(boardId);
+  }, [boardId, setActiveBoard, ensureMayaRisksColumn]);
 
   useEffect(() => {
     if (!editingTitle) return;
@@ -98,16 +112,11 @@ export function BoardShell({
     return () => window.clearTimeout(t);
   }, [editingTitle]);
 
-  const boardList = useMemo(
-    () => Object.values(boards).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-    [boards],
-  );
-
-  const board = boards[boardId] ?? null;
+  const board = visibleIds.has(boardId) ? boards[boardId] ?? null : null;
   const assignedTeam = board?.teamId ? teams[board.teamId] : null;
   const ancestors = useMemo(
-    () => (board ? getBoardAncestors(board.id, boards) : []),
-    [board, boards],
+    () => (board ? getBoardAncestors(board.id, boards).filter((b) => visibleIds.has(b.id)) : []),
+    [board, boards, visibleIds],
   );
   const childBoards = useMemo(
     () => (board ? getChildBoards(board.id, boards) : []),
@@ -117,6 +126,10 @@ export function BoardShell({
     () => (board ? getDescendantBoardIds(board.id, boards) : []),
     [board, boards],
   );
+  const hasChildBoards = descendantIds.length > 0;
+  const compactChildKanban =
+    hasChildBoards &&
+    (board?.level === "organization" || board?.level === "team");
   const [canvasView, setCanvasView] = useState<"local" | "all">("all");
 
   const boardMembers = useMemo(() => {
@@ -148,6 +161,17 @@ export function BoardShell({
       matchCount: pool.filter((c) => cardMatchesFilter(c, cardFilter)).length,
     };
   }, [board, lists, cards, cardFilter, descendantIds, boards, canvasView]);
+
+  const boardIndicators = useMemo(() => {
+    if (!board) return null;
+    return extractBoardIndicators({
+      boardIds: [board.id, ...descendantIds],
+      boards,
+      lists,
+      cards,
+      requirements,
+    });
+  }, [board, descendantIds, boards, lists, cards, requirements]);
 
   const reqCount = useMemo(
     () =>
@@ -186,6 +210,22 @@ export function BoardShell({
   };
 
   const themeStyle = board ? boardThemeStyle(board) : undefined;
+
+  const confirmDeleteBoard = async () => {
+    if (!board) return;
+    setDeleteBusy(true);
+    const title = board.title;
+    const synced = await removeBoardFromServer(board.id);
+    deleteBoard(board.id);
+    setDeleteBusy(false);
+    setPendingDelete(false);
+    toast(
+      synced
+        ? `Board "${title}" excluído.`
+        : `Board "${title}" removido neste dispositivo.`,
+    );
+    router.push("/");
+  };
 
   if (!board) {
     return (
@@ -292,10 +332,20 @@ export function BoardShell({
             <button
               type="button"
               onClick={() => setAppearanceOpen(true)}
-              title="Fundo e design"
-              className="rounded-xl border border-[var(--line)] p-1.5 text-[var(--muted)] transition hover:text-white sm:p-2"
+              title="Aparência: fundo do board e dos cards"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--line)] px-2 py-1.5 text-[var(--muted)] transition hover:text-white sm:px-2.5 sm:py-2"
             >
               <Palette className="h-4 w-4" />
+              <span className="hidden text-xs font-medium sm:inline">Aparência</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setPendingDelete(true)}
+              title="Excluir board"
+              className="rounded-xl border border-rose-500/30 p-1.5 text-rose-300 transition hover:bg-rose-500/15 hover:text-rose-100 sm:p-2"
+            >
+              <Trash2 className="h-4 w-4" />
             </button>
 
             <div className="flex items-center gap-0.5 rounded-xl border border-[var(--line)] bg-black/20 p-0.5 sm:gap-1 sm:rounded-2xl sm:p-1">
@@ -333,15 +383,16 @@ export function BoardShell({
               </button>
               <button
                 type="button"
-                onClick={() => toggle("ai")}
-                className={`inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm transition sm:rounded-xl sm:px-2.5 sm:py-2 ${
-                  panel === "ai"
+                onClick={() => setAiChatOpen((open) => !open)}
+                title="Jangadinha"
+                className={`inline-flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm transition sm:rounded-xl sm:px-2 sm:py-1.5 ${
+                  aiChatOpen
                     ? "bg-white font-semibold text-slate-900"
                     : "text-[var(--muted)] hover:text-white"
                 }`}
               >
-                <Sparkles className="h-4 w-4" />
-                <span className="hidden sm:inline">IA</span>
+                <JangadaBuddy size={22} mood={aiChatOpen ? "happy" : "idle"} />
+                <span className="hidden sm:inline">Jangadinha</span>
               </button>
             </div>
 
@@ -419,15 +470,20 @@ export function BoardShell({
                   </p>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => setEditingTitle(true)}
-                  className="group/title flex max-w-full items-start gap-2 rounded-xl text-left transition hover:bg-white/5"
-                >
+                <div className="flex max-w-full items-start gap-2">
                   <div className="min-w-0">
-                    <p className="truncate font-[family-name:var(--font-display)] text-xl text-white sm:text-2xl">
-                      {board.title}
-                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setEditingTitle(true)}
+                      className="group/title flex max-w-full items-start gap-2 rounded-xl text-left transition hover:bg-white/5"
+                    >
+                      <p className="truncate font-[family-name:var(--font-display)] text-xl text-white sm:text-2xl">
+                        {board.title}
+                      </p>
+                      <span className="mt-1.5 shrink-0 rounded-lg border border-[var(--line)] p-1.5 text-[var(--muted)] opacity-100 transition group-hover/title:border-[var(--accent)]/40 group-hover/title:text-[var(--accent)] sm:opacity-70">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </span>
+                    </button>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <span
                         className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${BOARD_LEVEL_STYLES[board.level]}`}
@@ -435,34 +491,29 @@ export function BoardShell({
                         {BOARD_LEVEL_LABELS[board.level]}
                       </span>
                       {ancestors.map((a) => (
-                        <button
+                        <Link
                           key={a.id}
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/board/${a.id}`);
-                          }}
+                          href={`/board/${a.id}`}
                           className="truncate text-[11px] text-white/70 hover:text-white hover:underline"
                         >
                           {a.title}
-                        </button>
+                        </Link>
                       ))}
-                      {childBoards.length > 0 ? (
+                      {descendantIds.length > 0 ? (
                         <span className="text-[11px] text-white/55">
-                          · {childBoards.length} filho(s) · {descendantIds.length}{" "}
-                          descendente(s)
+                          · {descendantIds.length} board
+                          {descendantIds.length === 1 ? "" : "s"} abaixo
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-0.5 hidden truncate text-xs text-[var(--muted)] sm:block">
-                      {board.description || "Clique para editar nome e descrição"}
-                      {managers[board.id] ? ` · ${managers[board.id].name}` : ""}
-                    </p>
+                    {childBoards.length === 0 ? (
+                      <p className="mt-0.5 hidden truncate text-xs text-[var(--muted)] sm:block">
+                        {board.description || "Clique para editar nome e descrição"}
+                        {managers[board.id] ? ` · ${managers[board.id].name}` : ""}
+                      </p>
+                    ) : null}
                   </div>
-                  <span className="mt-1.5 shrink-0 rounded-lg border border-[var(--line)] p-1.5 text-[var(--muted)] opacity-100 transition group-hover/title:border-[var(--accent)]/40 group-hover/title:text-[var(--accent)] sm:opacity-70">
-                    <Pencil className="h-3.5 w-3.5" />
-                  </span>
-                </button>
+                </div>
               )}
             </div>
 
@@ -501,58 +552,102 @@ export function BoardShell({
             </select>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-2 sm:px-3">
-            <BoardFilterBar
-              filter={cardFilter}
-              onChange={setCardFilter}
-              members={boardMembers}
-              matchCount={matchCount}
-              totalCount={totalCount}
-            />
-            {descendantIds.length > 0 ? (
-              <div className="mb-2 flex shrink-0 gap-1 rounded-xl border border-white/15 bg-black/15 p-0.5">
-                <button
-                  type="button"
-                  onClick={() => setCanvasView("all")}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                    canvasView === "all"
-                      ? "bg-white text-[#0079bf]"
-                      : "text-white/70 hover:text-white"
-                  }`}
-                >
-                  Local + inferiores
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCanvasView("local")}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                    canvasView === "local"
-                      ? "bg-white text-[#0079bf]"
-                      : "text-white/70 hover:text-white"
-                  }`}
-                >
-                  Só este board
-                </button>
+          <div
+            data-board-page-scroll={hasChildBoards ? "true" : undefined}
+            className={`flex min-h-0 flex-1 flex-col px-2 sm:px-3 ${
+              hasChildBoards
+                ? "overflow-y-auto overscroll-contain"
+                : "overflow-hidden"
+            }`}
+          >
+            {boardIndicators ? (
+              <div className="mb-2 shrink-0 rounded-2xl border border-white/15 bg-black/20 px-3 py-1.5">
+                <BoardIndicators
+                  stats={boardIndicators}
+                  variant="full"
+                  rolledUp={descendantIds.length > 0}
+                  descendantCount={descendantIds.length}
+                  activeFilter={cardFilter}
+                  onChipClick={(chip) => {
+                    if (!chip.filter) return;
+                    setCardFilter((cur) => {
+                      const next = { ...cur };
+                      if (chip.filter?.due) {
+                        next.due =
+                          cur.due === chip.filter.due ? "" : chip.filter.due;
+                      }
+                      if (chip.filter?.priority) {
+                        next.priority =
+                          cur.priority === chip.filter.priority
+                            ? ""
+                            : chip.filter.priority;
+                      }
+                      return next;
+                    });
+                  }}
+                />
               </div>
             ) : null}
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <BoardFilterBar
+                  filter={cardFilter}
+                  onChange={setCardFilter}
+                  members={boardMembers}
+                  matchCount={matchCount}
+                  totalCount={totalCount}
+                />
+              </div>
+              {descendantIds.length > 0 ? (
+                <div className="flex shrink-0 gap-1 rounded-xl border border-white/15 bg-black/15 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setCanvasView("all")}
+                    className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
+                      canvasView === "all"
+                        ? "bg-white text-[#0079bf]"
+                        : "text-white/70 hover:text-white"
+                    }`}
+                  >
+                    Local + inferiores
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCanvasView("local")}
+                    className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
+                      canvasView === "local"
+                        ? "bg-white text-[#0079bf]"
+                        : "text-white/70 hover:text-white"
+                    }`}
+                  >
+                    Só este board
+                  </button>
+                </div>
+              ) : null}
+            </div>
+            <div
+              className={
+                hasChildBoards
+                  ? "flex flex-col pb-8"
+                  : "flex min-h-0 flex-1 flex-col overflow-hidden"
+              }
+            >
               <div
                 className={
-                  canvasView === "all" && descendantIds.length > 0
-                    ? "min-h-0 max-h-[45%] shrink-0 overflow-hidden"
-                    : "min-h-0 flex-1 overflow-hidden"
+                  compactChildKanban
+                    ? "h-[min(28vh,16rem)] shrink-0 overflow-hidden"
+                    : hasChildBoards
+                      ? "h-[min(46vh,28rem)] shrink-0 overflow-hidden"
+                      : "min-h-0 flex-1 overflow-hidden"
                 }
               >
                 <BoardCanvas boardId={board.id} filter={cardFilter} />
               </div>
-              {canvasView === "all" && descendantIds.length > 0 ? (
-                <div className="min-h-0 flex-1 overflow-hidden">
-                  <ConsolidatedBoardCanvas
-                    boardId={board.id}
-                    filter={cardFilter}
-                    onOpenBoard={(id) => router.push(`/board/${id}`)}
-                  />
-                </div>
+              {hasChildBoards ? (
+                <ConsolidatedBoardCanvas
+                  boardId={board.id}
+                  filter={cardFilter}
+                />
               ) : null}
             </div>
           </div>
@@ -580,9 +675,6 @@ export function BoardShell({
               {panel === "meetings" ? (
                 <MeetingsPanel boardId={board.id} onClose={() => setPanel(null)} />
               ) : null}
-              {panel === "ai" ? (
-                <AiPanel boardId={board.id} onClose={() => setPanel(null)} />
-              ) : null}
               {panel === "invite" ? (
                 <aside className="anim-rise panel-glass flex h-full min-h-0 w-full flex-col overflow-hidden rounded-t-3xl p-4 sm:rounded-3xl">
                   <InvitePanel boardId={board.id} onClose={() => setPanel(null)} />
@@ -607,6 +699,28 @@ export function BoardShell({
         <BoardAppearanceDrawer
           boardId={board.id}
           onClose={() => setAppearanceOpen(false)}
+        />
+      ) : null}
+
+      {aiChatOpen ? (
+        <AiChatDialog boardId={board.id} onClose={() => setAiChatOpen(false)} />
+      ) : null}
+
+      {pendingDelete ? (
+        <DeleteBoardDialog
+          boardId={board.id}
+          title={board.title}
+          listCount={board.listIds.length}
+          cardCount={board.listIds.reduce(
+            (n, lid) => n + (lists[lid]?.cardIds.length ?? 0),
+            0,
+          )}
+          childCount={childBoards.length}
+          busy={deleteBusy}
+          onCancel={() => {
+            if (!deleteBusy) setPendingDelete(false);
+          }}
+          onConfirm={() => void confirmDeleteBoard()}
         />
       ) : null}
     </div>

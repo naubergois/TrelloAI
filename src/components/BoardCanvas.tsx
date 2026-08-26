@@ -110,6 +110,16 @@ export function BoardCanvas({
         <div
           className="board-scroll flex h-full overflow-x-auto overflow-y-hidden pb-1 pr-1"
           style={{ gap: "var(--board-gap, 0.75rem)" }}
+          onWheel={(event) => {
+            if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+            const inColumn = (event.target as HTMLElement | null)?.closest?.(
+              ".board-list-column",
+            );
+            if (inColumn) return;
+            const page = event.currentTarget.closest("[data-board-page-scroll]");
+            if (!(page instanceof HTMLElement)) return;
+            page.scrollTop += event.deltaY;
+          }}
         >
           {orderedLists.map((list, index) => (
             <div
