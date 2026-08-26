@@ -41,6 +41,20 @@ const MAYA_KEY = "maya-risks";
 const MAYA_TITLE = "Riscos Maya";
 const TRELLO_URL = "https://trello.com/b/Rl7Cb3rj/asesi";
 const WA_ASESI = "Grupo WhatsApp ASESI (120363430202949653@g.us)";
+const WA_ASESI_JID = "120363430202949653@g.us";
+
+function waGroup({ name, jid, notes }) {
+  const ts = nowIso();
+  return {
+    id: nid("wa-"),
+    name,
+    inviteUrl: null,
+    jid: jid || null,
+    notes: notes || undefined,
+    addedAt: ts,
+    updatedAt: ts,
+  };
+}
 
 function nowIso() {
   return new Date().toISOString();
@@ -95,6 +109,7 @@ function emptySnapshot({
   owner,
   team,
   gitRepos = [],
+  whatsappGroups = [],
   listTitles,
   seedCards = {},
 }) {
@@ -134,6 +149,7 @@ function emptySnapshot({
     backgroundImageUrl: null,
     backgroundTint: 28,
     gitRepos,
+    whatsappGroups,
     riskReport: null,
     createdAt: ts,
     updatedAt: ts,
@@ -612,6 +628,13 @@ function buildAllSnapshots() {
     backgroundId: "trello",
     owner,
     team,
+    whatsappGroups: [
+      waGroup({
+        name: "Grupo WhatsApp ASESI",
+        jid: WA_ASESI_JID,
+        notes: "Fonte principal da carteira ASESI.",
+      }),
+    ],
     listTitles: KANBAN,
     seedCards: asesiCards,
   });
@@ -627,6 +650,9 @@ function buildAllSnapshots() {
       owner,
       team,
       gitRepos: p.gitRepos || [],
+      whatsappGroups: p.waJid
+        ? [waGroup({ name: `Grupo WhatsApp ${p.title}`, jid: p.waJid })]
+        : [],
       listTitles: KANBAN,
       seedCards: p.cards || {},
     }),

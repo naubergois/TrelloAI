@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
+  Archive,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  Download,
   GitBranch,
   Loader2,
   MessageCircle,
@@ -26,6 +28,13 @@ import {
   formatCalendarDayLabel,
   shiftCalendarDay,
 } from "@/lib/calendar-report";
+import {
+  collectMayaDayMessages,
+  downloadTextFile,
+  formatMayaChatTranscript,
+  listMayaChatDays,
+  mayaChatFileName,
+} from "@/lib/maya-chat";
 
 type Tab = "chat" | "calendar" | "settings";
 
@@ -87,7 +96,7 @@ export function ManagerPanel({
   const updateManager = useBoardStore((s) => s.updateManager);
   const startDailyStandup = useBoardStore((s) => s.startDailyStandup);
   const applyStandupAiTurn = useBoardStore((s) => s.applyStandupAiTurn);
-  const appendManagerChat = useBoardStore((s) => s.appendManagerChat);
+  const appendMayaDayChat = useBoardStore((s) => s.appendMayaDayChat);
   const replyToStandupChat = useBoardStore((s) => s.replyToStandupChat);
   const setActiveStandup = useBoardStore((s) => s.setActiveStandup);
   const closeStandup = useBoardStore((s) => s.closeStandup);
@@ -98,6 +107,7 @@ export function ManagerPanel({
   const joinMeeting = useBoardStore((s) => s.joinMeeting);
   const activities = useBoardStore((s) => s.activities);
   const postCalendarDayAlert = useBoardStore((s) => s.postCalendarDayAlert);
+  const mayaLogs = useBoardStore((s) => s.mayaLogs);
 
   const [tab, setTab] = useState<Tab>("chat");
   const [processing, setProcessing] = useState(false);
@@ -105,8 +115,9 @@ export function ManagerPanel({
   const [draft, setDraft] = useState("");
   const [gitDraft, setGitDraft] = useState("");
   const [calendarDay, setCalendarDay] = useState(calendarDayKey());
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     ensureManager(boardId);
@@ -155,9 +166,30 @@ export function ManagerPanel({
     );
   }, [board, boardId, calendarDay, activities]);
 
+  const todayKey = calendarDayKey();
+  const todayMessages = useMemo(
+    () => collectMayaDayMessages(boardId, todayKey, mayaLogs, standups),
+    [boardId, todayKey, mayaLogs, standups],
+  );
+  const previousChatDays = useMemo(
+    () => listMayaChatDays(boardId, mayaLogs, standups).filter((day) => day !== todayKey),
+    [boardId, mayaLogs, standups, todayKey],
+  );
+
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [standup?.chat?.length, standup?.id]);
+    if (tab !== "chat") return;
+    const el = chatScrollRef.current;
+    if (!el) return;
+    const stickToEnd = () => {
+      el.scrollTop = el.scrollHeight;
+    };
+    const frame = window.requestAnimationFrame(stickToEnd);
+    const later = window.setTimeout(stickToEnd, 80);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(later);
+    };
+  }, [todayMessages.length, processing, standup?.awaitingReplyFrom, standup?.id, tab]);
 
   useEffect(() => {
     if (tab === "chat" && standup?.awaitingReplyFrom) {
@@ -280,6 +312,11 @@ export function ManagerPanel({
         status: r.status,
       })),
       gitRepos: (board.gitRepos || []).map((r) => ({ url: r.url })),
+      whatsappGroups: (board.whatsappGroups || []).map((g) => ({
+        name: g.name,
+        inviteUrl: g.inviteUrl || null,
+        jid: g.jid || null,
+      })),
       risks: latest?.risks?.map((r) => ({
         title: r.title,
         severity: r.severity,
@@ -393,6 +430,11 @@ export function ManagerPanel({
   const askManager = async (text: string, report?: BoardRiskReport | null) => {
     const prompt = text.trim();
     if (!prompt || processing) return;
+    appendMayaDayChat(boardId, {
+      role: "member",
+      memberId: currentUserId,
+      content: prompt,
+    });
     setProcessing(true);
     setResultMsg("");
     setDraft("");
@@ -420,10 +462,10 @@ export function ManagerPanel({
       const actions = [data.action, data.extraAction].filter(Boolean) as AiAction[];
       applyManagerActions(actions, boardId);
       const msg = data.message || "Pronto.";
-      if (standup) {
-        appendManagerChat(standup.id, msg);
+      appendMayaDayChat(boardId, { role: "manager", content: msg });
+      if (data.provider !== "deepseek" && msg.includes("DeepSeek falhou")) {
+        setResultMsg("Maya respondeu em modo local (DeepSeek indisponível).");
       }
-      setResultMsg(msg);
     } catch {
       setResultMsg("Erro de rede ao falar com Maya.");
     } finally {
@@ -469,6 +511,20 @@ export function ManagerPanel({
     { id: "calendar", label: "Dia", icon: CalendarDays },
     { id: "settings", label: "Ajustes", icon: Settings2 },
   ];
+
+  const downloadDayFile = (date: string) => {
+    const messages = collectMayaDayMessages(boardId, date, mayaLogs, standups);
+    downloadTextFile(
+      mayaChatFileName(board.title, date),
+      formatMayaChatTranscript({
+        boardTitle: board.title,
+        managerName: manager.name,
+        date,
+        messages,
+        members,
+      }),
+    );
+  };
 
   return (
     <aside className="anim-rise panel-glass flex h-full min-h-0 w-full flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl">
@@ -545,7 +601,68 @@ export function ManagerPanel({
       {/* Body */}
       {tab === "chat" ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          {!standup ? (
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] px-3 py-2">
+            <p className="text-[11px] text-[var(--muted)]">
+              Hoje · {todayMessages.length}{" "}
+              {todayMessages.length === 1 ? "mensagem" : "mensagens"}
+            </p>
+            <div className="flex items-center gap-1">
+              {todayMessages.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => downloadDayFile(todayKey)}
+                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-[var(--muted)] hover:text-white"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Salvar hoje
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setArchiveOpen((open) => !open)}
+                className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] ${
+                  archiveOpen ? "bg-white/10 text-white" : "text-[var(--muted)] hover:text-white"
+                }`}
+                aria-expanded={archiveOpen}
+              >
+                <Archive className="h-3.5 w-3.5" />
+                Dias anteriores
+                {previousChatDays.length > 0 ? (
+                  <span className="rounded-full bg-white/10 px-1.5 text-[10px]">
+                    {previousChatDays.length}
+                  </span>
+                ) : null}
+              </button>
+            </div>
+          </div>
+
+          {archiveOpen ? (
+            <div className="shrink-0 border-b border-[var(--line)] bg-black/20 px-3 py-2">
+              {previousChatDays.length === 0 ? (
+                <p className="text-[11px] text-[var(--muted)]">
+                  Conversas de outros dias aparecem aqui como arquivo .txt para baixar.
+                </p>
+              ) : (
+                <ul className="max-h-36 space-y-1 overflow-y-auto">
+                  {previousChatDays.map((day) => (
+                    <li key={day} className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-white">{formatCalendarDayLabel(day)}</span>
+                      <button
+                        type="button"
+                        onClick={() => downloadDayFile(day)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-[var(--line)] px-2 py-1 text-[11px] text-[var(--muted)] hover:text-white"
+                      >
+                        <Download className="h-3 w-3" />
+                        Arquivo
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : null}
+
+          {!standup && todayMessages.length === 0 ? (
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
                 <MayaAvatar size="lg" />
@@ -611,13 +728,24 @@ export function ManagerPanel({
             </div>
           ) : (
             <>
-              <div className="board-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-4">
-                {(standup.chat ?? []).map((msg, i) => {
+              <div ref={chatScrollRef} className="board-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-4">
+                {todayMessages.map((msg, i) => {
                   const isManager = msg.role === "manager";
                   const who = msg.memberId ? members[msg.memberId] : null;
+                  const prevMember = i > 0 ? todayMessages[i - 1].memberId : null;
+                  const showTurn = Boolean(msg.memberId && msg.memberId !== prevMember);
                   return (
+                    <div key={msg.id} className="space-y-2">
+                      {showTurn && who ? (
+                        <div className="flex items-center gap-2 pt-1">
+                          <div className="h-px flex-1 bg-white/10" />
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-white/50">
+                            {who.name}
+                          </span>
+                          <div className="h-px flex-1 bg-white/10" />
+                        </div>
+                      ) : null}
                     <div
-                      key={msg.id}
                       className={`chat-bubble flex gap-2 ${isManager ? "items-end" : "flex-row-reverse items-end"}`}
                       style={{ animationDelay: `${Math.min(i, 8) * 20}ms` }}
                     >
@@ -656,16 +784,17 @@ export function ManagerPanel({
                         <p className="whitespace-pre-wrap">{msg.content}</p>
                       </div>
                     </div>
+                    </div>
                   );
                 })}
 
-                {awaitingMember && standup.status === "open" ? (
+                {processing || (awaitingMember && standup?.status === "open") ? (
                   <div className="chat-bubble flex items-center gap-2 pl-1 text-xs text-[var(--muted)]">
                     <MayaAvatar size="sm" />
                     <span className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-white/5 px-2.5 py-1">
                       {processing
                         ? "Maya pensando (DeepSeek)…"
-                        : `Aguardando ${awaitingMember.name}`}
+                        : `Aguardando ${awaitingMember?.name}`}
                       <span className="ml-1 inline-flex gap-0.5">
                         <span className="typing-dot h-1 w-1 rounded-full bg-[var(--accent)]" />
                         <span className="typing-dot h-1 w-1 rounded-full bg-[var(--accent)]" />
@@ -674,13 +803,11 @@ export function ManagerPanel({
                     </span>
                   </div>
                 ) : null}
-
-                <div ref={chatEndRef} />
               </div>
 
-              {resultMsg || standup.managerSummary ? (
+              {resultMsg || standup?.managerSummary ? (
                 <div className="mx-3 mb-2 whitespace-pre-wrap rounded-2xl border border-[var(--accent)]/25 bg-[var(--accent)]/10 px-3 py-2 text-xs text-[var(--text)]">
-                  {resultMsg || standup.managerSummary}
+                  {resultMsg || standup?.managerSummary}
                 </div>
               ) : null}
 
@@ -717,7 +844,7 @@ export function ManagerPanel({
                 </div>
               ) : null}
 
-              {standup.status === "open" && awaitingMember ? (
+              {standup?.status === "open" && awaitingMember ? (
                 <div className="border-t border-[var(--line)] bg-gradient-to-t from-black/40 to-transparent px-3 pb-3 pt-2">
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <p className="text-[11px] text-[var(--muted)]">
@@ -822,10 +949,20 @@ export function ManagerPanel({
                       )}
                     </button>
                   </form>
+                  {!standup ? (
+                    <button
+                      type="button"
+                      onClick={() => startDailyStandup(boardId, { withMeeting: true })}
+                      className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--line)] px-3 py-2 text-xs text-[var(--muted)] hover:text-white"
+                    >
+                      <Play className="h-3.5 w-3.5" />
+                      Começar daily com {manager.name}
+                    </button>
+                  ) : null}
                 </div>
               )}
 
-              {standup.status === "closed" ? (
+              {standup?.status === "closed" ? (
                 <div className="border-t border-[var(--line)] px-3 py-3">
                   <button
                     type="button"

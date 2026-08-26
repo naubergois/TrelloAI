@@ -44,11 +44,13 @@ export function CardItem({
   dragging,
   overlay,
   dragHandleProps,
+  variant = "default",
 }: {
   card: Card;
   dragging?: boolean;
   overlay?: boolean;
   dragHandleProps?: Record<string, unknown>;
+  variant?: "default" | "chip";
 }) {
   const updateCard = useBoardStore((s) => s.updateCard);
   const deleteCard = useBoardStore((s) => s.deleteCard);
@@ -637,12 +639,17 @@ export function CardItem({
         )
       : null;
 
+  const listTitle = lists[card.listId]?.title;
+  const chip = variant === "chip";
+
   return (
     <>
       <article
         role="button"
         tabIndex={0}
-        className={`group/card board-card-surface cursor-pointer border p-3 transition ${
+        className={`group/card board-card-surface cursor-pointer border transition ${
+          chip ? "p-2" : "p-3"
+        } ${
           urgency === "overdue"
             ? "border-rose-400/55"
             : urgency === "today" || urgency === "soon"
@@ -666,8 +673,8 @@ export function CardItem({
           }
         }}
       >
-        <div className="mb-1 flex items-start gap-1">
-          {dragHandleProps ? (
+        <div className={`flex items-start gap-1 ${chip ? "mb-0" : "mb-1"}`}>
+          {dragHandleProps && !chip ? (
             <button
               type="button"
               className="mt-0.5 shrink-0 cursor-grab rounded p-0.5 board-card-muted hover:bg-black/5 hover:text-[var(--board-card-text)] active:cursor-grabbing"
@@ -680,57 +687,65 @@ export function CardItem({
           ) : null}
 
           <div className="min-w-0 flex-1">
-            <CardLabelBars labels={card.labels} />
+            {chip ? null : <CardLabelBars labels={card.labels} />}
 
             <h3 className="board-card-title text-sm font-medium leading-snug">
               {card.title}
             </h3>
 
-            {card.description ? (
+            {chip && listTitle ? (
+              <p className="board-card-muted mt-0.5 truncate text-[10px]">
+                {listTitle}
+              </p>
+            ) : null}
+
+            {!chip && card.description ? (
               <p className="board-card-muted mt-1 line-clamp-2 text-xs">
                 {card.description}
               </p>
             ) : null}
 
-            {linkedReq ? (
+            {!chip && linkedReq ? (
               <p className="mt-1.5 text-[10px] font-medium text-[var(--accent)]">
                 {linkedReq.code}
               </p>
             ) : null}
           </div>
 
-          <div className="flex shrink-0 flex-col items-end gap-1">
-            {!overlay ? (
+          {chip ? null : (
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              {!overlay ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wide board-card-muted hover:bg-black/5 hover:text-[var(--board-card-text)]"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPickingCover((open) => !open);
+                  }}
+                  aria-expanded={pickingCover}
+                  aria-label="Trocar fundo do card"
+                  title="Trocar fundo do card"
+                >
+                  <Palette className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
               <button
                 type="button"
-                className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wide board-card-muted hover:bg-black/5 hover:text-[var(--board-card-text)]"
+                className="shrink-0 rounded p-1 board-card-muted opacity-100 transition hover:bg-black/5 hover:text-[var(--accent)] sm:opacity-0 sm:group-hover/card:opacity-100"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setPickingCover((open) => !open);
+                  setOpen(true);
                 }}
-                aria-expanded={pickingCover}
-                aria-label="Trocar fundo do card"
-                title="Trocar fundo do card"
+                aria-label="Editar card"
+                title="Editar"
               >
-                <Palette className="h-3.5 w-3.5" />
+                <Pencil className="h-3.5 w-3.5" />
               </button>
-            ) : null}
-            <button
-              type="button"
-              className="shrink-0 rounded p-1 board-card-muted opacity-100 transition hover:bg-black/5 hover:text-[var(--accent)] sm:opacity-0 sm:group-hover/card:opacity-100"
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpen(true);
-              }}
-              aria-label="Editar card"
-              title="Editar"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
-          </div>
+            </div>
+          )}
         </div>
 
-        {pickingCover && !overlay ? (
+        {pickingCover && !overlay && !chip ? (
           <div
             className="mb-2 rounded-lg border border-black/10 bg-black/5 p-2"
             onClick={(e) => e.stopPropagation()}
@@ -749,7 +764,11 @@ export function CardItem({
           </div>
         ) : null}
 
-        <div className="mt-3 flex items-center justify-between gap-2 pl-0 sm:pl-5">
+        <div
+          className={`flex items-center justify-between gap-2 ${
+            chip ? "mt-1.5 pl-0" : "mt-3 pl-0 sm:pl-5"
+          }`}
+        >
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             {card.priority ? (
               <span
@@ -757,12 +776,12 @@ export function CardItem({
               >
                 {priorityLabel[card.priority]}
               </span>
-            ) : (
+            ) : chip ? null : (
               <span className="board-card-muted text-[10px]">
                 sem prioridade
               </span>
             )}
-            {card.dueDate ? (
+            {!chip && card.dueDate ? (
               <span
                 className={`text-[10px] font-medium ${
                   urgency === "overdue"
@@ -785,33 +804,35 @@ export function CardItem({
               </span>
             ) : null}
           </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <div
-              onClick={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-              onKeyDown={(e) => e.stopPropagation()}
-            >
-              <CardAssigneeCombo
-                selectedIds={cardAssigneeIds(card)}
-                team={assigneeChoices.team}
-                external={assigneeChoices.external}
-                members={members}
-                disabled={overlay}
-                onChange={(ids) => updateCard(card.id, { assigneeIds: ids })}
-              />
+          {chip ? null : (
+            <div className="flex shrink-0 items-center gap-1">
+              <div
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                <CardAssigneeCombo
+                  selectedIds={cardAssigneeIds(card)}
+                  team={assigneeChoices.team}
+                  external={assigneeChoices.external}
+                  members={members}
+                  disabled={overlay}
+                  onChange={(ids) => updateCard(card.id, { assigneeIds: ids })}
+                />
+              </div>
+              <button
+                type="button"
+                className="board-card-muted rounded p-1 hover:bg-black/5 hover:text-rose-600"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (confirm(`Excluir o card "${card.title}"?`)) deleteCard(card.id);
+                }}
+                aria-label="Excluir card"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
             </div>
-            <button
-              type="button"
-              className="board-card-muted rounded p-1 hover:bg-black/5 hover:text-rose-600"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (confirm(`Excluir o card "${card.title}"?`)) deleteCard(card.id);
-              }}
-              aria-label="Excluir card"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          </div>
+          )}
         </div>
       </article>
 

@@ -1,5 +1,6 @@
 import type { Board } from "./types";
 import { ensureBoardHierarchy } from "./board-hierarchy";
+import { normalizeWhatsAppGroups } from "./whatsapp-groups";
 
 export type BoardBackgroundId =
   | "ceara"
@@ -537,6 +538,7 @@ export function ensureBoardAppearance(board: Board): Board {
     externalMemberIds: Array.isArray(board.externalMemberIds) ? board.externalMemberIds : [],
     teamId: board.teamId ?? null,
     gitRepos: Array.isArray(board.gitRepos) ? board.gitRepos : [],
+    whatsappGroups: normalizeWhatsAppGroups(board.whatsappGroups),
     riskReport: board.riskReport ?? null,
     backgroundId: (board.backgroundId as BoardBackgroundId) || DEFAULT_BACKGROUND_ID,
     designId: (board.designId as BoardDesignId) || DEFAULT_DESIGN_ID,

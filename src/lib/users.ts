@@ -5,9 +5,11 @@ import {
   isPgConfigured,
   pgEnsureUsername,
   pgFindUserByEmail,
+  pgFindUserById,
   pgFindUserByLogin,
   pgInsertUser,
   pgListUsers,
+  pgUpdateUser,
 } from "@/lib/storage/pg";
 
 export type UserRole = "admin" | "user";
@@ -129,6 +131,16 @@ export async function findUserByLogin(login: string): Promise<StoredUser | undef
   );
 }
 
+export async function findUserById(id: string): Promise<StoredUser | undefined> {
+  if (!id) return undefined;
+  if (isPgConfigured()) {
+    const user = await pgFindUserById(id);
+    return user ? withDefaults(user) : undefined;
+  }
+  const found = readUsers().find((u) => u.id === id);
+  return found ? withDefaults(found) : undefined;
+}
+
 export async function listUsers(): Promise<PublicUser[]> {
   if (isPgConfigured()) {
     const users = await pgListUsers();
@@ -208,6 +220,94 @@ export async function createUser(input: {
   users.push(user);
   writeUsers(users);
 
+  return { ok: true, user: toPublic(user) };
+}
+
+export async function updateUser(
+  id: string,
+  input: {
+    email?: string;
+    username?: string;
+    name?: string;
+    password?: string;
+    role?: UserRole;
+  },
+): Promise<{ ok: true; user: PublicUser } | { ok: false; error: string }> {
+  const existing = await findUserById(id);
+  if (!existing) {
+    return { ok: false, error: "Usuário não encontrado." };
+  }
+
+  const name = (input.name ?? existing.name).trim();
+  const role = input.role !== undefined ? normalizeRole(input.role) : existing.role;
+  const username = normalizeUsername(input.username ?? existing.username);
+  const email = normalizeEmail(
+    input.email?.trim() || existing.email || (username ? `${username}@${DEFAULT_USER_DOMAIN}` : ""),
+  );
+  const password = input.password ?? "";
+
+  if (!username || username.length < 2) {
+    return { ok: false, error: "Informe um usuário com pelo menos 2 caracteres." };
+  }
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { ok: false, error: "Informe um e-mail válido ou um usuário." };
+  }
+  if (name.length < 2) {
+    return { ok: false, error: "Informe um nome com pelo menos 2 caracteres." };
+  }
+  if (password && password.length < 8) {
+    return { ok: false, error: "A senha deve ter pelo menos 8 caracteres." };
+  }
+  if (existing.role === "admin" && role !== "admin") {
+    const admins = (await listUsers()).filter((u) => u.role === "admin");
+    if (admins.length < 2) {
+      return { ok: false, error: "Não é possível remover o último administrador." };
+    }
+  }
+
+  const clashLogin = await findUserByLogin(username);
+  const clashEmail = await findUserByEmail(email);
+  if ((clashLogin && clashLogin.id !== id) || (clashEmail && clashEmail.id !== id)) {
+    return { ok: false, error: "Já existe uma conta com este usuário ou e-mail." };
+  }
+
+  let salt = existing.salt;
+  let passwordHash = existing.passwordHash;
+  if (password) {
+    salt = randomBytes(16).toString("hex");
+    passwordHash = hashPassword(password, salt);
+  }
+
+  const user: StoredUser = {
+    ...existing,
+    email,
+    username,
+    name,
+    role,
+    salt,
+    passwordHash,
+  };
+
+  if (isPgConfigured()) {
+    try {
+      await pgUpdateUser(user, existing.email);
+    } catch (err) {
+      const code = err && typeof err === "object" && "code" in err ? String(err.code) : "";
+      if (code === "23505") {
+        return { ok: false, error: "Já existe uma conta com este usuário ou e-mail." };
+      }
+      throw err;
+    }
+    return { ok: true, user: toPublic(user) };
+  }
+
+  const users = readUsers();
+  const index = users.findIndex((u) => u.id === id);
+  if (index < 0) {
+    return { ok: false, error: "Usuário não encontrado." };
+  }
+  users[index] = user;
+  writeUsers(users);
   return { ok: true, user: toPublic(user) };
 }
 

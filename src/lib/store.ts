@@ -13,6 +13,7 @@ import type {
   Requirement,
   RequirementStatus,
   StandupCheckIn,
+  MayaDayLog,
   StandupChatMessage,
   StandupSession,
   Team,
@@ -64,12 +65,19 @@ import {
 import { extractMeetingUrlFromText, sanitizeMeetingUrl } from "./meeting-links";
 import { sanitizeExecutiveSummary } from "./executive-summary";
 import {
+  findDuplicateWhatsAppGroup,
+  mergeWhatsAppGroup,
+  normalizeWhatsAppGroupInput,
+  normalizeWhatsAppGroups,
+} from "./whatsapp-groups";
+import {
   applyAssigneePatch,
   cardAssigneeIds,
   collectContactIds,
   membersForSnapshot,
   syncCardAssignees,
 } from "./members";
+import { mergeMayaMessages, upsertMayaDayLog } from "./maya-chat";
 
 function normalizeCalendarEvent(event: TeamCalendarEvent): TeamCalendarEvent {
   const meetingUrl =
@@ -113,6 +121,7 @@ interface BoardState {
   meetings: Record<string, Meeting>;
   managers: Record<string, VirtualManager>;
   standups: Record<string, StandupSession>;
+  mayaLogs: Record<string, MayaDayLog>;
   activities: Record<string, KanbanActivity>;
   requirements: Record<string, Requirement>;
   calendarEvents: Record<string, TeamCalendarEvent>;
@@ -145,6 +154,26 @@ interface BoardState {
   updateBoardExecutiveSummary: (boardId: string, executiveSummary: string) => void;
   addBoardGitRepo: (boardId: string, url: string, label?: string) => string | null;
   removeBoardGitRepo: (boardId: string, repoId: string) => void;
+  addBoardWhatsAppGroup: (
+    boardId: string,
+    input: {
+      name?: string;
+      inviteUrl?: string | null;
+      jid?: string | null;
+      notes?: string;
+    },
+  ) => string | null;
+  updateBoardWhatsAppGroup: (
+    boardId: string,
+    groupId: string,
+    patch: {
+      name?: string;
+      inviteUrl?: string | null;
+      jid?: string | null;
+      notes?: string;
+    },
+  ) => boolean;
+  removeBoardWhatsAppGroup: (boardId: string, groupId: string) => void;
   setBoardRiskReport: (boardId: string, report: Board["riskReport"]) => void;
   ensureMayaRisksColumn: (boardId: string) => void;
   assignBoardParent: (boardId: string, parentBoardId: string | null) => void;
@@ -317,6 +346,14 @@ interface BoardState {
     },
   ) => void;
   appendManagerChat: (standupId: string, content: string, memberId?: string | null) => void;
+  appendMayaDayChat: (
+    boardId: string,
+    input: {
+      role: "manager" | "member";
+      memberId?: string | null;
+      content: string;
+    },
+  ) => void;
   setActiveStandup: (standupId: string | null) => void;
   closeStandup: (standupId: string, summary: string) => void;
   applyManagerActions: (actions: AiAction[], boardId?: string) => void;
@@ -382,6 +419,21 @@ function syncBoardsWithTeam(
     }
   }
   return next;
+}
+
+function withStandupAndMayaLog(
+  state: { standups: Record<string, StandupSession>; mayaLogs: Record<string, MayaDayLog> },
+  standup: StandupSession,
+) {
+  return {
+    standups: { ...state.standups, [standup.id]: standup },
+    mayaLogs: upsertMayaDayLog(
+      state.mayaLogs || {},
+      standup.boardId,
+      standup.date,
+      standup.chat ?? [],
+    ),
+  };
 }
 
 export const useBoardStore = create<BoardState>()(
@@ -451,6 +503,7 @@ export const useBoardStore = create<BoardState>()(
           backgroundImageUrl: appearance?.backgroundImageUrl ?? null,
           backgroundTint: appearance?.backgroundTint ?? DEFAULT_BACKGROUND_TINT,
           gitRepos: [],
+          whatsappGroups: [],
           riskReport: null,
           createdAt: now,
           updatedAt: now,
@@ -561,6 +614,94 @@ export const useBoardStore = create<BoardState>()(
               [boardId]: {
                 ...ensureBoardMembers(board),
                 gitRepos: (board.gitRepos || []).filter((r) => r.id !== repoId),
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          };
+        }),
+
+      addBoardWhatsAppGroup: (boardId, input) => {
+        const normalized = normalizeWhatsAppGroupInput(input);
+        if (!normalized) return null;
+        let groupId = "";
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+          const groups = [...normalizeWhatsAppGroups(board.whatsappGroups)];
+          const now = new Date().toISOString();
+          const existing = findDuplicateWhatsAppGroup(groups, normalized);
+          if (existing) {
+            const merged = mergeWhatsAppGroup(existing, input, now);
+            if (!merged) return state;
+            groupId = existing.id;
+            return {
+              boards: {
+                ...state.boards,
+                [boardId]: {
+                  ...ensureBoardMembers(board),
+                  whatsappGroups: groups.map((g) => (g.id === existing.id ? merged : g)),
+                  updatedAt: now,
+                },
+              },
+            };
+          }
+          groupId = nanoid();
+          groups.push({
+            id: groupId,
+            name: normalized.name,
+            inviteUrl: normalized.inviteUrl,
+            jid: normalized.jid,
+            notes: normalized.notes || undefined,
+            addedAt: now,
+            updatedAt: now,
+          });
+          return {
+            boards: {
+              ...state.boards,
+              [boardId]: { ...ensureBoardMembers(board), whatsappGroups: groups, updatedAt: now },
+            },
+          };
+        });
+        return groupId || null;
+      },
+
+      updateBoardWhatsAppGroup: (boardId, groupId, patch) => {
+        let ok = false;
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+          const groups = [...normalizeWhatsAppGroups(board.whatsappGroups)];
+          const index = groups.findIndex((g) => g.id === groupId);
+          if (index < 0) return state;
+          const now = new Date().toISOString();
+          const merged = mergeWhatsAppGroup(groups[index], patch, now);
+          if (!merged) return state;
+          const clash = findDuplicateWhatsAppGroup(groups, merged, groupId);
+          if (clash) return state;
+          ok = true;
+          groups[index] = merged;
+          return {
+            boards: {
+              ...state.boards,
+              [boardId]: { ...ensureBoardMembers(board), whatsappGroups: groups, updatedAt: now },
+            },
+          };
+        });
+        return ok;
+      },
+
+      removeBoardWhatsAppGroup: (boardId, groupId) =>
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+          return {
+            boards: {
+              ...state.boards,
+              [boardId]: {
+                ...ensureBoardMembers(board),
+                whatsappGroups: normalizeWhatsAppGroups(board.whatsappGroups).filter(
+                  (g) => g.id !== groupId,
+                ),
                 updatedAt: new Date().toISOString(),
               },
             },
@@ -1011,6 +1152,11 @@ export const useBoardStore = create<BoardState>()(
             if (s.boardId === boardId) delete standups[id];
           }
 
+          const mayaLogs = { ...(state.mayaLogs || {}) };
+          for (const [id, log] of Object.entries(mayaLogs)) {
+            if (log.boardId === boardId) delete mayaLogs[id];
+          }
+
           const activities = { ...state.activities };
           for (const [id, a] of Object.entries(activities)) {
             if (a.boardId === boardId) delete activities[id];
@@ -1032,6 +1178,7 @@ export const useBoardStore = create<BoardState>()(
             managers,
             meetings,
             standups,
+            mayaLogs,
             activities,
             requirements,
             calendarEvents,
@@ -1926,7 +2073,7 @@ export const useBoardStore = create<BoardState>()(
         const manager = state.managers[boardId];
         if (!board || !manager) return "";
 
-        const today = new Date().toISOString().slice(0, 10);
+        const today = calendarDayKey();
         const existing = Object.values(state.standups).find(
           (s) => s.boardId === boardId && s.date === today && s.status !== "closed",
         );
@@ -1957,22 +2104,23 @@ export const useBoardStore = create<BoardState>()(
                 createdAt: nowFix,
               });
             }
+            const migrated: StandupSession = {
+              ...existing,
+              chat,
+              currentMemberIndex: 0,
+              currentQuestionIndex: 0,
+              awaitingReplyFrom: firstId,
+              questions,
+            };
             set((s) => ({
-              standups: {
-                ...s.standups,
-                [existing.id]: {
-                  ...existing,
-                  chat,
-                  currentMemberIndex: 0,
-                  currentQuestionIndex: 0,
-                  awaitingReplyFrom: firstId,
-                  questions,
-                },
-              },
+              ...withStandupAndMayaLog(s, migrated),
               activeStandupId: existing.id,
             }));
           } else {
-            set({ activeStandupId: existing.id });
+            set((s) => ({
+              ...withStandupAndMayaLog(s, existing),
+              activeStandupId: existing.id,
+            }));
           }
           return existing.id;
         }
@@ -2040,7 +2188,7 @@ export const useBoardStore = create<BoardState>()(
         };
 
         set((s) => ({
-          standups: { ...s.standups, [standupId]: standup },
+          ...withStandupAndMayaLog(s, standup),
           activeStandupId: standupId,
           managers: {
             ...s.managers,
@@ -2192,20 +2340,16 @@ export const useBoardStore = create<BoardState>()(
 
           void managerName;
 
-          return {
-            standups: {
-              ...state.standups,
-              [standupId]: {
-                ...standup,
-                chat,
-                checkIns,
-                currentMemberIndex: nextMemberIndex,
-                currentQuestionIndex: nextQuestionIndex,
-                awaitingReplyFrom,
-                updatedAt: now,
-              },
-            },
+          const nextStandup: StandupSession = {
+            ...standup,
+            chat,
+            checkIns,
+            currentMemberIndex: nextMemberIndex,
+            currentQuestionIndex: nextQuestionIndex,
+            awaitingReplyFrom,
+            updatedAt: now,
           };
+          return withStandupAndMayaLog(state, nextStandup);
         });
 
         if (boardIdForActivity && memberForActivity) {
@@ -2309,20 +2453,15 @@ export const useBoardStore = create<BoardState>()(
             awaitingReplyFrom = targetMemberId;
           }
 
-          return {
-            standups: {
-              ...state.standups,
-              [standupId]: {
-                ...standup,
-                chat,
-                checkIns,
-                currentMemberIndex: nextMemberIndex,
-                currentQuestionIndex: nextQuestionIndex,
-                awaitingReplyFrom,
-                updatedAt: now,
-              },
-            },
-          };
+          return withStandupAndMayaLog(state, {
+            ...standup,
+            chat,
+            checkIns,
+            currentMemberIndex: nextMemberIndex,
+            currentQuestionIndex: nextQuestionIndex,
+            awaitingReplyFrom,
+            updatedAt: now,
+          });
         });
 
         if (boardIdForActivity) {
@@ -2342,21 +2481,49 @@ export const useBoardStore = create<BoardState>()(
           const standup = state.standups[standupId];
           if (!standup) return state;
           const now = new Date().toISOString();
+          const nextStandup: StandupSession = {
+            ...standup,
+            chat: [
+              ...(standup.chat ?? []),
+              {
+                id: nanoid(),
+                role: "manager" as const,
+                memberId,
+                content: text,
+                createdAt: now,
+              },
+            ],
+            updatedAt: now,
+          };
+          return withStandupAndMayaLog(state, nextStandup);
+        });
+      },
+
+      appendMayaDayChat: (boardId, input) => {
+        const text = input.content.trim();
+        if (!text) return;
+        const date = calendarDayKey();
+        const now = new Date().toISOString();
+        const msg: StandupChatMessage = {
+          id: nanoid(),
+          role: input.role,
+          memberId: input.memberId ?? null,
+          content: text,
+          createdAt: now,
+        };
+        set((state) => {
+          const logs = upsertMayaDayLog(state.mayaLogs || {}, boardId, date, [msg]);
+          const openStandup = Object.values(state.standups).find(
+            (s) => s.boardId === boardId && s.date === date && s.status === "open",
+          );
+          if (!openStandup) return { mayaLogs: logs };
           return {
+            mayaLogs: logs,
             standups: {
               ...state.standups,
-              [standupId]: {
-                ...standup,
-                chat: [
-                  ...(standup.chat ?? []),
-                  {
-                    id: nanoid(),
-                    role: "manager" as const,
-                    memberId,
-                    content: text,
-                    createdAt: now,
-                  },
-                ],
+              [openStandup.id]: {
+                ...openStandup,
+                chat: mergeMayaMessages(openStandup.chat ?? [], [msg]),
                 updatedAt: now,
               },
             },
@@ -2370,16 +2537,15 @@ export const useBoardStore = create<BoardState>()(
         set((state) => {
           const standup = state.standups[standupId];
           if (!standup) return state;
+          const now = new Date().toISOString();
+          const closed: StandupSession = {
+            ...standup,
+            status: "closed",
+            managerSummary: summary,
+            updatedAt: now,
+          };
           return {
-            standups: {
-              ...state.standups,
-              [standupId]: {
-                ...standup,
-                status: "closed",
-                managerSummary: summary,
-                updatedAt: new Date().toISOString(),
-              },
-            },
+            ...withStandupAndMayaLog(state, closed),
             activeStandupId:
               state.activeStandupId === standupId ? null : state.activeStandupId,
           };
@@ -2610,6 +2776,11 @@ export const useBoardStore = create<BoardState>()(
           if (standup.boardId === boardId) standups[id] = standup;
         }
 
+        const mayaLogs: Record<string, MayaDayLog> = {};
+        for (const [id, log] of Object.entries(state.mayaLogs || {})) {
+          if (log.boardId === boardId) mayaLogs[id] = log;
+        }
+
         const activities: Record<string, KanbanActivity> = {};
         for (const [id, activity] of Object.entries(state.activities || {})) {
           if (activity.boardId === boardId) activities[id] = activity;
@@ -2637,6 +2808,7 @@ export const useBoardStore = create<BoardState>()(
           meetings,
           managers,
           standups,
+          mayaLogs,
           activities,
           requirements,
           calendarEvents,
@@ -2665,6 +2837,7 @@ export const useBoardStore = create<BoardState>()(
             meetings: { ...state.meetings, ...snapshot.meetings },
             managers: { ...state.managers, ...snapshot.managers },
             standups: { ...state.standups, ...snapshot.standups },
+            mayaLogs: { ...(state.mayaLogs || {}), ...(snapshot.mayaLogs || {}) },
             activities: { ...(state.activities || {}), ...snapshot.activities },
             requirements: {
               ...(state.requirements || {}),
@@ -2693,6 +2866,7 @@ export const useBoardStore = create<BoardState>()(
           const meetings: Record<string, Meeting> = {};
           const managers: Record<string, VirtualManager> = {};
           const standups: Record<string, StandupSession> = {};
+          const mayaLogs: Record<string, MayaDayLog> = {};
           const activities: Record<string, KanbanActivity> = {};
           const requirements: Record<string, Requirement> = {};
           const calendarEvents: Record<string, TeamCalendarEvent> = {};
@@ -2716,6 +2890,9 @@ export const useBoardStore = create<BoardState>()(
           for (const [id, standup] of Object.entries(state.standups)) {
             if (keep.has(standup.boardId)) standups[id] = standup;
           }
+          for (const [id, log] of Object.entries(state.mayaLogs || {})) {
+            if (keep.has(log.boardId)) mayaLogs[id] = log;
+          }
           for (const [id, activity] of Object.entries(state.activities || {})) {
             if (keep.has(activity.boardId)) activities[id] = activity;
           }
@@ -2733,6 +2910,7 @@ export const useBoardStore = create<BoardState>()(
             meetings,
             managers,
             standups,
+            mayaLogs,
             activities,
             requirements,
             calendarEvents,
@@ -2866,26 +3044,26 @@ export const useBoardStore = create<BoardState>()(
         const openStandup = Object.values(state.standups).find(
           (s) => s.boardId === boardId && s.date === today && s.status === "open",
         );
-        if (openStandup) {
-          const now = new Date().toISOString();
-          const chatMsg: StandupChatMessage = {
-            id: nanoid(),
-            role: "manager",
-            memberId: null,
-            content: message,
-            createdAt: now,
-          };
-          set((s) => ({
-            standups: {
-              ...s.standups,
-              [openStandup.id]: {
-                ...s.standups[openStandup.id],
-                chat: [...(s.standups[openStandup.id].chat || []), chatMsg],
-                updatedAt: now,
-              },
+        const now = new Date().toISOString();
+        const chatMsg: StandupChatMessage = {
+          id: nanoid(),
+          role: "manager",
+          memberId: null,
+          content: message,
+          createdAt: now,
+        };
+        set((s) => {
+          const logs = upsertMayaDayLog(s.mayaLogs || {}, boardId, today, [chatMsg]);
+          if (!openStandup) return { mayaLogs: logs };
+          return withStandupAndMayaLog(
+            { ...s, mayaLogs: logs },
+            {
+              ...s.standups[openStandup.id],
+              chat: [...(s.standups[openStandup.id].chat || []), chatMsg],
+              updatedAt: now,
             },
-          }));
-        }
+          );
+        });
 
         return message;
       },
@@ -2906,6 +3084,7 @@ export const useBoardStore = create<BoardState>()(
         meetings: state.meetings,
         managers: state.managers,
         standups: state.standups,
+        mayaLogs: state.mayaLogs,
         activities: state.activities,
         requirements: state.requirements,
         calendarEvents: state.calendarEvents,
@@ -2925,7 +3104,18 @@ export const useBoardStore = create<BoardState>()(
         if (!state.meetings) state.meetings = {};
         if (!state.managers) state.managers = {};
         if (!state.standups) state.standups = {};
+        if (!state.mayaLogs) state.mayaLogs = {};
         if (!state.activities) state.activities = {};
+        for (const standup of Object.values(state.standups)) {
+          if (standup.chat?.length) {
+            state.mayaLogs = upsertMayaDayLog(
+              state.mayaLogs,
+              standup.boardId,
+              standup.date,
+              standup.chat,
+            );
+          }
+        }
         if (!state.requirements) state.requirements = {};
         if (!state.calendarEvents) state.calendarEvents = {};
         if (state.skipAsesiSeed === undefined) state.skipAsesiSeed = false;

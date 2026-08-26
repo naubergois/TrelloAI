@@ -187,6 +187,8 @@ export function createSampleWorkspace() {
     parentBoardId: null,
     backgroundId: "ceara",
     designId: "classic",
+    gitRepos: [],
+    whatsappGroups: [],
     createdAt: now,
     updatedAt: now,
   };
@@ -307,6 +309,7 @@ export function createSampleWorkspace() {
     meetings,
     managers,
     standups,
+    mayaLogs: {},
     requirements,
     calendarEvents,
     activities: {},

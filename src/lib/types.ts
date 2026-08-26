@@ -118,6 +118,26 @@ export type BoardGitRepo = {
   addedAt: string;
 };
 
+/** Grupo WhatsApp ligado ao board (convite, JID e notas). */
+export type BoardWhatsAppGroup = {
+  id: string;
+  name: string;
+  /** Link de convite https://chat.whatsapp.com/… */
+  inviteUrl?: string | null;
+  /** Identificador interno do grupo, ex.: 120363430202949653@g.us */
+  jid?: string | null;
+  notes?: string;
+  addedAt: string;
+  updatedAt: string;
+};
+
+export type BoardWhatsAppGroupInput = {
+  name?: string;
+  inviteUrl?: string | null;
+  jid?: string | null;
+  notes?: string;
+};
+
 export type GitCoverageStatus = "implemented" | "partial" | "missing";
 
 export type GitCoverageItem = {
@@ -189,6 +209,8 @@ export interface Board {
   backgroundTint?: number;
   /** Repositórios Git ligados ao board (Maya analisa cobertura) */
   gitRepos?: BoardGitRepo[];
+  /** Grupos WhatsApp vinculados a este board */
+  whatsappGroups?: BoardWhatsAppGroup[];
   /** Última análise de riscos + Git da Maya */
   riskReport?: BoardRiskReport | null;
   createdAt: string;
@@ -345,5 +367,14 @@ export interface StandupSession {
   managerSummary: string;
   meetingId: string | null;
   createdAt: string;
+  updatedAt: string;
+}
+
+/** Conversa da Maya de um board em um dia (YYYY-MM-DD local). */
+export interface MayaDayLog {
+  id: string;
+  boardId: string;
+  date: string;
+  messages: StandupChatMessage[];
   updatedAt: string;
 }

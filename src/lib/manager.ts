@@ -9,6 +9,7 @@ export interface ManagerContext extends AiRequestContext {
   memberNames: Record<string, string>;
   requirements?: { id: string; code?: string; title: string; status?: string }[];
   gitRepos?: { url: string }[];
+  whatsappGroups?: { name: string; inviteUrl?: string | null; jid?: string | null }[];
   risks?: { title: string; severity: string; reason: string }[];
   git?: {
     url: string;

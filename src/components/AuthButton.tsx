@@ -18,7 +18,7 @@ export function AuthButton() {
           <Link
             href="/admin/usuarios"
             className="inline-flex items-center gap-1 rounded-lg border border-[var(--line)] p-2 text-xs text-[var(--muted)] transition hover:text-white sm:px-2.5 sm:py-2"
-            title="Cadastrar usuários"
+            title="Gerenciar usuários"
           >
             <Users className="h-3.5 w-3.5" />
             <span className="hidden lg:inline">Usuários</span>

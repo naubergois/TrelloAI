@@ -36,6 +36,7 @@ export function createAsesiBoardSeed(owner?: {
     },
   };
 
+  const today = calendarDayKey();
   const reqProcessos = nanoid();
   const reqKpis = nanoid();
   const reqPiloto = nanoid();
@@ -47,7 +48,7 @@ export function createAsesiBoardSeed(owner?: {
       title: "Mapear processos críticos da ASESI",
       description: "Identificar fluxos prioritários para auditoria e controle.",
       labels: [{ id: nanoid(), name: "planejamento", color: "teal" }],
-      dueDate: null,
+      dueDate: shiftCalendarDay(today, 2),
       priority: "high",
       assigneeId: ownerId,
       requirementId: reqProcessos,
@@ -74,7 +75,7 @@ export function createAsesiBoardSeed(owner?: {
       title: "Validar o Jangada com a equipe",
       description: "Convites, cadastro e uso diário do gestor virtual Maya.",
       labels: [{ id: nanoid(), name: "validação", color: "amber" }],
-      dueDate: null,
+      dueDate: today,
       priority: "high",
       assigneeId: ownerId,
       requirementId: reqPiloto,
@@ -86,7 +87,7 @@ export function createAsesiBoardSeed(owner?: {
       title: "Preparar migração para ambiente CGE",
       description: "Checklist de infraestrutura, auth e dados antes do go-live.",
       labels: [{ id: nanoid(), name: "infra", color: "sky" }],
-      dueDate: null,
+      dueDate: shiftCalendarDay(today, 4),
       priority: "medium",
       assigneeId: null,
       requirementId: null,
@@ -193,6 +194,17 @@ export function createAsesiBoardSeed(owner?: {
     backgroundId: "trello",
     designId: "soft",
     gitRepos: [],
+    whatsappGroups: [
+      {
+        id: "wa-asesi",
+        name: "Grupo WhatsApp ASESI",
+        inviteUrl: null,
+        jid: "120363430202949653@g.us",
+        notes: "Fonte principal da carteira ASESI.",
+        addedAt: now,
+        updatedAt: now,
+      },
+    ],
     riskReport: null,
     createdAt: now,
     updatedAt: now,
@@ -314,6 +326,7 @@ export function createAsesiBoardSnapshot(
     meetings: {},
     managers: { [seed.board.id]: seed.manager },
     standups: {},
+    mayaLogs: {},
     activities: {},
     requirements: seed.requirements,
     calendarEvents: seed.calendarEvents,
@@ -379,6 +392,7 @@ export function createCgeBoardSeed(owner?: {
     backgroundId: "ocean",
     designId: "soft",
     gitRepos: [],
+    whatsappGroups: [],
     riskReport: null,
     createdAt: now,
     updatedAt: now,
@@ -413,6 +427,7 @@ export function createCgeBoardSnapshot(
     meetings: {},
     managers: { [seed.board.id]: seed.manager },
     standups: {},
+    mayaLogs: {},
     activities: {},
     requirements: {},
     calendarEvents: {},

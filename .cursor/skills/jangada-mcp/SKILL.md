@@ -19,5 +19,6 @@ Qualquer pedido para criar/mover/atualizar cards, listas ou requisitos no Jangad
 - `jangada_criar_lista`, `jangada_mover_card`, `jangada_atualizar_card`
 - `jangada_atualizar_resumo` — guarda o resumo executivo do board
 - `jangada_adicionar_git` — liga um repositório para a Maya comparar código vs kanban
+- `jangada_adicionar_whatsapp` / `jangada_atualizar_whatsapp` / `jangada_remover_whatsapp` — metadados de grupos WhatsApp do board (`name`, `invite_url`, `jid`, `notes`)
 
 Liste o board antes de criar. Prefira `list_title` (ex.: Backlog) se não tiver o id da lista.

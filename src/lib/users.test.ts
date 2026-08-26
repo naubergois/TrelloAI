@@ -13,6 +13,7 @@ import {
   hashPassword,
   listUsers,
   resetAdminSeedCache,
+  updateUser,
   verifyPassword,
 } from "./users";
 
@@ -89,5 +90,84 @@ describe("admin seed and passwords", () => {
       DEFAULT_ADMIN_EMAIL,
       "pessoa@cge.ce.gov.br",
     ]);
+  });
+
+  it("lets any admin promote a user to admin", async () => {
+    await ensureDefaultAdmin();
+    const created = await createUser({
+      username: "gestor",
+      name: "Gestor ASESI",
+      password: "senha1234",
+      role: "user",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const promoted = await updateUser(created.user.id, { role: "admin" });
+    expect(promoted.ok).toBe(true);
+    if (!promoted.ok) return;
+    expect(promoted.user.role).toBe("admin");
+    expect(promoted.user.name).toBe("Gestor ASESI");
+
+    const stored = await findUserByLogin("gestor");
+    expect(stored?.role).toBe("admin");
+    expect(verifyPassword(stored!, "senha1234")).toBe(true);
+  });
+
+  it("lets an admin edit name, username and password", async () => {
+    await ensureDefaultAdmin();
+    const created = await createUser({
+      username: "ana",
+      name: "Ana",
+      password: "senha1234",
+      role: "user",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const updated = await updateUser(created.user.id, {
+      name: "Ana Silva",
+      username: "ana.silva",
+      password: "novaSenha9",
+    });
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) return;
+    expect(updated.user.name).toBe("Ana Silva");
+    expect(updated.user.username).toBe("ana.silva");
+    expect(updated.user.role).toBe("user");
+
+    const stored = await findUserByLogin("ana.silva");
+    expect(stored?.name).toBe("Ana Silva");
+    expect(verifyPassword(stored!, "novaSenha9")).toBe(true);
+  });
+
+  it("refuses to demote the last administrator", async () => {
+    const admin = await ensureDefaultAdmin();
+    expect(admin?.id).toBeTruthy();
+    const result = await updateUser(admin!.id, { role: "user" });
+    expect(result).toEqual({
+      ok: false,
+      error: "Não é possível remover o último administrador.",
+    });
+    expect((await findUserByEmail(DEFAULT_ADMIN_EMAIL))?.role).toBe("admin");
+  });
+
+  it("lets an admin demote another admin when more than one remains", async () => {
+    const admin = await ensureDefaultAdmin();
+    const created = await createUser({
+      username: "segundo",
+      name: "Segundo Admin",
+      password: "senha1234",
+      role: "admin",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const demoted = await updateUser(created.user.id, { role: "user" });
+    expect(demoted.ok).toBe(true);
+    if (!demoted.ok) return;
+    expect(demoted.user.role).toBe("user");
+    expect((await findUserByEmail(DEFAULT_ADMIN_EMAIL))?.role).toBe("admin");
+    expect(admin?.role).toBe("admin");
   });
 });

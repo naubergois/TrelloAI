@@ -63,6 +63,13 @@ export function compactBoard(snapshot) {
         id: repo.id,
         url: repo.url,
       })),
+      whatsappGroups: (snapshot.board?.whatsappGroups || []).map((group) => ({
+        id: group.id,
+        name: group.name,
+        inviteUrl: group.inviteUrl || null,
+        jid: group.jid || null,
+        notes: group.notes || "",
+      })),
     },
     lists,
     requirements,
@@ -234,6 +241,136 @@ export function applyAdicionarGit(snapshot, args) {
   return { snapshot: next, repoId: id };
 }
 
+function sanitizeWaInvite(raw) {
+  let value = String(raw || "").trim();
+  if (!value) return null;
+  if (/^chat\.whatsapp\.com\//i.test(value)) value = `https://${value}`;
+  try {
+    const parsed = new URL(value);
+    if (!["http:", "https:"].includes(parsed.protocol.toLowerCase())) return null;
+    const host = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    if (host !== "chat.whatsapp.com") return null;
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    const code = segments[0] === "invite" ? segments[1] : segments[0];
+    if (!code || !/^[A-Za-z0-9_-]{10,80}$/.test(code)) return null;
+    return `https://chat.whatsapp.com/${code}`;
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeWaJid(raw) {
+  const value = String(raw || "").trim();
+  if (!value) return null;
+  const matched = value.match(/(\d{10,32})@g\.us/i);
+  if (matched) return `${matched[1]}@g.us`;
+  const digits = value.match(/^(\d{10,32})$/);
+  if (digits) return `${digits[1]}@g.us`;
+  return null;
+}
+
+function normalizeWaInput(args) {
+  const inviteUrl = sanitizeWaInvite(args.invite_url ?? args.inviteUrl ?? args.url);
+  const jid = sanitizeWaJid(args.jid);
+  const notes = String(args.notes || args.notas || "").replace(/\r\n/g, "\n").trim().slice(0, 2000);
+  let name = String(args.name || args.nome || "").trim().slice(0, 120);
+  if (!name && inviteUrl) {
+    try {
+      name = `Grupo WhatsApp (${new URL(inviteUrl).pathname.replace(/^\//, "").slice(0, 8)}…)`;
+    } catch {
+      name = "Grupo WhatsApp";
+    }
+  }
+  if (!name && jid) name = `Grupo WhatsApp (${jid.replace(/@g\.us$/i, "")})`;
+  if (!name) return null;
+  return { name, inviteUrl, jid, notes };
+}
+
+function findWaDuplicate(groups, candidate, exceptId) {
+  return groups.find((group) => {
+    if (exceptId && group.id === exceptId) return false;
+    if (candidate.inviteUrl && group.inviteUrl === candidate.inviteUrl) return true;
+    if (candidate.jid && group.jid === candidate.jid) return true;
+    return false;
+  });
+}
+
+export function applyAdicionarWhatsApp(snapshot, args) {
+  const normalized = normalizeWaInput(args || {});
+  if (!normalized) {
+    throw new Error("Informe o nome, o link de convite (chat.whatsapp.com) ou o JID do grupo.");
+  }
+  const next = clone(snapshot);
+  next.board.whatsappGroups = Array.isArray(next.board.whatsappGroups)
+    ? next.board.whatsappGroups
+    : [];
+  const existing = findWaDuplicate(next.board.whatsappGroups, normalized);
+  const ts = nowIso();
+  if (existing) {
+    if (args.name || args.nome) existing.name = normalized.name;
+    if (normalized.inviteUrl) existing.inviteUrl = normalized.inviteUrl;
+    if (normalized.jid) existing.jid = normalized.jid;
+    if (normalized.notes) existing.notes = normalized.notes;
+    existing.updatedAt = ts;
+    next.board.updatedAt = ts;
+    next.updatedAt = ts;
+    return { snapshot: next, groupId: existing.id, group: existing };
+  }
+  const group = {
+    id: nid(),
+    name: normalized.name,
+    inviteUrl: normalized.inviteUrl,
+    jid: normalized.jid,
+    notes: normalized.notes || undefined,
+    addedAt: ts,
+    updatedAt: ts,
+  };
+  next.board.whatsappGroups.push(group);
+  next.board.updatedAt = ts;
+  next.updatedAt = ts;
+  return { snapshot: next, groupId: group.id, group };
+}
+
+export function applyAtualizarWhatsApp(snapshot, args) {
+  const groupId = args.group_id || args.groupId;
+  const next = clone(snapshot);
+  next.board.whatsappGroups = Array.isArray(next.board.whatsappGroups)
+    ? next.board.whatsappGroups
+    : [];
+  const group = next.board.whatsappGroups.find((g) => g.id === groupId);
+  if (!group) throw new Error("Grupo WhatsApp não encontrado.");
+  const merged = normalizeWaInput({
+    name: args.name ?? args.nome ?? group.name,
+    invite_url: args.invite_url ?? args.inviteUrl ?? group.inviteUrl,
+    jid: args.jid ?? group.jid,
+    notes: args.notes ?? args.notas ?? group.notes,
+  });
+  if (!merged) throw new Error("Metadados do grupo inválidos.");
+  const clash = findWaDuplicate(next.board.whatsappGroups, merged, group.id);
+  if (clash) throw new Error("Já existe outro grupo com o mesmo convite ou JID.");
+  const ts = nowIso();
+  group.name = merged.name;
+  group.inviteUrl = merged.inviteUrl;
+  group.jid = merged.jid;
+  group.notes = merged.notes || undefined;
+  group.updatedAt = ts;
+  next.board.updatedAt = ts;
+  next.updatedAt = ts;
+  return { snapshot: next, groupId: group.id, group };
+}
+
+export function applyRemoverWhatsApp(snapshot, args) {
+  const groupId = args.group_id || args.groupId;
+  const next = clone(snapshot);
+  const groups = Array.isArray(next.board.whatsappGroups) ? next.board.whatsappGroups : [];
+  if (!groups.some((g) => g.id === groupId)) throw new Error("Grupo WhatsApp não encontrado.");
+  next.board.whatsappGroups = groups.filter((g) => g.id !== groupId);
+  const ts = nowIso();
+  next.board.updatedAt = ts;
+  next.updatedAt = ts;
+  return { snapshot: next, groupId };
+}
+
 export function applyAtualizarResumo(snapshot, args) {
   const text = String(args.resumo ?? args.executive_summary ?? args.executiveSummary ?? "");
   const next = clone(snapshot);
@@ -389,6 +526,49 @@ export function listTools() {
       },
     },
     {
+      name: "jangada_adicionar_whatsapp",
+      description:
+        "Vincula um grupo WhatsApp ao board (nome, link de convite chat.whatsapp.com e/ou JID 1203…@g.us).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          board_id: boardId,
+          name: { type: "string", description: "Nome do grupo" },
+          invite_url: { type: "string", description: "Link https://chat.whatsapp.com/…" },
+          jid: { type: "string", description: "JID do grupo, ex.: 120363430202949653@g.us" },
+          notes: { type: "string", description: "Notas / metadados livres" },
+        },
+      },
+    },
+    {
+      name: "jangada_atualizar_whatsapp",
+      description: "Edita metadados de um grupo WhatsApp já vinculado ao board.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          board_id: boardId,
+          group_id: { type: "string" },
+          name: { type: "string" },
+          invite_url: { type: "string" },
+          jid: { type: "string" },
+          notes: { type: "string" },
+        },
+        required: ["group_id"],
+      },
+    },
+    {
+      name: "jangada_remover_whatsapp",
+      description: "Remove o vínculo de um grupo WhatsApp com o board.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          board_id: boardId,
+          group_id: { type: "string" },
+        },
+        required: ["group_id"],
+      },
+    },
+    {
       name: "jangada_atualizar_resumo",
       description:
         "Guarda o resumo executivo do board (texto livre para a liderança: situação, prioridades e riscos).",
@@ -434,6 +614,9 @@ export async function callTool(name, args, store) {
     else if (name === "jangada_mover_card") result = applyMoverCard(snapshot, args);
     else if (name === "jangada_criar_requisito") result = applyCriarRequisito(snapshot, args);
     else if (name === "jangada_adicionar_git") result = applyAdicionarGit(snapshot, args);
+    else if (name === "jangada_adicionar_whatsapp") result = applyAdicionarWhatsApp(snapshot, args);
+    else if (name === "jangada_atualizar_whatsapp") result = applyAtualizarWhatsApp(snapshot, args);
+    else if (name === "jangada_remover_whatsapp") result = applyRemoverWhatsApp(snapshot, args);
     else if (name === "jangada_atualizar_resumo") result = applyAtualizarResumo(snapshot, args);
     else return { status: "erro", erro: `Tool desconhecida: ${name}` };
 

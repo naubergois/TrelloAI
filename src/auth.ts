@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import type { NextAuthConfig } from "next-auth";
-import { ensureDefaultAdmin, findUserByLogin, verifyPassword } from "@/lib/users";
+import { ensureDefaultAdmin, findUserById, findUserByLogin, verifyPassword } from "@/lib/users";
 import type { UserRole } from "@/lib/users";
 
 const providers: NextAuthConfig["providers"] = [
@@ -46,6 +46,17 @@ export const authConfig = {
         if (user.name) token.name = user.name;
         const role = "role" in user ? (user.role as UserRole) : undefined;
         if (role) token.role = role;
+      } else if (typeof token.sub === "string") {
+        try {
+          const dbUser = await findUserById(token.sub);
+          if (dbUser) {
+            token.email = dbUser.email;
+            token.name = dbUser.name;
+            token.role = dbUser.role;
+          }
+        } catch {
+          /* keep the existing token if the store is unavailable */
+        }
       }
       return token;
     },

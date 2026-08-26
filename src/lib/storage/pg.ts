@@ -431,6 +431,49 @@ export async function pgInsertUser(user: StoredUser) {
   return true;
 }
 
+export async function pgFindUserById(id: string): Promise<StoredUser | undefined> {
+  const p = await getPool();
+  if (!p) return undefined;
+  const res = await p.query<UserRow>(`SELECT ${USER_SELECT} FROM users WHERE id = $1`, [id]);
+  const row = res.rows[0];
+  return row ? mapUser(row) : undefined;
+}
+
+export async function pgUpdateUser(user: StoredUser, previousEmail?: string) {
+  const p = await getPool();
+  if (!p) return false;
+  await p.query(
+    `UPDATE users
+     SET email = $2, name = $3, password_hash = $4, salt = $5, role = $6, username = $7
+     WHERE id = $1`,
+    [
+      user.id,
+      user.email,
+      user.name,
+      user.passwordHash,
+      user.salt,
+      user.role,
+      user.username,
+    ],
+  );
+  const from = previousEmail?.trim().toLowerCase();
+  const to = user.email.trim().toLowerCase();
+  if (from && from !== to) {
+    await p.query(`UPDATE board_memberships SET email = $2 WHERE lower(email) = $1`, [from, to]);
+    await p.query(
+      `UPDATE user_board_visibility
+       SET email = $2
+       WHERE lower(email) = $1
+         AND NOT EXISTS (
+           SELECT 1 FROM user_board_visibility other WHERE lower(other.email) = $2
+         )`,
+      [from, to],
+    );
+    await p.query(`DELETE FROM user_board_visibility WHERE lower(email) = $1`, [from]);
+  }
+  return true;
+}
+
 export async function pgEnsureUsername(email: string, username: string) {
   const p = await getPool();
   if (!p) return false;

@@ -3,9 +3,11 @@
 import {
   Bot,
   CalendarDays,
+  CalendarRange,
   ClipboardList,
   Home,
   LayoutGrid,
+  MessageCircle,
   MoreHorizontal,
   Palette,
   Pencil,
@@ -35,6 +37,8 @@ import { removeBoardFromServer } from "@/lib/board-sync";
 import { RequirementsPanel } from "@/components/RequirementsPanel";
 import { TeamCalendarPanel } from "@/components/TeamCalendarPanel";
 import { ActivityPanel } from "@/components/ActivityPanel";
+import { WhatsAppGroupsPanel } from "@/components/WhatsAppGroupsPanel";
+import { TeamBoardView } from "@/components/TeamBoardView";
 import { BoardFilterBar } from "@/components/BoardFilterBar";
 import {
   BOARD_LEVEL_LABELS,
@@ -69,6 +73,7 @@ type SidePanel =
   | "requirements"
   | "calendar"
   | "activity"
+  | "whatsapp"
   | null;
 
 export function BoardShell({
@@ -137,6 +142,11 @@ export function BoardShell({
   );
   const hasChildBoards = descendantIds.length > 0;
   const [canvasView, setCanvasView] = useState<"local" | "all">("all");
+  const [boardLayout, setBoardLayout] = useState<"kanban" | "team">("kanban");
+  const scopeBoardIds = useMemo(
+    () => (canvasView === "all" ? [boardId, ...descendantIds] : [boardId]),
+    [canvasView, boardId, descendantIds],
+  );
 
   const boardMembers = useMemo(() => {
     if (!board) return [];
@@ -412,6 +422,21 @@ export function BoardShell({
               </button>
               <button
                 type="button"
+                onClick={() => toggle("whatsapp")}
+                title="Grupos WhatsApp vinculados"
+                className={toolBtn(panel === "whatsapp")}
+              >
+                <MessageCircle className="h-4 w-4" />
+                {(board.whatsappGroups || []).length > 0 ? (
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-400 px-1 text-[9px] font-bold text-slate-950">
+                    {(board.whatsappGroups || []).length > 99
+                      ? "99+"
+                      : (board.whatsappGroups || []).length}
+                  </span>
+                ) : null}
+              </button>
+              <button
+                type="button"
                 onClick={() => setAppearanceOpen(true)}
                 title="Aparência: fundo do board e dos cards"
                 className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--line)] p-2 text-[var(--muted)] transition hover:text-white xl:px-2.5 xl:py-2"
@@ -545,6 +570,20 @@ export function BoardShell({
                           {descendantIds.length === 1 ? "" : "s"} abaixo
                         </span>
                       ) : null}
+                      {(board.whatsappGroups || []).length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => toggle("whatsapp")}
+                          className="inline-flex max-w-[14rem] items-center gap-1 truncate rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-200 hover:bg-white/10"
+                          title="Grupos WhatsApp vinculados"
+                        >
+                          <MessageCircle className="h-3 w-3" />
+                          {(board.whatsappGroups || [])[0].name}
+                          {(board.whatsappGroups || []).length > 1
+                            ? ` +${(board.whatsappGroups || []).length - 1}`
+                            : ""}
+                        </button>
+                      ) : null}
                     </div>
                     {childBoards.length === 0 ? (
                       <p className="mt-0.5 hidden truncate text-xs text-[var(--muted)] sm:block">
@@ -641,6 +680,32 @@ export function BoardShell({
                   totalCount={totalCount}
                 />
               </div>
+              <div className="flex shrink-0 gap-1 rounded-xl border border-white/15 bg-black/15 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setBoardLayout("kanban")}
+                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
+                    boardLayout === "kanban"
+                      ? "bg-white text-[#0079bf]"
+                      : "text-white/70 hover:text-white"
+                  }`}
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  Kanban
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBoardLayout("team")}
+                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
+                    boardLayout === "team"
+                      ? "bg-white text-[#0079bf]"
+                      : "text-white/70 hover:text-white"
+                  }`}
+                >
+                  <CalendarRange className="h-3.5 w-3.5" />
+                  Por pessoa
+                </button>
+              </div>
               {descendantIds.length > 0 ? (
                 <div className="flex shrink-0 gap-1 rounded-xl border border-white/15 bg-black/15 p-0.5">
                   <button
@@ -689,15 +754,25 @@ export function BoardShell({
               }}
             />
             <div className="flex flex-col pb-8">
-              <div className="shrink-0">
-                <BoardCanvas boardId={board.id} filter={cardFilter} />
-              </div>
-              {hasChildBoards ? (
-                <ConsolidatedBoardCanvas
+              {boardLayout === "team" ? (
+                <TeamBoardView
                   boardId={board.id}
                   filter={cardFilter}
+                  scopeBoardIds={scopeBoardIds}
                 />
-              ) : null}
+              ) : (
+                <>
+                  <div className="shrink-0">
+                    <BoardCanvas boardId={board.id} filter={cardFilter} />
+                  </div>
+                  {hasChildBoards ? (
+                    <ConsolidatedBoardCanvas
+                      boardId={board.id}
+                      filter={cardFilter}
+                    />
+                  ) : null}
+                </>
+              )}
             </div>
           </div>
         </main>
@@ -731,6 +806,9 @@ export function BoardShell({
               ) : null}
               {panel === "activity" ? (
                 <ActivityPanel boardId={board.id} onClose={() => setPanel(null)} />
+              ) : null}
+              {panel === "whatsapp" ? (
+                <WhatsAppGroupsPanel boardId={board.id} onClose={() => setPanel(null)} />
               ) : null}
             </div>
           </>
@@ -791,6 +869,21 @@ export function BoardShell({
                 {calCount > 0 ? (
                   <span className="ml-auto rounded-full bg-[var(--accent-2)] px-1.5 text-[10px] font-bold text-slate-950">
                     {calCount > 99 ? "99+" : calCount}
+                  </span>
+                ) : null}
+              </button>
+              <button
+                type="button"
+                onClick={() => toggle("whatsapp")}
+                className="flex items-center gap-2 rounded-xl border border-[var(--line)] px-3 py-3 text-left text-sm text-white hover:bg-white/5"
+              >
+                <MessageCircle className="h-4 w-4 text-[var(--accent)]" />
+                WhatsApp
+                {(board.whatsappGroups || []).length > 0 ? (
+                  <span className="ml-auto rounded-full bg-emerald-400 px-1.5 text-[10px] font-bold text-slate-950">
+                    {(board.whatsappGroups || []).length > 99
+                      ? "99+"
+                      : (board.whatsappGroups || []).length}
                   </span>
                 ) : null}
               </button>

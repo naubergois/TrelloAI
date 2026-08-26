@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   applyAdicionarGit,
+  applyAdicionarWhatsApp,
   applyAtualizarResumo,
+  applyAtualizarWhatsApp,
   applyCriarCard,
   applyCriarLista,
   applyMoverCard,
+  applyRemoverWhatsApp,
   compactBoard,
   findList,
 } from "../../scripts/jangada-mcp-tools.mjs";
@@ -73,5 +76,35 @@ describe("jangada MCP snapshot tools", () => {
     expect(compactBoard(next).board.executiveSummary).toBe(
       "Situação estável.\nPrioridade: piloto.",
     );
+  });
+
+  it("adds, edits and removes WhatsApp group metadata on a board", () => {
+    const added = applyAdicionarWhatsApp(snapshot(), {
+      name: "Grupo WhatsApp ASESI",
+      jid: "120363430202949653@g.us",
+      notes: "Fonte da carteira",
+    });
+    expect(added.group.jid).toBe("120363430202949653@g.us");
+    expect(compactBoard(added.snapshot).board.whatsappGroups).toHaveLength(1);
+
+    const again = applyAdicionarWhatsApp(added.snapshot, {
+      jid: "Grupo WhatsApp ASESI (120363430202949653@g.us)",
+      invite_url: "https://chat.whatsapp.com/AbCdEfGhIjKlMnOp",
+    });
+    expect(again.groupId).toBe(added.groupId);
+    expect(again.snapshot.board.whatsappGroups).toHaveLength(1);
+    expect(again.group.inviteUrl).toContain("chat.whatsapp.com");
+
+    const edited = applyAtualizarWhatsApp(again.snapshot, {
+      group_id: added.groupId,
+      name: "ASESI",
+      notes: "Atualizado",
+    });
+    expect(edited.group.name).toBe("ASESI");
+    expect(edited.group.notes).toBe("Atualizado");
+    expect(edited.group.jid).toBe("120363430202949653@g.us");
+
+    const removed = applyRemoverWhatsApp(edited.snapshot, { group_id: added.groupId });
+    expect(removed.snapshot.board.whatsappGroups).toEqual([]);
   });
 });
