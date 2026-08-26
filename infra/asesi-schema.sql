@@ -54,3 +54,18 @@ CREATE TABLE IF NOT EXISTS trelloai.user_board_visibility (
   board_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Homolog/prod usa asesi_jangada. CREATE TABLE feito como postgres deixa
+-- essa role só com SELECT (permission denied no INSERT/UPDATE).
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'asesi_jangada') THEN
+    GRANT USAGE, CREATE ON SCHEMA trelloai TO asesi_jangada;
+    ALTER TABLE trelloai.board_snapshots OWNER TO asesi_jangada;
+    ALTER TABLE trelloai.board_memberships OWNER TO asesi_jangada;
+    ALTER TABLE trelloai.users OWNER TO asesi_jangada;
+    ALTER TABLE trelloai.invites OWNER TO asesi_jangada;
+    ALTER TABLE trelloai.user_board_visibility OWNER TO asesi_jangada;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA trelloai TO asesi_jangada;
+  END IF;
+END $$;

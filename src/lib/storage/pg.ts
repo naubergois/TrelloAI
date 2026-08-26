@@ -121,9 +121,59 @@ function ddl(schema: string) {
   `;
 }
 
+const DEFAULT_APP_ROLE = "asesi_jangada";
+
+function appRoleName() {
+  const raw = (process.env.PG_APP_ROLE || DEFAULT_APP_ROLE).trim().toLowerCase();
+  return /^[a-z][a-z0-9_]{0,62}$/.test(raw) ? raw : DEFAULT_APP_ROLE;
+}
+
+/** CREATE TABLE as postgres leaves homolog (asesi_jangada) without INSERT/UPDATE. */
+function grantAppRole(schema: string) {
+  const role = appRoleName();
+  return `
+    DO $grant$
+    DECLARE
+      rec record;
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${role}') THEN
+        RETURN;
+      END IF;
+      EXECUTE format('GRANT USAGE, CREATE ON SCHEMA %I TO %I', '${schema}', '${role}');
+      FOR rec IN
+        SELECT c.relname, c.relkind
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = '${schema}'
+          AND c.relkind IN ('r', 'S')
+      LOOP
+        IF rec.relkind = 'S' THEN
+          EXECUTE format('ALTER SEQUENCE %I.%I OWNER TO %I', '${schema}', rec.relname, '${role}');
+        ELSE
+          EXECUTE format('ALTER TABLE %I.%I OWNER TO %I', '${schema}', rec.relname, '${role}');
+        END IF;
+      END LOOP;
+      EXECUTE format(
+        'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA %I TO %I',
+        '${schema}',
+        '${role}'
+      );
+    EXCEPTION
+      WHEN insufficient_privilege THEN
+        NULL;
+    END
+    $grant$;
+  `;
+}
+
 async function ensureSchema(p: Pool) {
   const schema = readPgConfig()?.schema || activeSchema;
   await p.query(ddl(schema));
+  try {
+    await p.query(grantAppRole(schema));
+  } catch {
+    /* app user cannot reassign ownership */
+  }
 
   const existing = await p.query<{ n: number }>("SELECT COUNT(*)::int AS n FROM board_snapshots");
   if ((existing.rows[0]?.n ?? 0) === 0) {

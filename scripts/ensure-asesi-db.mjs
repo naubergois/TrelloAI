@@ -65,6 +65,44 @@ try {
   await client.connect();
   await client.query(`SET search_path TO ${schema}, public`);
   await client.query(sql);
+
+  const appRole = (process.env.PG_APP_ROLE || "asesi_jangada").trim().toLowerCase();
+  if (/^[a-z][a-z0-9_]{0,62}$/.test(appRole)) {
+    await client.query(
+      `
+      DO $grant$
+      DECLARE
+        rec record;
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${appRole}') THEN
+          RETURN;
+        END IF;
+        EXECUTE format('GRANT USAGE, CREATE ON SCHEMA %I TO %I', '${schema}', '${appRole}');
+        FOR rec IN
+          SELECT c.relname, c.relkind
+          FROM pg_class c
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = '${schema}' AND c.relkind IN ('r', 'S')
+        LOOP
+          IF rec.relkind = 'S' THEN
+            EXECUTE format('ALTER SEQUENCE %I.%I OWNER TO %I', '${schema}', rec.relname, '${appRole}');
+          ELSE
+            EXECUTE format('ALTER TABLE %I.%I OWNER TO %I', '${schema}', rec.relname, '${appRole}');
+          END IF;
+        END LOOP;
+        EXECUTE format(
+          'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA %I TO %I',
+          '${schema}',
+          '${appRole}'
+        );
+      EXCEPTION
+        WHEN insufficient_privilege THEN
+          NULL;
+      END
+      $grant$;
+    `,
+    );
+  }
   const ping = await client.query("SELECT current_database() AS db, current_schema() AS schema");
   const tables = await client.query(
     `SELECT table_name FROM information_schema.tables WHERE table_schema = $1 ORDER BY 1`,
