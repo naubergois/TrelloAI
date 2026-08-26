@@ -30,6 +30,14 @@ import { dueUrgency } from "@/lib/board-filters";
 import { useToast } from "@/components/Toast";
 import { CardLabelBars } from "@/components/CardLabelBars";
 import { CardCoverSwatches } from "@/components/CardCoverSwatches";
+import { PhotoFileButton } from "@/components/MemberAvatar";
+import { CardAssigneeCombo } from "@/components/CardAssigneeCombo";
+import {
+  boardAssigneeOptions,
+  cardAssigneeIds,
+  isExternalMember,
+  syncCardAssignees,
+} from "@/lib/members";
 
 export function CardItem({
   card,
@@ -47,9 +55,11 @@ export function CardItem({
   const archiveCard = useBoardStore((s) => s.archiveCard);
   const addCardComment = useBoardStore((s) => s.addCardComment);
   const moveCard = useBoardStore((s) => s.moveCard);
+  const addExternalContact = useBoardStore((s) => s.addExternalContact);
   const boards = useBoardStore((s) => s.boards);
   const lists = useBoardStore((s) => s.lists);
   const members = useBoardStore((s) => s.members);
+  const teams = useBoardStore((s) => s.teams);
   const requirements = useBoardStore((s) => s.requirements);
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -57,8 +67,8 @@ export function CardItem({
   const [draftTitle, setDraftTitle] = useState(card.title);
   const [draftDescription, setDraftDescription] = useState(card.description);
   const [draftPriority, setDraftPriority] = useState<Card["priority"]>(card.priority);
-  const [draftAssigneeId, setDraftAssigneeId] = useState<string | null>(
-    card.assigneeId ?? null,
+  const [draftAssigneeIds, setDraftAssigneeIds] = useState<string[]>(() =>
+    cardAssigneeIds(card),
   );
   const [draftListId, setDraftListId] = useState(card.listId);
   const [draftDueDate, setDraftDueDate] = useState(card.dueDate ?? "");
@@ -78,12 +88,23 @@ export function CardItem({
   );
   const [newCheckText, setNewCheckText] = useState("");
   const [newComment, setNewComment] = useState("");
+  const [externalName, setExternalName] = useState("");
+  const [externalEmail, setExternalEmail] = useState("");
+  const [externalImage, setExternalImage] = useState<string | null>(null);
+  const [addingExternal, setAddingExternal] = useState(false);
   const titleRef = useRef<HTMLInputElement | null>(null);
 
   const boardId = lists[card.listId]?.boardId;
-  const boardMembers = boardId
-    ? (boards[boardId]?.memberIds || []).map((id) => members[id]).filter(Boolean)
-    : [];
+  const board = boardId ? boards[boardId] : null;
+  const assignedTeam = board?.teamId ? teams[board.teamId] : null;
+  const assigneeChoices = board
+    ? boardAssigneeOptions({
+        board,
+        members,
+        team: assignedTeam,
+        extraIds: [...cardAssigneeIds(card), ...draftAssigneeIds],
+      })
+    : { team: [], external: [] };
   const boardLists = boardId
     ? (boards[boardId]?.listIds || []).map((id) => lists[id]).filter(Boolean)
     : [];
@@ -92,7 +113,6 @@ export function CardItem({
         .filter((r) => r.boardId === boardId)
         .sort((a, b) => a.code.localeCompare(b.code))
     : [];
-  const assignee = card.assigneeId ? members[card.assigneeId] : null;
   const linkedReq = card.requirementId
     ? requirements?.[card.requirementId]
     : null;
@@ -109,7 +129,7 @@ export function CardItem({
     setDraftTitle(card.title);
     setDraftDescription(card.description);
     setDraftPriority(card.priority);
-    setDraftAssigneeId(card.assigneeId ?? null);
+    setDraftAssigneeIds(cardAssigneeIds(card));
     setDraftListId(card.listId);
     setDraftDueDate(card.dueDate ?? "");
     setDraftRequirementId(card.requirementId ?? null);
@@ -117,6 +137,10 @@ export function CardItem({
     setDraftLabels(card.labels ?? []);
     setDraftCoverColor(card.coverColor ?? null);
     setDraftChecklist(card.checklist ?? []);
+    setExternalName("");
+    setExternalEmail("");
+    setExternalImage(null);
+    setAddingExternal(false);
     const t = window.setTimeout(() => titleRef.current?.focus(), 50);
     return () => window.clearTimeout(t);
   }, [
@@ -126,6 +150,7 @@ export function CardItem({
     card.description,
     card.priority,
     card.assigneeId,
+    card.assigneeIds,
     card.listId,
     card.dueDate,
     card.requirementId,
@@ -150,11 +175,22 @@ export function CardItem({
   }, [open]);
 
   const save = () => {
+    let ids = draftAssigneeIds;
+    if (addingExternal && boardId && externalName.trim()) {
+      const created = addExternalContact(boardId, {
+        name: externalName.trim(),
+        email: externalEmail.trim(),
+        image: externalImage,
+      });
+      if (created && !ids.includes(created)) ids = [...ids, created];
+    }
+    const { assigneeId, assigneeIds } = syncCardAssignees(ids);
     updateCard(card.id, {
       title: draftTitle.trim() || card.title,
       description: draftDescription,
       priority: draftPriority,
-      assigneeId: draftAssigneeId,
+      assigneeId,
+      assigneeIds,
       dueDate: draftDueDate || null,
       requirementId: draftRequirementId,
       acceptanceCriteria: draftAcceptance,
@@ -168,6 +204,23 @@ export function CardItem({
     }
     toast("Card salvo");
     setOpen(false);
+  };
+
+  const assignNewExternal = () => {
+    if (!boardId || !externalName.trim()) return;
+    const id = addExternalContact(boardId, {
+      name: externalName.trim(),
+      email: externalEmail.trim(),
+      image: externalImage,
+    });
+    if (!id) return;
+    setDraftAssigneeIds((prev) =>
+      prev.includes(id) ? prev : [...prev, id],
+    );
+    setAddingExternal(false);
+    setExternalName("");
+    setExternalEmail("");
+    setExternalImage(null);
   };
 
   const toggleLabelColor = (color: LabelColor) => {
@@ -294,23 +347,58 @@ export function CardItem({
                     </select>
                   </label>
 
-                  <label className="block text-xs text-[var(--muted)] sm:text-sm">
-                    Responsável
-                    <select
-                      className="mt-1.5 w-full rounded-2xl border border-[var(--line)] bg-[var(--ink)] px-4 py-3 text-sm text-white outline-none focus:border-[var(--accent)]"
-                      value={draftAssigneeId ?? ""}
-                      onChange={(e) =>
-                        setDraftAssigneeId(e.target.value || null)
-                      }
+                  <div>
+                    <CardAssigneeCombo
+                      variant="form"
+                      selectedIds={draftAssigneeIds}
+                      team={assigneeChoices.team}
+                      external={assigneeChoices.external}
+                      members={members}
+                      onChange={setDraftAssigneeIds}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setAddingExternal((value) => !value)}
+                      className="mt-2 text-[11px] text-[var(--muted)] hover:text-white"
                     >
-                      <option value="">Sem responsável</option>
-                      {boardMembers.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                      {addingExternal ? "Cancelar pessoa externa" : "+ Pessoa externa"}
+                    </button>
+                    {draftAssigneeIds.some((id) => isExternalMember(members[id])) ? (
+                      <p className="mt-1.5 text-[11px] text-[var(--muted)]">
+                        Contatos externos não ganham acesso ao board.
+                      </p>
+                    ) : null}
+                    {addingExternal ? (
+                      <div className="mt-2 space-y-2 rounded-2xl border border-[var(--line)] bg-black/20 p-3">
+                        <input
+                          value={externalName}
+                          onChange={(e) => setExternalName(e.target.value)}
+                          placeholder="Nome da pessoa externa"
+                          className="w-full rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2 text-sm text-white outline-none focus:border-[var(--accent)]"
+                        />
+                        <input
+                          value={externalEmail}
+                          onChange={(e) => setExternalEmail(e.target.value)}
+                          placeholder="Email (opcional)"
+                          type="email"
+                          className="w-full rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2 text-sm text-white outline-none focus:border-[var(--accent)]"
+                        />
+                        <PhotoFileButton
+                          preview={externalImage}
+                          onChange={setExternalImage}
+                          label="Foto (opcional)"
+                        />
+                        <button
+                          type="button"
+                          disabled={!externalName.trim()}
+                          onClick={assignNewExternal}
+                          className="w-full rounded-xl bg-[var(--accent)] px-3 py-2 text-sm font-semibold text-[var(--accent-on)] disabled:opacity-40"
+                        >
+                          Atribuir pessoa externa
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
 
                   <label className="block text-xs text-[var(--muted)] sm:text-sm">
                     Prazo
@@ -696,29 +784,34 @@ export function CardItem({
                 {checklistDone}/{checklistTotal}
               </span>
             ) : null}
-            {assignee ? (
-              <span
-                title={assignee.name}
-                className={`flex h-6 max-w-[7rem] items-center gap-1 truncate rounded-full px-1.5 text-[10px] font-semibold ${labelStyles[assignee.color]}`}
-              >
-                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-black/20 text-[9px]">
-                  {assignee.name.slice(0, 1).toUpperCase()}
-                </span>
-                <span className="truncate">{assignee.name.split(" ")[0]}</span>
-              </span>
-            ) : null}
           </div>
-          <button
-            type="button"
-            className="board-card-muted rounded p-1 hover:bg-black/5 hover:text-rose-600"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (confirm(`Excluir o card "${card.title}"?`)) deleteCard(card.id);
-            }}
-            aria-label="Excluir card"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <div
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <CardAssigneeCombo
+                selectedIds={cardAssigneeIds(card)}
+                team={assigneeChoices.team}
+                external={assigneeChoices.external}
+                members={members}
+                disabled={overlay}
+                onChange={(ids) => updateCard(card.id, { assigneeIds: ids })}
+              />
+            </div>
+            <button
+              type="button"
+              className="board-card-muted rounded p-1 hover:bg-black/5 hover:text-rose-600"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (confirm(`Excluir o card "${card.title}"?`)) deleteCard(card.id);
+              }}
+              aria-label="Excluir card"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </article>
 

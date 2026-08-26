@@ -57,6 +57,7 @@ import {
 } from "@/components/MayaSuggestionsBar";
 import { suggestMayaActivities } from "@/lib/maya-suggestions";
 import { useVisibleBoards } from "@/lib/use-visible-boards";
+import { boardAssigneeOptions, cardAssigneeIds } from "@/lib/members";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -139,8 +140,17 @@ export function BoardShell({
 
   const boardMembers = useMemo(() => {
     if (!board) return [];
-    return (board.memberIds ?? []).map((id) => members[id]).filter(Boolean);
-  }, [board, members]);
+    const extraIds = board.listIds.flatMap((listId) =>
+      (lists[listId]?.cardIds ?? []).flatMap((id) => cardAssigneeIds(cards[id])),
+    );
+    const options = boardAssigneeOptions({
+      board,
+      members,
+      extraIds,
+      team: assignedTeam,
+    });
+    return [...options.team, ...options.external];
+  }, [board, members, lists, cards, assignedTeam]);
 
   const { matchCount, totalCount } = useMemo(() => {
     if (!board) return { matchCount: 0, totalCount: 0 };
@@ -271,7 +281,7 @@ export function BoardShell({
 
   return (
     <div
-      className="board-theme flex min-h-dvh flex-col overflow-x-hidden pb-[env(safe-area-inset-bottom)]"
+      className="board-theme flex min-h-dvh w-full flex-col overflow-visible pb-[env(safe-area-inset-bottom)]"
       style={themeStyle}
     >
       <MeetingRoom />
@@ -466,8 +476,8 @@ export function BoardShell({
         </div>
       </header>
 
-      <div className="relative mx-auto flex w-full max-w-[1600px] flex-1 px-2 py-2 sm:px-4 sm:py-3 lg:gap-3 lg:px-6">
-        <main className="flex min-w-0 flex-1 flex-col">
+      <div className="relative mx-auto flex w-full max-w-[1600px] px-2 py-2 sm:px-4 sm:py-3 lg:gap-3 lg:px-6">
+        <main className="flex min-w-0 w-full flex-col">
           <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2 sm:mb-3 sm:gap-3">
             <div className="min-w-0 flex-1">
               {editingTitle ? (

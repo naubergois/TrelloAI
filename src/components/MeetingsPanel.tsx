@@ -11,8 +11,8 @@ import {
   Radio,
 } from "lucide-react";
 import { useBoardStore } from "@/lib/store";
-import { labelStyles } from "@/lib/utils";
 import type { MeetingStatus } from "@/lib/types";
+import { MemberPhotoButton, PhotoFileButton } from "@/components/MemberAvatar";
 
 function statusLabel(status: MeetingStatus) {
   if (status === "live") return "Ao vivo";
@@ -52,6 +52,7 @@ export function MeetingsPanel({
   const currentUserId = useBoardStore((s) => s.currentUserId);
   const addTeamMember = useBoardStore((s) => s.addTeamMember);
   const removeTeamMember = useBoardStore((s) => s.removeTeamMember);
+  const updateMember = useBoardStore((s) => s.updateMember);
   const assignTeamToBoard = useBoardStore((s) => s.assignTeamToBoard);
   const createTeam = useBoardStore((s) => s.createTeam);
   const setCurrentUserName = useBoardStore((s) => s.setCurrentUserName);
@@ -61,6 +62,7 @@ export function MeetingsPanel({
 
   const [memberName, setMemberName] = useState("");
   const [memberEmail, setMemberEmail] = useState("");
+  const [memberImage, setMemberImage] = useState<string | null>(null);
   const [meetingTitle, setMeetingTitle] = useState("Sync da equipe");
   const [meetingWhen, setMeetingWhen] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -102,9 +104,11 @@ export function MeetingsPanel({
     addTeamMember(boardId, {
       name: memberName.trim(),
       email: memberEmail.trim(),
+      image: memberImage,
     });
     setMemberName("");
     setMemberEmail("");
+    setMemberImage(null);
   };
 
   const onCreateTeam = (e: FormEvent) => {
@@ -276,21 +280,10 @@ export function MeetingsPanel({
                 key={member.id}
                 className="flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--ink)]/50 px-2.5 py-2"
               >
-                {member.image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={member.image}
-                    alt=""
-                    className="h-8 w-8 rounded-full object-cover ring-1 ring-[var(--line)]"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <span
-                    className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${labelStyles[member.color]}`}
-                  >
-                    {member.name.slice(0, 1).toUpperCase()}
-                  </span>
-                )}
+                <MemberPhotoButton
+                  member={member}
+                  onChange={(image) => updateMember(member.id, { image })}
+                />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-white">
                     {member.name}
@@ -326,6 +319,11 @@ export function MeetingsPanel({
               placeholder="Email"
               type="email"
               className="w-full rounded-lg border border-[var(--line)] bg-[var(--ink)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
+            />
+            <PhotoFileButton
+              preview={memberImage}
+              onChange={setMemberImage}
+              label="Foto do membro"
             />
             <button
               type="submit"

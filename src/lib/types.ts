@@ -26,8 +26,10 @@ export interface Card {
   originKey?: string | null;
   dueDate: string | null;
   priority: "low" | "medium" | "high" | null;
-  /** Membro responsável (TeamMember.id) */
+  /** Responsável principal (primeiro de assigneeIds; compatível com dados antigos) */
   assigneeId: string | null;
+  /** Um ou mais responsáveis (time ou externos). */
+  assigneeIds?: string[];
   /** Requisito vinculado (opcional) */
   requirementId: string | null;
   /** Critérios de aceite / notas de validação */
@@ -167,6 +169,8 @@ export interface Board {
   executiveSummary?: string;
   listIds: string[];
   memberIds: string[];
+  /** Contatos externos (não entram no time nem no acesso ao board) */
+  externalMemberIds?: string[];
   /** Equipe atribuída a este kanban (opcional) */
   teamId: string | null;
   /** Nível na hierarquia: organização → unidade → time → projeto */
@@ -195,6 +199,8 @@ export type BoardLevel = "organization" | "unit" | "team" | "project";
 
 export type TeamRole = "owner" | "member";
 
+export type MemberKind = "member" | "external";
+
 export interface TeamMember {
   id: string;
   name: string;
@@ -202,6 +208,8 @@ export interface TeamMember {
   role: TeamRole;
   color: LabelColor;
   image?: string | null;
+  /** Pessoa externa: pode ser responsável de card, sem acesso ao time */
+  kind?: MemberKind;
   createdAt: string;
 }
 

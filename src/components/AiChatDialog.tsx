@@ -7,6 +7,7 @@ import { nanoid } from "nanoid";
 import { useBoardStore } from "@/lib/store";
 import { calendarDayKey } from "@/lib/calendar-report";
 import { JangadaBuddy } from "@/components/JangadaBuddy";
+import { boardAssigneeOptions, cardAssigneeIds } from "@/lib/members";
 import {
   runBoardToolCalls,
   type AiToolChatResponse,
@@ -90,6 +91,7 @@ export function AiChatDialog({
   const lists = useBoardStore((s) => s.lists);
   const cards = useBoardStore((s) => s.cards);
   const members = useBoardStore((s) => s.members);
+  const teams = useBoardStore((s) => s.teams);
   const calendarEvents = useBoardStore((s) => s.calendarEvents);
   const addCard = useBoardStore((s) => s.addCard);
   const addList = useBoardStore((s) => s.addList);
@@ -189,10 +191,21 @@ export function AiChatDialog({
               dueDate: c.dueDate,
             })),
         })),
-      members: (board.memberIds ?? []).map((id) => members[id]).filter(Boolean).map((m) => ({
-        id: m.id,
-        name: m.name,
-      })),
+      members: (() => {
+        const extraIds = board.listIds.flatMap((listId) =>
+          (lists[listId]?.cardIds ?? []).flatMap((cid) => cardAssigneeIds(cards[cid])),
+        );
+        const options = boardAssigneeOptions({
+          board,
+          members,
+          extraIds,
+          team: board.teamId ? teams[board.teamId] : null,
+        });
+        return [...options.team, ...options.external].map((m) => ({
+          id: m.id,
+          name: m.kind === "external" ? `${m.name} (externo)` : m.name,
+        }));
+      })(),
       events: Object.values(calendarEvents || {})
         .filter((e) => e.boardId === boardId)
         .sort((a, b) => `${a.date}${a.time || ""}`.localeCompare(`${b.date}${b.time || ""}`))
@@ -206,7 +219,7 @@ export function AiChatDialog({
           meetingUrl: e.meetingUrl,
         })),
     };
-  }, [board, lists, cards, members, calendarEvents, boardId]);
+  }, [board, lists, cards, members, teams, calendarEvents, boardId]);
 
   const onPointerMove = (e: PointerEvent) => {
     const drag = dragRef.current;

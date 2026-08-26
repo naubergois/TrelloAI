@@ -4,6 +4,7 @@ import {
   type BoardCardFilter,
 } from "./board-filters";
 import { classifyListStage, type ListStage } from "./board-indicators";
+import { cardAssigneeLabel, hasCardAssignees } from "./members";
 import type { Board, Card, List, Requirement } from "./types";
 
 export type MayaSuggestionTone = "danger" | "warn" | "info" | "ok";
@@ -73,14 +74,6 @@ function daysBetween(from: string, to: string) {
 
 function plural(n: number, one: string, many: string) {
   return n === 1 ? one : many;
-}
-
-function memberName(
-  members: SuggestMayaActivitiesInput["members"],
-  id: string | null | undefined,
-) {
-  if (!id) return null;
-  return members?.[id]?.name || null;
 }
 
 function otherBoardTitle(board: Board, rootBoardId: string | undefined) {
@@ -215,7 +208,7 @@ export function suggestMayaActivities(
 
   for (const item of overdueItems) {
     const late = daysBetween(item.card.dueDate || today, today);
-    const who = memberName(input.members, item.card.assigneeId);
+    const who = cardAssigneeLabel(input.members, item.card);
     pushCard(item, {
       kind: "overdue",
       title: `Tratar atraso: ${item.card.title}`,
@@ -240,7 +233,7 @@ export function suggestMayaActivities(
 
   for (const item of active) {
     if (dueUrgency(item.card.dueDate) !== "today") continue;
-    const who = memberName(input.members, item.card.assigneeId);
+    const who = cardAssigneeLabel(input.members, item.card);
     pushCard(item, {
       kind: "due-today",
       title: `Entregar hoje: ${item.card.title}`,
@@ -262,7 +255,7 @@ export function suggestMayaActivities(
   }
 
   for (const item of active) {
-    if (item.card.priority !== "high" || item.card.assigneeId) continue;
+    if (item.card.priority !== "high" || hasCardAssignees(item.card)) continue;
     pushCard(item, {
       kind: "unassigned",
       title: `Atribuir: ${item.card.title}`,
@@ -285,7 +278,7 @@ export function suggestMayaActivities(
 
   for (const item of active) {
     if (item.stage !== "review") continue;
-    const who = memberName(input.members, item.card.assigneeId);
+    const who = cardAssigneeLabel(input.members, item.card);
     pushCard(item, {
       kind: "review",
       title: `Revisar: ${item.card.title}`,

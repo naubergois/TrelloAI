@@ -16,6 +16,7 @@ import {
   type BoardDesignId,
 } from "@/lib/board-themes";
 import { boardPhotoCatalog, isUsableBackgroundUrl, type BoardPhoto } from "@/lib/board-photos";
+import { compressImageFile } from "@/lib/compress-image";
 
 const PAGE_SIZE = 36;
 
@@ -82,7 +83,7 @@ export function BoardAppearanceEditor({
 
   const onUpload = async (file: File) => {
     if (!file.type.startsWith("image/")) return;
-    const dataUrl = await compressImage(file);
+    const dataUrl = await compressImageFile(file);
     if (!dataUrl) return;
     onChange({ backgroundImageUrl: dataUrl, backgroundTint: tint });
     setUrlDraft("");
@@ -320,27 +321,6 @@ function CardThemeGrid({
       ))}
     </div>
   );
-}
-
-async function compressImage(file: File): Promise<string | null> {
-  const bitmap = await createImageBitmap(file);
-  const max = 1920;
-  const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
-  const width = Math.round(bitmap.width * scale);
-  const height = Math.round(bitmap.height * scale);
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  ctx.drawImage(bitmap, 0, 0, width, height);
-  const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
-  if (dataUrl.length > 450_000) {
-    const tighter = canvas.toDataURL("image/jpeg", 0.55);
-    if (tighter.length > 450_000) return null;
-    return tighter;
-  }
-  return dataUrl;
 }
 
 export function BoardAppearanceDrawer({

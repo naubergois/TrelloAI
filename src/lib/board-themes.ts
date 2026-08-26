@@ -534,6 +534,7 @@ export function ensureBoardAppearance(board: Board): Board {
     executiveSummary:
       typeof board.executiveSummary === "string" ? board.executiveSummary : "",
     memberIds: board.memberIds ?? [],
+    externalMemberIds: Array.isArray(board.externalMemberIds) ? board.externalMemberIds : [],
     teamId: board.teamId ?? null,
     gitRepos: Array.isArray(board.gitRepos) ? board.gitRepos : [],
     riskReport: board.riskReport ?? null,

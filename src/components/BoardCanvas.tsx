@@ -108,7 +108,7 @@ export function BoardCanvas({
         onDragEnd={onDragEnd}
       >
         <div
-          className="board-canvas-scroll flex items-start overflow-x-auto pb-1 pr-1"
+          className="board-h-scroll board-canvas-scroll flex items-start overflow-x-auto"
           style={{ gap: "var(--board-gap, 0.75rem)" }}
           onWheel={(event) => {
             if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
@@ -152,6 +152,7 @@ export function BoardCanvas({
               Adicionar lista
             </button>
           </form>
+          <div className="board-h-scroll-end" aria-hidden="true" />
         </div>
 
         <DragOverlay>

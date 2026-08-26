@@ -1,3 +1,5 @@
+import { cardAssigneeIds } from "./members";
+
 export type BoardCardFilter = {
   query: string;
   assigneeId: string;
@@ -41,6 +43,7 @@ export function cardMatchesFilter(
     title: string;
     description?: string;
     assigneeId?: string | null;
+    assigneeIds?: string[] | null;
     priority?: string | null;
     dueDate?: string | null;
     archived?: boolean;
@@ -56,7 +59,7 @@ export function cardMatchesFilter(
     if (!hay.includes(q)) return false;
   }
 
-  if (filter.assigneeId && card.assigneeId !== filter.assigneeId) return false;
+  if (filter.assigneeId && !cardAssigneeIds(card).includes(filter.assigneeId)) return false;
   if (filter.priority && card.priority !== filter.priority) return false;
 
   if (filter.due === "any" && !card.dueDate) return false;

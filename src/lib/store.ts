@@ -63,6 +63,13 @@ import {
 } from "./calendar-report";
 import { extractMeetingUrlFromText, sanitizeMeetingUrl } from "./meeting-links";
 import { sanitizeExecutiveSummary } from "./executive-summary";
+import {
+  applyAssigneePatch,
+  cardAssigneeIds,
+  collectContactIds,
+  membersForSnapshot,
+  syncCardAssignees,
+} from "./members";
 
 function normalizeCalendarEvent(event: TeamCalendarEvent): TeamCalendarEvent {
   const meetingUrl =
@@ -78,9 +85,11 @@ function normalizeCalendarEvent(event: TeamCalendarEvent): TeamCalendarEvent {
 }
 
 function normalizeCard(card: Card): Card {
+  const assignees = syncCardAssignees(cardAssigneeIds(card));
   return {
     ...card,
-    assigneeId: card.assigneeId ?? null,
+    assigneeId: assignees.assigneeId,
+    assigneeIds: assignees.assigneeIds,
     requirementId: card.requirementId ?? null,
     acceptanceCriteria: card.acceptanceCriteria ?? "",
     checklist: Array.isArray(card.checklist) ? card.checklist : [],
@@ -165,8 +174,23 @@ interface BoardState {
   deleteTeam: (teamId: string) => void;
   addMemberToTeam: (
     teamId: string,
-    data: { name: string; email: string; role?: TeamRole; color?: LabelColor },
+    data: {
+      name: string;
+      email: string;
+      role?: TeamRole;
+      color?: LabelColor;
+      image?: string | null;
+    },
   ) => string;
+  updateMember: (
+    memberId: string,
+    patch: Partial<Pick<TeamMember, "name" | "email" | "image" | "color">>,
+  ) => void;
+  addExternalContact: (
+    boardId: string,
+    data: { name: string; email?: string; image?: string | null },
+  ) => string;
+  removeExternalContact: (boardId: string, memberId: string) => void;
   removeMemberFromTeam: (teamId: string, memberId: string) => void;
   addExistingMemberToTeam: (teamId: string, memberId: string) => void;
   addList: (boardId: string, title: string) => string;
@@ -186,6 +210,7 @@ interface BoardState {
         | "origin"
         | "originKey"
         | "assigneeId"
+        | "assigneeIds"
         | "requirementId"
         | "acceptanceCriteria"
         | "checklist"
@@ -250,7 +275,13 @@ interface BoardState {
   }) => void;
   addTeamMember: (
     boardId: string,
-    data: { name: string; email: string; role?: TeamRole; color?: LabelColor },
+    data: {
+      name: string;
+      email: string;
+      role?: TeamRole;
+      color?: LabelColor;
+      image?: string | null;
+    },
   ) => string;
   removeTeamMember: (boardId: string, memberId: string) => void;
   createMeeting: (input: {
@@ -314,6 +345,24 @@ const MEMBER_COLORS: LabelColor[] = ["teal", "amber", "rose", "sky", "lime", "vi
 
 function ensureBoardMembers(board: Board): Board {
   return ensureBoardAppearance(board);
+}
+
+function touchBoardsWithMember(
+  boards: Record<string, Board>,
+  memberId: string,
+  now: string,
+): Record<string, Board> {
+  const next = { ...boards };
+  for (const [id, board] of Object.entries(next)) {
+    const safe = ensureBoardMembers(board);
+    if (
+      (safe.memberIds || []).includes(memberId) ||
+      (safe.externalMemberIds || []).includes(memberId)
+    ) {
+      next[id] = { ...safe, updatedAt: now };
+    }
+  }
+  return next;
 }
 
 function syncBoardsWithTeam(
@@ -744,6 +793,8 @@ export const useBoardStore = create<BoardState>()(
             email: data.email.trim() || `${memberId}@equipe.local`,
             role: data.role ?? "member",
             color,
+            image: data.image ?? null,
+            kind: "member",
             createdAt: now,
           };
           const memberIds = [...team.memberIds, memberId];
@@ -758,6 +809,131 @@ export const useBoardStore = create<BoardState>()(
         });
         return memberId;
       },
+
+      updateMember: (memberId, patch) =>
+        set((state) => {
+          const existing = state.members[memberId];
+          if (!existing) return state;
+          const now = new Date().toISOString();
+          const next: TeamMember = {
+            ...existing,
+            name:
+              patch.name !== undefined
+                ? patch.name.trim() || existing.name
+                : existing.name,
+            email: patch.email !== undefined ? patch.email.trim() : existing.email,
+            image: patch.image !== undefined ? patch.image : existing.image,
+            color: patch.color ?? existing.color,
+          };
+          return {
+            members: { ...state.members, [memberId]: next },
+            boards: touchBoardsWithMember(state.boards, memberId, now),
+          };
+        }),
+
+      addExternalContact: (boardId, data) => {
+        const now = new Date().toISOString();
+        let memberId = "";
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+          const safe = ensureBoardMembers(board);
+          const name = data.name.trim();
+          if (!name) return state;
+          const email = (data.email || "").trim().toLowerCase();
+          const existing = email
+            ? Object.values(state.members).find(
+                (m) => m.email.trim().toLowerCase() === email,
+              )
+            : undefined;
+
+          if (existing && existing.kind !== "external") {
+            memberId = existing.id;
+            if (data.image && data.image !== existing.image) {
+              return {
+                members: {
+                  ...state.members,
+                  [existing.id]: { ...existing, image: data.image },
+                },
+                boards: touchBoardsWithMember(state.boards, existing.id, now),
+              };
+            }
+            return state;
+          }
+
+          memberId = existing?.id || nanoid();
+          const member: TeamMember = existing
+            ? {
+                ...existing,
+                name,
+                email: email || existing.email,
+                image: data.image ?? existing.image,
+                kind: "external",
+              }
+            : {
+                id: memberId,
+                name,
+                email: email || `${memberId}@externo.local`,
+                role: "member",
+                color:
+                  MEMBER_COLORS[Object.keys(state.members).length % MEMBER_COLORS.length],
+                image: data.image ?? null,
+                kind: "external",
+                createdAt: now,
+              };
+          const externalMemberIds = Array.from(
+            new Set([...(safe.externalMemberIds || []), memberId]),
+          );
+          return {
+            members: { ...state.members, [memberId]: member },
+            boards: {
+              ...state.boards,
+              [boardId]: { ...safe, externalMemberIds, updatedAt: now },
+            },
+          };
+        });
+        return memberId;
+      },
+
+      removeExternalContact: (boardId, memberId) =>
+        set((state) => {
+          const board = state.boards[boardId];
+          const member = state.members[memberId];
+          if (!board || !member || member.kind !== "external") return state;
+          const now = new Date().toISOString();
+          const safe = ensureBoardMembers(board);
+          const cards = { ...state.cards };
+          for (const listId of safe.listIds) {
+            const list = state.lists[listId];
+            if (!list) continue;
+            for (const cardId of list.cardIds) {
+              const card = cards[cardId];
+              if (card?.assigneeId === memberId) {
+                cards[cardId] = { ...card, assigneeId: null, updatedAt: now };
+              }
+            }
+          }
+          const usedElsewhere = Object.values(state.boards).some(
+            (b) =>
+              b.id !== boardId && (b.externalMemberIds || []).includes(memberId),
+          );
+          const nextMembers = { ...state.members };
+          if (!usedElsewhere) delete nextMembers[memberId];
+          return {
+            members: nextMembers,
+            cards,
+            boards: {
+              ...state.boards,
+              [boardId]: {
+                ...safe,
+                externalMemberIds: (safe.externalMemberIds || []).filter(
+                  (id) => id !== memberId,
+                ),
+                updatedAt: now,
+              },
+            },
+          };
+        }),
 
       removeMemberFromTeam: (teamId, memberId) =>
         set((state) => {
@@ -963,7 +1139,9 @@ export const useBoardStore = create<BoardState>()(
             originKey: extras.originKey ?? null,
             dueDate: extras.dueDate ?? null,
             priority: extras.priority ?? null,
-            assigneeId: extras.assigneeId ?? null,
+            ...syncCardAssignees(
+              extras.assigneeIds ?? (extras.assigneeId ? [extras.assigneeId] : []),
+            ),
             requirementId: extras.requirementId ?? null,
             acceptanceCriteria: extras.acceptanceCriteria ?? "",
             checklist: extras.checklist ?? [],
@@ -998,12 +1176,14 @@ export const useBoardStore = create<BoardState>()(
           if (!card) return state;
           const list = state.lists[card.listId];
           boardId = list?.boardId ?? null;
+          const assigneeFields = applyAssigneePatch(patch);
           return {
             cards: {
               ...state.cards,
               [cardId]: {
                 ...card,
                 ...patch,
+                ...(assigneeFields ?? {}),
                 id: card.id,
                 updatedAt: new Date().toISOString(),
               },
@@ -1454,6 +1634,7 @@ export const useBoardStore = create<BoardState>()(
             description: item.description,
             priority: item.priority ?? null,
             assigneeId: item.assigneeId ?? null,
+            assigneeIds: item.assigneeId ? [item.assigneeId] : [],
             dueDate: item.dueDate ?? null,
           });
         }
@@ -1548,6 +1729,8 @@ export const useBoardStore = create<BoardState>()(
             email: data.email.trim() || `${memberId}@equipe.local`,
             role: data.role ?? "member",
             color,
+            image: data.image ?? null,
+            kind: "member",
             createdAt: now,
           };
           const safeBoard = ensureBoardMembers(board);
@@ -2400,17 +2583,21 @@ export const useBoardStore = create<BoardState>()(
           }
         }
 
-        const members: Record<string, TeamMember> = {};
-        for (const memberId of board.memberIds || []) {
-          if (state.members[memberId]) members[memberId] = state.members[memberId];
-        }
+        const members = membersForSnapshot(
+          state.members,
+          collectContactIds({
+            board,
+            team: board.teamId ? state.teams[board.teamId] : null,
+            cards: Object.values(cards),
+            requirements: Object.values(state.requirements || {}).filter(
+              (req) => req.boardId === boardId,
+            ),
+          }),
+        );
 
         const teams: Record<string, Team> = {};
         if (board.teamId && state.teams[board.teamId]) {
           teams[board.teamId] = state.teams[board.teamId];
-          for (const memberId of state.teams[board.teamId].memberIds) {
-            if (state.members[memberId]) members[memberId] = state.members[memberId];
-          }
         }
 
         const meetings: Record<string, Meeting> = {};

@@ -50,12 +50,15 @@
 }
 
 html {
-  overflow-x: clip;
+  overflow-x: auto;
+  overflow-y: visible;
 }
 
 html,
 body {
-  min-height: 100%;
+  height: auto;
+  min-height: 100dvh;
+  max-height: none;
   max-width: 100%;
 }
 
@@ -69,9 +72,9 @@ body {
     radial-gradient(700px 480px at 70% 110%, rgba(235, 95, 10, 0.18), transparent 50%),
     linear-gradient(165deg, #04662e 0%, #00863b 46%, #0b3d22 100%);
   background-attachment: fixed;
-  min-height: 100%;
+  min-height: 100dvh;
   overscroll-behavior: none;
-  overflow-x: clip;
+  overflow: visible;
 }
 
 .app-bar,
@@ -94,13 +97,17 @@ a,
 
   .board-canvas-scroll {
     scroll-snap-type: x proximity;
-    scroll-padding-inline: 0.5rem;
+    scroll-padding-inline: 1rem;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-x: contain;
   }
 
   .board-canvas-scroll > * {
     scroll-snap-align: start;
+  }
+
+  .board-canvas-scroll > .board-h-scroll-end {
+    scroll-snap-align: none;
   }
 }
 
@@ -126,13 +133,60 @@ a,
   background: var(--board-list-bg);
   border-color: var(--board-list-border);
   backdrop-filter: blur(6px);
-  height: auto;
-  max-height: none;
-  overflow: visible;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
 }
 
 .board-theme .board-list-cards {
-  overflow: visible;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.board-theme .board-canvas-scroll {
+  height: auto;
+  max-height: none;
+  align-items: flex-start;
+}
+
+/* Horizontal scroller: breathing room after the last item + a usable track */
+.board-h-scroll {
+  padding-bottom: 0.9rem;
+  scroll-padding-inline: 1rem;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 209, 0, 0.55) rgba(255, 255, 255, 0.1);
+}
+
+.board-h-scroll-end {
+  flex: 0 0 max(2.25rem, env(safe-area-inset-right, 0px));
+  width: max(2.25rem, env(safe-area-inset-right, 0px));
+  min-height: 1px;
+  pointer-events: none;
+}
+
+.board-h-scroll::-webkit-scrollbar {
+  height: 10px;
+}
+
+.board-h-scroll::-webkit-scrollbar-track {
+  margin-inline: 0.35rem;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+}
+
+.board-h-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, rgba(255, 209, 0, 0.45), rgba(255, 255, 255, 0.4));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.board-h-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 209, 0, 0.85);
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 .board-theme .board-list-column header {

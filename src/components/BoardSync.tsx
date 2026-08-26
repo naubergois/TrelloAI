@@ -30,6 +30,8 @@ export function BoardSync() {
         state.cards !== prev.cards ||
         state.lists !== prev.lists ||
         state.boards !== prev.boards ||
+        state.members !== prev.members ||
+        state.teams !== prev.teams ||
         state.requirements !== prev.requirements ||
         state.calendarEvents !== prev.calendarEvents;
       if (changed) scheduleBoardSync(boardId);

@@ -45,7 +45,7 @@ export function BoardFilterBar({
           <option value="">Responsável</option>
           {members.map((m) => (
             <option key={m.id} value={m.id}>
-              {m.name}
+              {m.kind === "external" ? `${m.name} (externo)` : m.name}
             </option>
           ))}
         </select>

@@ -1,5 +1,6 @@
 import type { BoardRisk, Card, GitCoverageItem, Requirement } from "./types";
 import { isMayaRisksList } from "./maya-risk-column";
+import { hasCardAssignees } from "./members";
 
 const STOP = new Set([
   "para",
@@ -94,7 +95,7 @@ export function analyzeBoardRisks(opts: {
         cardId: card.id,
       });
     }
-    if (card.priority === "high" && !card.assigneeId) {
+    if (card.priority === "high" && !hasCardAssignees(card)) {
       risks.push({
         id: `unassigned-${card.id}`,
         title: `Sem responsável: ${card.title}`,

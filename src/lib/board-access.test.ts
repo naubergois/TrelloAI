@@ -141,6 +141,31 @@ describe("snapshotVisibleToEmail", () => {
     });
     expect(snapshotVisibleToEmail(invited, "ana@cge.ce.gov.br")).toBe(true);
   });
+
+  it("does not grant board access to an external card assignee", () => {
+    const withExternal = snap({
+      board: board({
+        id: "farol",
+        teamId: "team-farol",
+        memberIds: ["ana"],
+        externalMemberIds: ["fornecedor"],
+      }),
+      teams: { "team-farol": farol },
+      members: {
+        ana: member({ id: "ana", email: "ana@cge.ce.gov.br", name: "Ana" }),
+        fornecedor: member({
+          id: "fornecedor",
+          email: "contato@fornecedor.com",
+          name: "Fornecedor",
+          kind: "external",
+        }),
+      },
+    });
+    expect(snapshotVisibleToEmail(withExternal, "contato@fornecedor.com")).toBe(false);
+    expect(memberCanSeeBoard(withExternal.board, "fornecedor", withExternal.teams)).toBe(
+      false,
+    );
+  });
 });
 
 describe("teamIdsHeldByEmail", () => {

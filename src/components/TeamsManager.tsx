@@ -8,6 +8,7 @@ import { useVisibleBoards } from "@/lib/use-visible-boards";
 import { labelStyles } from "@/lib/utils";
 import type { LabelColor } from "@/lib/types";
 import type { BoardSnapshot } from "@/lib/board-snapshot";
+import { MemberPhotoButton, PhotoFileButton } from "@/components/MemberAvatar";
 
 const TEAM_COLORS: LabelColor[] = ["teal", "amber", "rose", "sky", "lime", "violet"];
 
@@ -20,6 +21,7 @@ export function TeamsManager() {
   const deleteTeam = useBoardStore((s) => s.deleteTeam);
   const addMemberToTeam = useBoardStore((s) => s.addMemberToTeam);
   const removeMemberFromTeam = useBoardStore((s) => s.removeMemberFromTeam);
+  const updateMember = useBoardStore((s) => s.updateMember);
 
   const { teamList } = useVisibleBoards();
 
@@ -30,6 +32,7 @@ export function TeamsManager() {
   const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
   const [memberName, setMemberName] = useState("");
   const [memberEmail, setMemberEmail] = useState("");
+  const [memberImage, setMemberImage] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
@@ -67,9 +70,11 @@ export function TeamsManager() {
     addMemberToTeam(activeTeam.id, {
       name: memberName.trim(),
       email: memberEmail.trim(),
+      image: memberImage,
     });
     setMemberName("");
     setMemberEmail("");
+    setMemberImage(null);
   };
 
   function snapshotsForTeam(teamId: string): BoardSnapshot[] {
@@ -360,11 +365,10 @@ export function TeamsManager() {
                       key={id}
                       className="flex items-center gap-3 rounded-xl border border-[var(--line)] bg-black/20 px-3 py-2"
                     >
-                      <span
-                        className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${labelStyles[m.color]}`}
-                      >
-                        {m.name.slice(0, 1).toUpperCase()}
-                      </span>
+                      <MemberPhotoButton
+                        member={m}
+                        onChange={(image) => updateMember(id, { image })}
+                      />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm text-white">{m.name}</p>
                         <p className="truncate text-[11px] text-[var(--muted)]">{m.email}</p>
@@ -382,7 +386,8 @@ export function TeamsManager() {
                 })}
               </ul>
 
-              <form onSubmit={onAddMember} className="flex flex-col gap-2 sm:flex-row">
+              <form onSubmit={onAddMember} className="flex flex-col gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
                 <input
                   value={memberName}
                   onChange={(e) => setMemberName(e.target.value)}
@@ -402,6 +407,8 @@ export function TeamsManager() {
                   <UserPlus className="h-4 w-4" />
                   Adicionar
                 </button>
+                </div>
+                <PhotoFileButton preview={memberImage} onChange={setMemberImage} label="Foto do membro" />
               </form>
             </div>
           </div>

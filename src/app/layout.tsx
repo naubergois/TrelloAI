@@ -32,7 +32,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="pt-BR" className={`${display.variable} ${body.variable} min-h-full antialiased`}>
-      <body className="min-h-full flex flex-col font-sans">
+      <body className="min-h-dvh font-sans">
         <AuthSessionProvider>{children}</AuthSessionProvider>
       </body>
     </html>

@@ -1,5 +1,6 @@
 import { dueUrgency, type BoardCardFilter } from "@/lib/board-filters";
 import { isMayaRisksList } from "@/lib/maya-risk-column";
+import { hasCardAssignees } from "@/lib/members";
 import type { Board, Card, List, Requirement } from "@/lib/types";
 
 export type ListStage =
@@ -151,7 +152,7 @@ export function extractBoardIndicators(
         if (urgency === "today") stats.dueToday += 1;
         if (urgency === "today" || urgency === "soon") stats.dueSoon += 1;
         if (card.priority === "high") stats.highPriority += 1;
-        if (!card.assigneeId) stats.unassigned += 1;
+        if (!hasCardAssignees(card)) stats.unassigned += 1;
         if (isBlockedCard(card)) stats.blocked += 1;
       }
     }

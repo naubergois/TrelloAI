@@ -119,7 +119,7 @@ export function MayaSuggestionsBar({
       </div>
 
       {open ? (
-        <div className="board-scroll -mx-1 mt-2 flex gap-2 overflow-x-auto px-1 pb-0.5">
+        <div className="board-h-scroll -mx-1 mt-2 flex gap-2 overflow-x-auto px-1">
           {suggestions.map((suggestion) => {
             const active = suggestionActive(suggestion, filter);
             return (
@@ -142,6 +142,7 @@ export function MayaSuggestionsBar({
               </button>
             );
           })}
+          <div className="board-h-scroll-end" aria-hidden="true" />
         </div>
       ) : null}
     </section>
