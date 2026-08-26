@@ -93,6 +93,8 @@ O mesmo servidor stdio grava no Postgres ASESI (ou em `data/shared-boards.json` 
 - Cursor: `.cursor/mcp.json`
 - Kiro: `.kiro/settings/mcp.json`
 
-Reinicie o MCP nas duas IDEs depois do `npm install`. Tools principais: `jangada_listar_boards`, `jangada_ver_board`, `jangada_criar_card`, `jangada_criar_cards`, `jangada_mover_card`. Board padrão: `asesi`.
+Reinicie o MCP nas duas IDEs depois do `npm install`. Tools principais: `jangada_listar_boards`, `jangada_ver_board`, `jangada_criar_card`, `jangada_criar_cards`, `jangada_mover_card`, `jangada_adicionar_git`. Board padrão: `asesi`.
 
 Opcional no `.env.local`: `MCP_ACTOR_EMAIL` (default `admin@cge.ce.gov.br`) — e-mail associado às alterações.
+
+A Maya analisa **riscos** do kanban e, quando o board tem um Git (Ajustes da Maya), compara cards/requisitos com os arquivos do repositório (o que já está implementado vs o que falta). Token opcional: `GITLAB_TOKEN` / `GITHUB_TOKEN`.

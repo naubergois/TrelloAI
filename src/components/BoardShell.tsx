@@ -14,6 +14,7 @@ import {
   UserPlus,
   Users,
   Video,
+  Trash2,
 } from "lucide-react";
 import { useBoardStore } from "@/lib/store";
 import { boardThemeStyle } from "@/lib/board-themes";
@@ -27,6 +28,9 @@ import { BrandMark } from "@/components/BrandMark";
 import { ManagerPanel } from "@/components/ManagerPanel";
 import { BoardAppearanceDrawer } from "@/components/BoardAppearanceDrawer";
 import { InvitePanel } from "@/components/InvitePanel";
+import { DeleteBoardDialog } from "@/components/DeleteBoardDialog";
+import { useToast } from "@/components/Toast";
+import { removeBoardFromServer } from "@/lib/board-sync";
 import { RequirementsPanel } from "@/components/RequirementsPanel";
 import { TeamCalendarPanel } from "@/components/TeamCalendarPanel";
 import { ActivityPanel } from "@/components/ActivityPanel";
@@ -74,6 +78,7 @@ export function BoardShell({
   const renameBoard = useBoardStore((s) => s.renameBoard);
   const updateBoardDescription = useBoardStore((s) => s.updateBoardDescription);
   const resetDemo = useBoardStore((s) => s.resetDemo);
+  const deleteBoard = useBoardStore((s) => s.deleteBoard);
   const meetings = useBoardStore((s) => s.meetings);
   const createMeeting = useBoardStore((s) => s.createMeeting);
   const standups = useBoardStore((s) => s.standups);
@@ -83,7 +88,10 @@ export function BoardShell({
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [cardFilter, setCardFilter] = useState<BoardCardFilter>(EMPTY_BOARD_FILTER);
+  const [pendingDelete, setPendingDelete] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     setActiveBoard(boardId);
@@ -186,6 +194,22 @@ export function BoardShell({
   };
 
   const themeStyle = board ? boardThemeStyle(board) : undefined;
+
+  const confirmDeleteBoard = async () => {
+    if (!board) return;
+    setDeleteBusy(true);
+    const title = board.title;
+    const synced = await removeBoardFromServer(board.id);
+    deleteBoard(board.id);
+    setDeleteBusy(false);
+    setPendingDelete(false);
+    toast(
+      synced
+        ? `Board "${title}" excluído.`
+        : `Board "${title}" removido neste dispositivo.`,
+    );
+    router.push("/");
+  };
 
   if (!board) {
     return (
@@ -296,6 +320,15 @@ export function BoardShell({
               className="rounded-xl border border-[var(--line)] p-1.5 text-[var(--muted)] transition hover:text-white sm:p-2"
             >
               <Palette className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setPendingDelete(true)}
+              title="Excluir board"
+              className="rounded-xl border border-rose-500/30 p-1.5 text-rose-300 transition hover:bg-rose-500/15 hover:text-rose-100 sm:p-2"
+            >
+              <Trash2 className="h-4 w-4" />
             </button>
 
             <div className="flex items-center gap-0.5 rounded-xl border border-[var(--line)] bg-black/20 p-0.5 sm:gap-1 sm:rounded-2xl sm:p-1">
@@ -607,6 +640,24 @@ export function BoardShell({
         <BoardAppearanceDrawer
           boardId={board.id}
           onClose={() => setAppearanceOpen(false)}
+        />
+      ) : null}
+
+      {pendingDelete ? (
+        <DeleteBoardDialog
+          boardId={board.id}
+          title={board.title}
+          listCount={board.listIds.length}
+          cardCount={board.listIds.reduce(
+            (n, lid) => n + (lists[lid]?.cardIds.length ?? 0),
+            0,
+          )}
+          childCount={childBoards.length}
+          busy={deleteBusy}
+          onCancel={() => {
+            if (!deleteBusy) setPendingDelete(false);
+          }}
+          onConfirm={() => void confirmDeleteBoard()}
         />
       ) : null}
     </div>

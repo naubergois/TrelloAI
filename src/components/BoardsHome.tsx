@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   LayoutGrid,
-  LayoutTemplate,
   Palette,
   Pencil,
   Plus,
@@ -21,22 +20,27 @@ import { AuthButton } from "@/components/AuthButton";
 import { BrandMark } from "@/components/BrandMark";
 import { TeamsManager } from "@/components/TeamsManager";
 import { InvitePanel } from "@/components/InvitePanel";
-import {
-  BOARD_BACKGROUNDS,
-  BOARD_DESIGNS,
-  DEFAULT_BACKGROUND_ID,
-  DEFAULT_DESIGN_ID,
-  getBackground,
-  getDesign,
-  type BoardBackgroundId,
-  type BoardDesignId,
-} from "@/lib/board-themes";
+import { DeleteBoardDialog } from "@/components/DeleteBoardDialog";
+import { BoardAppearanceEditor } from "@/components/BoardAppearanceDrawer";
+import { useToast } from "@/components/Toast";
+import { removeBoardFromServer } from "@/lib/board-sync";
 import {
   BOARD_LEVEL_LABELS,
   BOARD_LEVEL_STYLES,
   BOARD_LEVELS,
   parentLevelFor,
 } from "@/lib/board-hierarchy";
+import {
+  DEFAULT_BACKGROUND_ID,
+  DEFAULT_BACKGROUND_TINT,
+  DEFAULT_CARD_THEME_ID,
+  DEFAULT_DESIGN_ID,
+  getBackground,
+  getDesign,
+  type BoardBackgroundId,
+  type BoardCardThemeId,
+  type BoardDesignId,
+} from "@/lib/board-themes";
 import type { BoardLevel } from "@/lib/types";
 
 type HomeTab = "boards" | "teams";
@@ -60,6 +64,7 @@ export function BoardsHome() {
   const createTeam = useBoardStore((s) => s.createTeam);
   const deleteBoard = useBoardStore((s) => s.deleteBoard);
   const ensureAsesiBoard = useBoardStore((s) => s.ensureAsesiBoard);
+  const { toast } = useToast();
 
   const me = currentUserId ? members[currentUserId] : null;
 
@@ -86,6 +91,9 @@ export function BoardsHome() {
   const [description, setDescription] = useState("");
   const [bgId, setBgId] = useState<BoardBackgroundId>(DEFAULT_BACKGROUND_ID);
   const [designId, setDesignId] = useState<BoardDesignId>(DEFAULT_DESIGN_ID);
+  const [cardThemeId, setCardThemeId] = useState<BoardCardThemeId>(DEFAULT_CARD_THEME_ID);
+  const [createImageUrl, setCreateImageUrl] = useState<string | null>(null);
+  const [createTint, setCreateTint] = useState(DEFAULT_BACKGROUND_TINT);
   const [teamId, setTeamId] = useState<string>("");
   const [boardLevel, setBoardLevelState] = useState<BoardLevel>("project");
   const [parentBoardId, setParentBoardId] = useState<string>("");
@@ -93,6 +101,8 @@ export function BoardsHome() {
   const [customizeId, setCustomizeId] = useState<string | null>(null);
   const [inviteBoardId, setInviteBoardId] = useState<string | null>(null);
   const [customizeNewTeam, setCustomizeNewTeam] = useState("");
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const customizeBoard = customizeId ? boards[customizeId] : null;
 
@@ -125,6 +135,36 @@ export function BoardsHome() {
     router.push(`/board/${boardId}`);
   };
 
+  const boardCounts = (boardId: string) => {
+    const board = boards[boardId];
+    if (!board) return { listCount: 0, cardCount: 0, childCount: 0 };
+    return {
+      listCount: board.listIds.length,
+      cardCount: board.listIds.reduce((n, lid) => n + (lists[lid]?.cardIds.length ?? 0), 0),
+      childCount: Object.values(boards).filter((b) => b.parentBoardId === boardId).length,
+    };
+  };
+
+  const confirmDeleteBoard = async () => {
+    if (!pendingDeleteId) return;
+    const target = boards[pendingDeleteId];
+    if (!target) {
+      setPendingDeleteId(null);
+      return;
+    }
+    setDeleteBusy(true);
+    const synced = await removeBoardFromServer(target.id);
+    deleteBoard(target.id);
+    setDeleteBusy(false);
+    setPendingDeleteId(null);
+    setCustomizeId((cur) => (cur === target.id ? null : cur));
+    toast(
+      synced
+        ? `Board "${target.title}" excluído.`
+        : `Board "${target.title}" removido neste dispositivo. Se reaparecer, tente de novo logado.`,
+    );
+  };
+
   const onCreate = (e: FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
@@ -138,6 +178,9 @@ export function BoardsHome() {
     const id = createBoard(title.trim(), description.trim(), {
       backgroundId: bgId,
       designId,
+      cardThemeId,
+      backgroundImageUrl: createImageUrl,
+      backgroundTint: createTint,
       teamId: linkedTeamId,
       level: boardLevel,
       parentBoardId: parentBoardId || null,
@@ -148,6 +191,11 @@ export function BoardsHome() {
     setBoardLevelState("project");
     setParentBoardId("");
     setNewTeamName("");
+    setBgId(DEFAULT_BACKGROUND_ID);
+    setDesignId(DEFAULT_DESIGN_ID);
+    setCardThemeId(DEFAULT_CARD_THEME_ID);
+    setCreateImageUrl(null);
+    setCreateTint(DEFAULT_BACKGROUND_TINT);
     setCreating(false);
     openBoard(id);
   };
@@ -300,7 +348,15 @@ export function BoardsHome() {
                 >
                   <div
                     className="relative flex flex-1 flex-col justify-end p-4"
-                    style={{ backgroundImage: bg.preview }}
+                    style={
+                      board.backgroundImageUrl
+                        ? {
+                            backgroundImage: `url("${board.backgroundImageUrl.replace(/"/g, "")}")`,
+                            backgroundSize: "cover",
+                            backgroundPosition: "center",
+                          }
+                        : { backgroundImage: bg.preview }
+                    }
                   >
                     <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/10 to-transparent" />
                     <div className="relative z-[1]">
@@ -356,6 +412,17 @@ export function BoardsHome() {
                   </button>
                   <button
                     type="button"
+                    title="Excluir board"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPendingDeleteId(board.id);
+                    }}
+                    className="rounded-lg border border-rose-400/30 bg-black/45 p-2 text-rose-100 backdrop-blur hover:bg-rose-600/70"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
                     title="Fundo e design"
                     onClick={(e) => {
                       e.stopPropagation();
@@ -385,7 +452,7 @@ export function BoardsHome() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
           <form
             onSubmit={onCreate}
-            className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-[var(--line)] bg-[var(--panel-strong)] sm:rounded-3xl"
+            className="flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border border-[var(--line)] bg-[var(--panel-strong)] sm:rounded-3xl"
           >
             <header className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
               <div>
@@ -493,11 +560,21 @@ export function BoardsHome() {
                 </label>
               ) : null}
 
-              <AppearancePicker
-                bgId={bgId}
+              <BoardAppearanceEditor
+                backgroundId={bgId}
                 designId={designId}
-                onBg={setBgId}
-                onDesign={setDesignId}
+                cardThemeId={cardThemeId}
+                backgroundImageUrl={createImageUrl}
+                backgroundTint={createTint}
+                onChange={(patch) => {
+                  if (patch.backgroundId) setBgId(patch.backgroundId);
+                  if (patch.designId) setDesignId(patch.designId);
+                  if (patch.cardThemeId) setCardThemeId(patch.cardThemeId);
+                  if (patch.backgroundImageUrl !== undefined) {
+                    setCreateImageUrl(patch.backgroundImageUrl);
+                  }
+                  if (patch.backgroundTint !== undefined) setCreateTint(patch.backgroundTint);
+                }}
               />
             </div>
 
@@ -523,7 +600,7 @@ export function BoardsHome() {
 
       {customizeBoard ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
-          <div className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-[var(--line)] bg-[var(--panel-strong)] sm:rounded-3xl">
+          <div className="flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border border-[var(--line)] bg-[var(--panel-strong)] sm:rounded-3xl">
             <header className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
               <div className="flex items-center gap-2">
                 <Settings2 className="h-4 w-4 text-[var(--accent)]" />
@@ -659,36 +736,20 @@ export function BoardsHome() {
                 </button>
               </div>
 
-              <AppearancePicker
-                bgId={
-                  (customizeBoard.backgroundId as BoardBackgroundId) ||
-                  DEFAULT_BACKGROUND_ID
-                }
-                designId={
-                  (customizeBoard.designId as BoardDesignId) || DEFAULT_DESIGN_ID
-                }
-                onBg={(id) =>
-                  updateBoardAppearance(customizeBoard.id, { backgroundId: id })
-                }
-                onDesign={(id) =>
-                  updateBoardAppearance(customizeBoard.id, { designId: id })
-                }
+              <BoardAppearanceEditor
+                backgroundId={customizeBoard.backgroundId}
+                designId={customizeBoard.designId}
+                cardThemeId={customizeBoard.cardThemeId}
+                backgroundImageUrl={customizeBoard.backgroundImageUrl}
+                backgroundTint={customizeBoard.backgroundTint}
+                onChange={(patch) => updateBoardAppearance(customizeBoard.id, patch)}
               />
             </div>
 
             <footer className="flex flex-wrap gap-2 border-t border-[var(--line)] p-4">
               <button
                 type="button"
-                onClick={() => {
-                  if (
-                    confirm(
-                      `Excluir o board "${customizeBoard.title}"? Esta ação não pode ser desfeita.`,
-                    )
-                  ) {
-                    deleteBoard(customizeBoard.id);
-                    setCustomizeId(null);
-                  }
-                }}
+                onClick={() => setPendingDeleteId(customizeBoard.id)}
                 className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/30 px-3 py-2.5 text-sm text-rose-300 hover:bg-rose-500/10"
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -728,78 +789,19 @@ export function BoardsHome() {
           </div>
         </div>
       ) : null}
+
+      {pendingDeleteId && boards[pendingDeleteId] ? (
+        <DeleteBoardDialog
+          boardId={pendingDeleteId}
+          title={boards[pendingDeleteId].title}
+          {...boardCounts(pendingDeleteId)}
+          busy={deleteBusy}
+          onCancel={() => {
+            if (!deleteBusy) setPendingDeleteId(null);
+          }}
+          onConfirm={() => void confirmDeleteBoard()}
+        />
+      ) : null}
     </div>
-  );
-}
-
-function AppearancePicker({
-  bgId,
-  designId,
-  onBg,
-  onDesign,
-}: {
-  bgId: BoardBackgroundId;
-  designId: BoardDesignId;
-  onBg: (id: BoardBackgroundId) => void;
-  onDesign: (id: BoardDesignId) => void;
-}) {
-  return (
-    <>
-      <div>
-        <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-          <Palette className="h-3.5 w-3.5" />
-          Fundo
-        </p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {BOARD_BACKGROUNDS.map((bg) => {
-            const active = bg.id === bgId;
-            return (
-              <button
-                key={bg.id}
-                type="button"
-                onClick={() => onBg(bg.id)}
-                className={`overflow-hidden rounded-xl border text-left transition ${
-                  active
-                    ? "border-[var(--accent)] ring-2 ring-[var(--accent)]/40"
-                    : "border-[var(--line)] hover:border-white/30"
-                }`}
-              >
-                <div className="h-14 w-full" style={{ backgroundImage: bg.preview }} />
-                <p className="truncate bg-black/30 px-2 py-1.5 text-[11px] text-white">
-                  {bg.name}
-                </p>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div>
-        <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-          <LayoutTemplate className="h-3.5 w-3.5" />
-          Design
-        </p>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {BOARD_DESIGNS.map((d) => {
-            const active = d.id === designId;
-            return (
-              <button
-                key={d.id}
-                type="button"
-                onClick={() => onDesign(d.id)}
-                className={`rounded-xl border px-3 py-2.5 text-left transition ${
-                  active
-                    ? "border-[var(--accent)] bg-[var(--accent)]/10"
-                    : "border-[var(--line)] hover:border-white/25"
-                }`}
-              >
-                <p className="text-sm font-medium text-white">{d.name}</p>
-                <p className="text-[11px] text-[var(--muted)]">{d.description}</p>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </>
   );
 }

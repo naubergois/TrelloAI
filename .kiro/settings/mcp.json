@@ -14,7 +14,8 @@
         "jangada_criar_cards",
         "jangada_atualizar_card",
         "jangada_mover_card",
-        "jangada_criar_requisito"
+        "jangada_criar_requisito",
+        "jangada_adicionar_git"
       ]
     }
   }

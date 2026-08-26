@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import {
   addMembership,
+  deleteSharedBoard,
   emailHasBoardAccess,
   getSharedBoard,
   saveSharedBoard,
@@ -54,4 +55,23 @@ export async function PUT(
   await saveSharedBoard(body.snapshot);
   await addMembership(session.user.email, boardId);
   return NextResponse.json({ ok: true, updatedAt: body.snapshot.updatedAt });
+}
+
+export async function DELETE(
+  _request: Request,
+  context: { params: Promise<{ boardId: string }> },
+) {
+  const session = await auth();
+  if (!session?.user?.email) {
+    return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+  }
+  const { boardId } = await context.params;
+  if (!(await emailHasBoardAccess(session.user.email, boardId))) {
+    const snapshot = await getSharedBoard(boardId);
+    if (snapshot) {
+      return NextResponse.json({ error: "Sem acesso a este board." }, { status: 403 });
+    }
+  }
+  await deleteSharedBoard(boardId);
+  return NextResponse.json({ ok: true });
 }

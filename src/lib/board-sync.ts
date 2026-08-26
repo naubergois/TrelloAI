@@ -37,8 +37,22 @@ export function scheduleBoardSync(boardId: string, delayMs = 2000) {
   }, delayMs);
 }
 
-export function flushBoardSync(boardId: string) {
+export function cancelBoardSync(boardId?: string) {
+  if (boardId && pendingBoardId && pendingBoardId !== boardId) return;
   if (pushTimer) clearTimeout(pushTimer);
+  pushTimer = null;
   pendingBoardId = null;
-  return pushBoardToServer(boardId);
+}
+
+export async function removeBoardFromServer(boardId: string): Promise<boolean> {
+  cancelBoardSync(boardId);
+  try {
+    const res = await fetch(`/api/boards/${boardId}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    return res.ok || res.status === 404 || res.status === 401;
+  } catch {
+    return false;
+  }
 }

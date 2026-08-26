@@ -13,12 +13,10 @@ import {
   cardMatchesFilter,
   type BoardCardFilter,
 } from "@/lib/board-filters";
-import {
-  cardPriorityStyles,
-  labelStyles,
-  priorityLabel,
-} from "@/lib/utils";
+import { cardPriorityStyles, priorityLabel } from "@/lib/utils";
 import { dueUrgency } from "@/lib/board-filters";
+import { cardCoverStyle } from "@/lib/card-appearance";
+import { CardLabelBars } from "@/components/CardLabelBars";
 import type { Card } from "@/lib/types";
 
 function MirroredCard({
@@ -46,23 +44,15 @@ function MirroredCard({
         }
       }}
       className="board-card-surface cursor-pointer border p-3 transition hover:shadow-md"
-      style={{ borderRadius: "var(--board-card-radius, 0.75rem)" }}
+      style={{
+        borderRadius: "var(--board-card-radius, 0.75rem)",
+        ...cardCoverStyle(card.coverColor),
+      }}
     >
-      <p className="mb-1 text-[10px] font-medium text-[var(--trello-gray)]">
+      <p className="mb-1 text-[10px] font-medium board-card-muted">
         {listTitle}
       </p>
-      {card.labels.length > 0 ? (
-        <div className="mb-2 flex flex-wrap gap-1">
-          {card.labels.map((label) => (
-            <span
-              key={label.id}
-              className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${labelStyles[label.color]}`}
-            >
-              {label.name}
-            </span>
-          ))}
-        </div>
-      ) : null}
+      <CardLabelBars labels={card.labels} />
       <h3 className="board-card-title text-sm font-medium leading-snug">
         {card.title}
       </h3>

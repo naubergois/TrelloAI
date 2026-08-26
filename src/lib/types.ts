@@ -18,6 +18,8 @@ export interface Card {
   title: string;
   description: string;
   labels: Label[];
+  /** Cor própria do card (id da paleta ou #hex). Ausente usa o tema do board. */
+  coverColor?: string | null;
   dueDate: string | null;
   priority: "low" | "medium" | "high" | null;
   /** Membro responsável (TeamMember.id) */
@@ -97,6 +99,49 @@ export interface List {
   cardIds: string[];
 }
 
+export type BoardGitRepo = {
+  id: string;
+  url: string;
+  label?: string;
+  addedAt: string;
+};
+
+export type GitCoverageStatus = "implemented" | "partial" | "missing";
+
+export type GitCoverageItem = {
+  kind: "card" | "requirement";
+  id: string;
+  title: string;
+  status: GitCoverageStatus;
+  evidence?: string;
+};
+
+export type BoardRisk = {
+  id: string;
+  title: string;
+  severity: "low" | "medium" | "high";
+  reason: string;
+  cardId?: string;
+};
+
+export type GitInspectSummary = {
+  url: string;
+  ok: boolean;
+  error?: string;
+  kind?: "local" | "gitlab" | "github" | "generic";
+  fileCount: number;
+  files: string[];
+  readmeExcerpt?: string;
+  hints: string[];
+  coverage: GitCoverageItem[];
+};
+
+export type BoardRiskReport = {
+  analyzedAt: string;
+  risks: BoardRisk[];
+  git: GitInspectSummary[];
+};
+
 export interface Board {
   id: string;
   title: string;
@@ -113,6 +158,16 @@ export interface Board {
   backgroundId: string;
   /** Estilo de listas/cards */
   designId: string;
+  /** Paleta de cor dos cards */
+  cardThemeId?: string;
+  /** Foto de fundo (URL https ou data URL). Sobrepõe o degradê. */
+  backgroundImageUrl?: string | null;
+  /** Escurecimento da foto (0–80) para o texto continuar legível */
+  backgroundTint?: number;
+  /** Repositórios Git ligados ao board (Maya analisa cobertura) */
+  gitRepos?: BoardGitRepo[];
+  /** Última análise de riscos + Git da Maya */
+  riskReport?: BoardRiskReport | null;
   createdAt: string;
   updatedAt: string;
 }

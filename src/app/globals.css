@@ -97,26 +97,26 @@ body {
   border-color: var(--board-list-header-border);
 }
 
-.board-theme .board-list-column .list-add-input {
-  background: rgba(255, 255, 255, 0.92);
-  border-color: rgba(9, 30, 66, 0.12);
-  color: var(--trello-navy);
-}
-
-.board-theme .board-list-column .list-add-input::placeholder {
-  color: var(--trello-gray);
-}
-
 .board-theme .board-card-surface {
   background: var(--board-card-bg);
   border-color: var(--board-card-border);
   color: var(--board-card-text);
-  box-shadow: 0 1px 1px rgba(9, 30, 66, 0.25);
+  box-shadow: var(--board-card-shadow, 0 1px 1px rgba(9, 30, 66, 0.25));
 }
 
 .board-theme .board-card-surface:hover {
-  border-color: rgba(9, 30, 66, 0.14);
+  border-color: var(--board-card-border-hover, rgba(9, 30, 66, 0.14));
   box-shadow: 0 4px 8px rgba(9, 30, 66, 0.12);
+}
+
+.board-theme .board-list-column .list-add-input {
+  background: var(--board-card-bg);
+  border-color: var(--board-card-border);
+  color: var(--board-card-text);
+}
+
+.board-theme .board-list-column .list-add-input::placeholder {
+  color: var(--board-card-muted);
 }
 
 .board-theme .board-card-surface .board-card-title {

@@ -181,6 +181,8 @@ export function createAsesiBoardSeed(owner?: {
     parentBoardId: null,
     backgroundId: "trello",
     designId: "soft",
+    gitRepos: [],
+    riskReport: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -189,7 +191,7 @@ export function createAsesiBoardSeed(owner?: {
     boardId: ASESI_BOARD_ID,
     name: "Maya",
     persona:
-      "Gestora virtual da ASESI: conduz dailies, cria e move cards, atribui responsáveis, remove bloqueios e mantém o projeto alinhado à CGE.",
+      "Gestora virtual da ASESI: analisa riscos, compara o Git com o que está no kanban, conduz dailies e atualiza cards.",
     enabled: true,
     autoStartDaily: false,
     dailyTime: "09:00",

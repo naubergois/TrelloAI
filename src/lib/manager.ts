@@ -7,6 +7,18 @@ export interface ManagerContext extends AiRequestContext {
   members: { id: string; name: string; email?: string }[];
   checkIns: StandupCheckIn[];
   memberNames: Record<string, string>;
+  requirements?: { id: string; code?: string; title: string; status?: string }[];
+  gitRepos?: { url: string }[];
+  risks?: { title: string; severity: string; reason: string }[];
+  git?: {
+    url: string;
+    ok: boolean;
+    error?: string;
+    fileCount: number;
+    files: string[];
+    hints: string[];
+    coverage: { title: string; status: string; evidence?: string }[];
+  }[];
 }
 
 export type ManagerAiResponse = AiResponse & { extraAction?: AiAction };
@@ -187,6 +199,7 @@ export async function deepSeekManagerProcess(
 
   const system = `Você é ${context.managerName}, gestor(a) virtual do kanban "${context.boardTitle}".
 Fala português (Brasil). Você GERENCIA o projeto de verdade: cria listas/cards, move, prioriza, atribui responsáveis e define prazos.
+Você TAMBÉM analisa riscos e, quando houver Git no contexto, compara cards/requisitos com os arquivos do repositório (o que já está implementado vs o que falta).
 Retorne SOMENTE JSON válido (sem markdown):
 {
   "message": string (resumo claro das decisões para a equipe),
@@ -201,6 +214,9 @@ Retorne SOMENTE JSON válido (sem markdown):
 }
 Regras:
 - Use ids reais do contexto (listas, cards, membros).
+- Sempre comente riscos na message (atrasos, alta prioridade parada, requisitos sem card, gaps de Git).
+- Se git.coverage tiver status "missing", crie cards no backlog no máximo 6, sem duplicar títulos já existentes.
+- Se git.coverage tiver "implemented" e o card ainda estiver no backlog, sugira mover para revisão/andamento.
 - Atribua trabalho com assigneeId quando fizer sentido.
 - Mova cards entre listas conforme progresso (backlog → andamento → revisão → concluído).
 - Crie listas só se o fluxo do projeto precisar.
@@ -252,6 +268,73 @@ export function localManagerChat(
   const todo = context.lists[0];
   const doing = context.lists[1] ?? todo;
   const done = context.lists[context.lists.length - 1] ?? todo;
+
+  if (/risco|git\b|reposit|implementad|cobertura|analis/i.test(lower)) {
+    const existing = new Set(
+      context.lists.flatMap((l) => l.cards.map((c) => c.title.toLowerCase())),
+    );
+    const cards: { title: string; description?: string; priority?: Card["priority"] }[] = [];
+    for (const risk of context.risks || []) {
+      const title = risk.title.slice(0, 100);
+      if (!existing.has(title.toLowerCase())) {
+        cards.push({
+          title,
+          description: risk.reason,
+          priority: risk.severity === "high" ? "high" : "medium",
+        });
+      }
+    }
+    for (const repo of context.git || []) {
+      for (const item of (repo.coverage || []).filter((c) => c.status === "missing").slice(0, 6)) {
+        const title = `Implementar no git: ${item.title}`.slice(0, 100);
+        if (!existing.has(title.toLowerCase())) {
+          cards.push({
+            title,
+            description: `Não encontrado em ${repo.url}${item.evidence ? ` (${item.evidence})` : ""}.`,
+            priority: "medium",
+          });
+        }
+      }
+    }
+    const missing = (context.git || []).flatMap((g) =>
+      (g.coverage || []).filter((c) => c.status === "missing"),
+    );
+    const implemented = (context.git || []).flatMap((g) =>
+      (g.coverage || []).filter((c) => c.status === "implemented"),
+    );
+    const message = [
+      context.risks?.length
+        ? `${context.managerName} viu ${context.risks.length} risco(s): ${context.risks
+            .slice(0, 4)
+            .map((r) => r.title)
+            .join("; ")}.`
+        : `${context.managerName} não viu riscos estruturais óbvios no kanban.`,
+      implemented.length
+        ? `Já aparece no Git: ${implemented
+            .slice(0, 5)
+            .map((i) => i.title)
+            .join("; ")}.`
+        : "",
+      missing.length
+        ? `Ainda não aparece no Git: ${missing
+            .slice(0, 5)
+            .map((i) => i.title)
+            .join("; ")}.`
+        : context.git?.length
+          ? "Cobertura Git alinhada com os cards atuais."
+          : "Ligue um repositório Git no board para eu comparar o código com o kanban.",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    if (cards.length && todo) {
+      return {
+        message,
+        action: { type: "create_cards", listId: todo.id, cards: cards.slice(0, 8) },
+        provider: "local",
+      };
+    }
+    return { message, action: { type: "none" }, provider: "local" };
+  }
 
   if (/lista|coluna|swim/.test(lower) && /cri|add|nova/.test(lower)) {
     const titleMatch = prompt.match(/["“](.+?)["”]/) || prompt.match(/lista\s+(.+)$/i);

@@ -34,9 +34,12 @@ import {
 } from "./requirement-prompts";
 import {
   DEFAULT_BACKGROUND_ID,
+  DEFAULT_CARD_THEME_ID,
   DEFAULT_DESIGN_ID,
+  DEFAULT_BACKGROUND_TINT,
   ensureBoardAppearance,
   type BoardBackgroundId,
+  type BoardCardThemeId,
   type BoardDesignId,
 } from "./board-themes";
 import {
@@ -61,6 +64,7 @@ function normalizeCard(card: Card): Card {
     comments: Array.isArray(card.comments) ? card.comments : [],
     archived: card.archived ?? false,
     labels: Array.isArray(card.labels) ? card.labels : [],
+    coverColor: card.coverColor ?? null,
     dueDate: card.dueDate ?? null,
     priority: card.priority ?? null,
   };
@@ -83,6 +87,8 @@ interface BoardState {
   activeMeetingId: string | null;
   activeStandupId: string | null;
   hydrated: boolean;
+  /** Não recria o board oficial ASESI depois que o usuário o excluiu */
+  skipAsesiSeed: boolean;
   setHydrated: (value: boolean) => void;
   createBoard: (
     title: string,
@@ -93,16 +99,28 @@ interface BoardState {
       teamId?: string | null;
       level?: BoardLevel;
       parentBoardId?: string | null;
+      cardThemeId?: BoardCardThemeId;
+      backgroundImageUrl?: string | null;
+      backgroundTint?: number;
     },
   ) => string;
   setActiveBoard: (boardId: string) => void;
   renameBoard: (boardId: string, title: string) => void;
   updateBoardDescription: (boardId: string, description: string) => void;
+  addBoardGitRepo: (boardId: string, url: string, label?: string) => string | null;
+  removeBoardGitRepo: (boardId: string, repoId: string) => void;
+  setBoardRiskReport: (boardId: string, report: Board["riskReport"]) => void;
   assignBoardParent: (boardId: string, parentBoardId: string | null) => void;
   setBoardLevel: (boardId: string, level: BoardLevel) => void;
   updateBoardAppearance: (
     boardId: string,
-    appearance: { backgroundId?: BoardBackgroundId; designId?: BoardDesignId },
+    appearance: {
+      backgroundId?: BoardBackgroundId;
+      designId?: BoardDesignId;
+      cardThemeId?: BoardCardThemeId;
+      backgroundImageUrl?: string | null;
+      backgroundTint?: number;
+    },
   ) => void;
   assignTeamToBoard: (boardId: string, teamId: string | null) => void;
   deleteBoard: (boardId: string) => void;
@@ -136,6 +154,7 @@ interface BoardState {
         | "priority"
         | "dueDate"
         | "labels"
+        | "coverColor"
         | "assigneeId"
         | "requirementId"
         | "acceptanceCriteria"
@@ -288,6 +307,7 @@ export const useBoardStore = create<BoardState>()(
     (set, get) => ({
       ...sample,
       hydrated: false,
+      skipAsesiSeed: false,
       setHydrated: (value) => set({ hydrated: value }),
 
       createBoard: (title, description = "", appearance) => {
@@ -338,6 +358,11 @@ export const useBoardStore = create<BoardState>()(
           parentBoardId,
           backgroundId: appearance?.backgroundId ?? DEFAULT_BACKGROUND_ID,
           designId: appearance?.designId ?? DEFAULT_DESIGN_ID,
+          cardThemeId: appearance?.cardThemeId ?? DEFAULT_CARD_THEME_ID,
+          backgroundImageUrl: appearance?.backgroundImageUrl ?? null,
+          backgroundTint: appearance?.backgroundTint ?? DEFAULT_BACKGROUND_TINT,
+          gitRepos: [],
+          riskReport: null,
           createdAt: now,
           updatedAt: now,
         };
@@ -346,7 +371,7 @@ export const useBoardStore = create<BoardState>()(
           boardId,
           name: "Maya",
           persona:
-            "Gestor(a) virtual: reúne o time diariamente, pergunta o andamento e atualiza o kanban.",
+            "Gestor(a) virtual: analisa riscos, compara o Git com o kanban e atualiza cards.",
           enabled: true,
           autoStartDaily: false,
           dailyTime: "09:30",
@@ -393,6 +418,60 @@ export const useBoardStore = create<BoardState>()(
               [boardId]: {
                 ...ensureBoardMembers(board),
                 description,
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          };
+        }),
+
+      addBoardGitRepo: (boardId, url, label) => {
+        const trimmed = url.trim();
+        if (!trimmed) return null;
+        let repoId = "";
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+          const repos = [...(board.gitRepos || [])];
+          if (repos.some((r) => r.url === trimmed)) return state;
+          repoId = nanoid();
+          const now = new Date().toISOString();
+          repos.push({ id: repoId, url: trimmed, label: label?.trim() || undefined, addedAt: now });
+          return {
+            boards: {
+              ...state.boards,
+              [boardId]: { ...ensureBoardMembers(board), gitRepos: repos, updatedAt: now },
+            },
+          };
+        });
+        return repoId || null;
+      },
+
+      removeBoardGitRepo: (boardId, repoId) =>
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+          return {
+            boards: {
+              ...state.boards,
+              [boardId]: {
+                ...ensureBoardMembers(board),
+                gitRepos: (board.gitRepos || []).filter((r) => r.id !== repoId),
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          };
+        }),
+
+      setBoardRiskReport: (boardId, report) =>
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+          return {
+            boards: {
+              ...state.boards,
+              [boardId]: {
+                ...ensureBoardMembers(board),
+                riskReport: report,
                 updatedAt: new Date().toISOString(),
               },
             },
@@ -463,17 +542,21 @@ export const useBoardStore = create<BoardState>()(
         set((state) => {
           const board = state.boards[boardId];
           if (!board) return state;
+          const next = { ...ensureBoardMembers(board) };
+          if (appearance.backgroundId) next.backgroundId = appearance.backgroundId;
+          if (appearance.designId) next.designId = appearance.designId;
+          if (appearance.cardThemeId) next.cardThemeId = appearance.cardThemeId;
+          if (appearance.backgroundImageUrl !== undefined) {
+            next.backgroundImageUrl = appearance.backgroundImageUrl;
+          }
+          if (appearance.backgroundTint !== undefined) {
+            next.backgroundTint = appearance.backgroundTint;
+          }
+          next.updatedAt = new Date().toISOString();
           return {
             boards: {
               ...state.boards,
-              [boardId]: {
-                ...ensureBoardMembers(board),
-                ...(appearance.backgroundId
-                  ? { backgroundId: appearance.backgroundId }
-                  : {}),
-                ...(appearance.designId ? { designId: appearance.designId } : {}),
-                updatedAt: new Date().toISOString(),
-              },
+              [boardId]: next,
             },
           };
         }),
@@ -687,6 +770,14 @@ export const useBoardStore = create<BoardState>()(
           }
 
           const remaining = Object.keys(boards);
+          const requirements = { ...(state.requirements || {}) };
+          for (const [id, req] of Object.entries(requirements)) {
+            if (req.boardId === boardId) delete requirements[id];
+          }
+          const calendarEvents = { ...(state.calendarEvents || {}) };
+          for (const [id, event] of Object.entries(calendarEvents)) {
+            if (event.boardId === boardId) delete calendarEvents[id];
+          }
           return {
             boards,
             lists,
@@ -695,6 +786,9 @@ export const useBoardStore = create<BoardState>()(
             meetings,
             standups,
             activities,
+            requirements,
+            calendarEvents,
+            skipAsesiSeed: boardId === ASESI_BOARD_ID ? true : state.skipAsesiSeed,
             activeBoardId:
               state.activeBoardId === boardId
                 ? remaining[0] ?? null
@@ -793,6 +887,7 @@ export const useBoardStore = create<BoardState>()(
             title: title.trim() || "Novo card",
             description: extras.description ?? "",
             labels: extras.labels ?? [],
+            coverColor: extras.coverColor ?? null,
             dueDate: extras.dueDate ?? null,
             priority: extras.priority ?? null,
             assigneeId: extras.assigneeId ?? null,
@@ -1545,7 +1640,7 @@ export const useBoardStore = create<BoardState>()(
               boardId,
               name: "Maya",
               persona:
-                "Gestor(a) virtual: reúne o time diariamente, pergunta o andamento e atualiza o kanban.",
+                "Gestor(a) virtual: analisa riscos, compara o Git com o kanban e atualiza cards.",
               enabled: true,
               autoStartDaily: false,
               dailyTime: "09:30",
@@ -2085,6 +2180,9 @@ export const useBoardStore = create<BoardState>()(
 
       ensureAsesiBoard: () => {
         const state = get();
+        if (state.skipAsesiSeed && !state.boards[ASESI_BOARD_ID]) {
+          return ASESI_BOARD_ID;
+        }
         if (state.boards[ASESI_BOARD_ID]) {
           const hasReq = Object.values(state.requirements || {}).some(
             (r) => r.boardId === ASESI_BOARD_ID,
@@ -2399,7 +2497,7 @@ export const useBoardStore = create<BoardState>()(
 
       resetDemo: () => {
         const next = createSampleWorkspace();
-        set({ ...next, hydrated: true });
+        set({ ...next, hydrated: true, skipAsesiSeed: false });
       },
     }),
     {
@@ -2418,6 +2516,7 @@ export const useBoardStore = create<BoardState>()(
         calendarEvents: state.calendarEvents,
         currentUserId: state.currentUserId,
         activeBoardId: state.activeBoardId,
+        skipAsesiSeed: state.skipAsesiSeed,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
@@ -2434,6 +2533,7 @@ export const useBoardStore = create<BoardState>()(
         if (!state.activities) state.activities = {};
         if (!state.requirements) state.requirements = {};
         if (!state.calendarEvents) state.calendarEvents = {};
+        if (state.skipAsesiSeed === undefined) state.skipAsesiSeed = false;
 
         for (const [id, card] of Object.entries(state.cards || {})) {
           if (card) state.cards[id] = normalizeCard(card as Card);

@@ -58,6 +58,10 @@ export function compactBoard(snapshot) {
       title: snapshot.board?.title,
       description: snapshot.board?.description,
       updatedAt: snapshot.updatedAt,
+      gitRepos: (snapshot.board?.gitRepos || []).map((repo) => ({
+        id: repo.id,
+        url: repo.url,
+      })),
     },
     lists,
     requirements,
@@ -104,6 +108,7 @@ export function applyCriarCard(snapshot, args) {
     title,
     description: String(args.description || ""),
     labels: Array.isArray(args.labels) ? args.labels : [],
+    coverColor: args.cover_color || args.coverColor || null,
     dueDate: args.due_date || args.dueDate || null,
     priority: args.priority ? normalizePriority(args.priority) : "medium",
     assigneeId: args.assignee_id || args.assigneeId || null,
@@ -150,6 +155,10 @@ export function applyAtualizarCard(snapshot, args) {
   if (args.acceptance_criteria != null || args.acceptanceCriteria != null) {
     card.acceptanceCriteria = String(args.acceptance_criteria ?? args.acceptanceCriteria ?? "");
   }
+  if (args.cover_color !== undefined || args.coverColor !== undefined) {
+    card.coverColor = args.cover_color ?? args.coverColor ?? null;
+  }
+  if (args.labels != null) card.labels = Array.isArray(args.labels) ? args.labels : [];
   card.updatedAt = nowIso();
   next.board.updatedAt = card.updatedAt;
   next.updatedAt = card.updatedAt;
@@ -209,6 +218,21 @@ export function applyCriarRequisito(snapshot, args) {
   return { snapshot: next, requirementId: id, requirement: req };
 }
 
+export function applyAdicionarGit(snapshot, args) {
+  const url = String(args.url || "").trim();
+  if (!url) throw new Error("Informe a URL do Git.");
+  const next = clone(snapshot);
+  next.board.gitRepos = Array.isArray(next.board.gitRepos) ? next.board.gitRepos : [];
+  if (next.board.gitRepos.some((r) => r.url === url)) {
+    return { snapshot: next, repoId: next.board.gitRepos.find((r) => r.url === url).id };
+  }
+  const id = nid();
+  next.board.gitRepos.push({ id, url, addedAt: nowIso() });
+  next.board.updatedAt = nowIso();
+  next.updatedAt = nowIso();
+  return { snapshot: next, repoId: id };
+}
+
 export function listTools() {
   const boardId = { type: "string", description: "Id do board (default: asesi)" };
   const listId = { type: "string", description: "Id da lista" };
@@ -259,6 +283,10 @@ export function listTools() {
           due_date: { type: "string", description: "YYYY-MM-DD" },
           assignee_id: { type: "string" },
           requirement_id: { type: "string" },
+          cover_color: {
+            type: "string",
+            description: "Cor do card (green, yellow, blue, #hex…)",
+          },
         },
         required: ["title"],
       },
@@ -302,6 +330,7 @@ export function listTools() {
           priority: { type: "string", enum: ["low", "medium", "high"] },
           due_date: { type: "string" },
           assignee_id: { type: "string" },
+          cover_color: { type: "string" },
         },
         required: ["card_id"],
       },
@@ -336,6 +365,18 @@ export function listTools() {
         required: ["code", "title"],
       },
     },
+    {
+      name: "jangada_adicionar_git",
+      description: "Liga um repositório Git ao board para a Maya analisar o que já está implementado.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          board_id: boardId,
+          url: { type: "string", description: "URL HTTPS do Git ou caminho local" },
+        },
+        required: ["url"],
+      },
+    },
   ];
 }
 
@@ -365,6 +406,7 @@ export async function callTool(name, args, store) {
     else if (name === "jangada_atualizar_card") result = applyAtualizarCard(snapshot, args);
     else if (name === "jangada_mover_card") result = applyMoverCard(snapshot, args);
     else if (name === "jangada_criar_requisito") result = applyCriarRequisito(snapshot, args);
+    else if (name === "jangada_adicionar_git") result = applyAdicionarGit(snapshot, args);
     else return { status: "erro", erro: `Tool desconhecida: ${name}` };
 
     await store.saveBoard(result.snapshot);

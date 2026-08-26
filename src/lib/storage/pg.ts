@@ -113,10 +113,8 @@ async function ensureSchema(p: Pool) {
   const schema = readPgConfig()?.schema || activeSchema;
   await p.query(ddl(schema));
 
-  const existing = await p.query("SELECT 1 FROM board_snapshots WHERE board_id = $1", [
-    ASESI_BOARD_ID,
-  ]);
-  if ((existing.rowCount ?? 0) === 0) {
+  const existing = await p.query<{ n: number }>("SELECT COUNT(*)::int AS n FROM board_snapshots");
+  if ((existing.rows[0]?.n ?? 0) === 0) {
     const snapshot = createAsesiBoardSnapshot();
     await p.query(
       `INSERT INTO board_snapshots (board_id, snapshot, updated_at)
@@ -184,6 +182,15 @@ export async function pgSaveBoard(snapshot: BoardSnapshot) {
      ON CONFLICT (board_id) DO UPDATE SET snapshot = $2::jsonb, updated_at = NOW()`,
     [snapshot.board.id, JSON.stringify(snapshot)],
   );
+  return true;
+}
+
+export async function pgDeleteBoard(boardId: string) {
+  const p = await getPool();
+  if (!p) return false;
+  await p.query("DELETE FROM invites WHERE board_id = $1", [boardId]);
+  await p.query("DELETE FROM board_memberships WHERE board_id = $1", [boardId]);
+  await p.query("DELETE FROM board_snapshots WHERE board_id = $1", [boardId]);
   return true;
 }
 

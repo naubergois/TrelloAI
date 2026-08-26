@@ -1,6 +1,7 @@
 import {
   isPgConfigured,
   pgAddMembership,
+  pgDeleteBoard,
   pgEmailHasAccess,
   pgGetBoard,
   pgListBoardsForEmail,
@@ -80,6 +81,18 @@ export async function listBoardsForEmail(email: string): Promise<BoardSnapshot[]
   const store = readStore();
   const ids = store.memberships[email.trim().toLowerCase()] || [];
   return ids.map((id) => store.boards[id]).filter(Boolean);
+}
+
+export async function deleteSharedBoard(boardId: string) {
+  if (isPgConfigured()) {
+    await pgDeleteBoard(boardId);
+  }
+  const store = readStore();
+  delete store.boards[boardId];
+  for (const email of Object.keys(store.memberships)) {
+    store.memberships[email] = (store.memberships[email] || []).filter((id) => id !== boardId);
+  }
+  writeStore(store);
 }
 
 export async function addMembership(email: string, boardId: string) {

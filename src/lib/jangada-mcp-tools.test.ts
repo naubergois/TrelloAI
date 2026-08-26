@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyAdicionarGit,
   applyCriarCard,
   applyCriarLista,
   applyMoverCard,
@@ -48,5 +49,18 @@ describe("jangada MCP snapshot tools", () => {
     expect(moved.snapshot.cards[withCard.cardId].listId).toBe(withList.listId);
     expect(moved.snapshot.lists.backlog.cardIds).not.toContain(withCard.cardId);
     expect(findList(moved.snapshot, withList.listId)?.cardIds).toContain(withCard.cardId);
+  });
+
+  it("links a git repo to the board without duplicating the same URL", () => {
+    const first = applyAdicionarGit(snapshot(), {
+      url: "http://git.cge.local/g_asesi/jangada.git",
+    });
+    const again = applyAdicionarGit(first.snapshot, {
+      url: "http://git.cge.local/g_asesi/jangada.git",
+    });
+    expect(first.repoId).toBeTruthy();
+    expect(again.repoId).toBe(first.repoId);
+    expect(first.snapshot.board.gitRepos).toHaveLength(1);
+    expect(compactBoard(first.snapshot).board.gitRepos[0].url).toContain("jangada.git");
   });
 });
