@@ -16,6 +16,7 @@ import {
   UserPlus,
   Users,
   Video,
+  Target,
   Trash2,
 } from "lucide-react";
 import { useBoardStore } from "@/lib/store";
@@ -39,6 +40,7 @@ import { TeamCalendarPanel } from "@/components/TeamCalendarPanel";
 import { ActivityPanel } from "@/components/ActivityPanel";
 import { WhatsAppGroupsPanel } from "@/components/WhatsAppGroupsPanel";
 import { TeamBoardView } from "@/components/TeamBoardView";
+import { ProjectBriefPanel } from "@/components/ProjectBriefPanel";
 import { BoardFilterBar } from "@/components/BoardFilterBar";
 import {
   BOARD_LEVEL_LABELS,
@@ -74,6 +76,7 @@ type SidePanel =
   | "calendar"
   | "activity"
   | "whatsapp"
+  | "brief"
   | null;
 
 export function BoardShell({
@@ -396,11 +399,23 @@ export function BoardShell({
               </button>
               <button
                 type="button"
-                onClick={() => toggle("requirements")}
-                title="Requisitos"
-                className={toolBtn(panel === "requirements")}
+                onClick={() =>
+                  toggle(board.level === "project" ? "brief" : "requirements")
+                }
+                title={
+                  board.level === "project"
+                    ? "Objetivos e requisitos do projeto"
+                    : "Requisitos"
+                }
+                className={toolBtn(
+                  panel === "brief" || panel === "requirements",
+                )}
               >
-                <ClipboardList className="h-4 w-4" />
+                {board.level === "project" ? (
+                  <Target className="h-4 w-4" />
+                ) : (
+                  <ClipboardList className="h-4 w-4" />
+                )}
                 {reqCount > 0 ? (
                   <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--accent)] px-1 text-[9px] font-bold text-[var(--accent-on)]">
                     {reqCount > 99 ? "99+" : reqCount}
@@ -617,6 +632,27 @@ export function BoardShell({
               </button>
             )}
 
+            {board.level === "project" ? (
+              <button
+                type="button"
+                onClick={() => toggle("brief")}
+                title="Objetivos e requisitos do projeto"
+                className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs transition ${
+                  panel === "brief"
+                    ? "border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent)]"
+                    : "border-[var(--line)] bg-black/20 text-[var(--muted)] hover:border-[var(--accent)]/40 hover:text-white"
+                }`}
+              >
+                <Target className="h-3.5 w-3.5 shrink-0" />
+                <span className="hidden sm:inline">Objetivos</span>
+                {reqCount > 0 ? (
+                  <span className="rounded-full bg-white/15 px-1.5 text-[10px] font-bold">
+                    {reqCount}
+                  </span>
+                ) : null}
+              </button>
+            ) : null}
+
             <select
               className="max-w-[min(11rem,42vw)] rounded-lg border border-[var(--line)] bg-[var(--ink-2)] px-2 py-1.5 text-xs outline-none focus:border-[var(--accent)] md:hidden sm:text-sm"
               value={boardId}
@@ -793,6 +829,13 @@ export function BoardShell({
                 xl:w-[420px]
               `}
             >
+              {panel === "brief" ? (
+                <ProjectBriefPanel
+                  boardId={board.id}
+                  onClose={() => setPanel(null)}
+                  onOpenFullRequirements={() => setPanel("requirements")}
+                />
+              ) : null}
               {panel === "manager" ? (
                 <ManagerPanel boardId={board.id} onClose={() => setPanel(null)} />
               ) : null}
@@ -816,7 +859,12 @@ export function BoardShell({
       </div>
 
       {panel === "requirements" ? (
-        <RequirementsPanel boardId={board.id} onClose={() => setPanel(null)} />
+        <RequirementsPanel
+          boardId={board.id}
+          onClose={() =>
+            setPanel(board.level === "project" ? "brief" : null)
+          }
+        />
       ) : null}
       {panel === "calendar" ? (
         <TeamCalendarPanel boardId={board.id} onClose={() => setPanel(null)} />
@@ -848,11 +896,17 @@ export function BoardShell({
               </button>
               <button
                 type="button"
-                onClick={() => toggle("requirements")}
+                onClick={() =>
+                  toggle(board.level === "project" ? "brief" : "requirements")
+                }
                 className="flex items-center gap-2 rounded-xl border border-[var(--line)] px-3 py-3 text-left text-sm text-white hover:bg-white/5"
               >
-                <ClipboardList className="h-4 w-4 text-[var(--accent)]" />
-                Requisitos
+                {board.level === "project" ? (
+                  <Target className="h-4 w-4 text-[var(--accent)]" />
+                ) : (
+                  <ClipboardList className="h-4 w-4 text-[var(--accent)]" />
+                )}
+                {board.level === "project" ? "Objetivos" : "Requisitos"}
                 {reqCount > 0 ? (
                   <span className="ml-auto rounded-full bg-[var(--accent)] px-1.5 text-[10px] font-bold text-[var(--accent-on)]">
                     {reqCount > 99 ? "99+" : reqCount}
@@ -975,6 +1029,23 @@ export function BoardShell({
           }}
           onConfirm={() => void confirmDeleteBoard()}
         />
+      ) : null}
+
+      {board.level === "project" && panel !== "brief" && panel !== "requirements" ? (
+        <button
+          type="button"
+          onClick={() => toggle("brief")}
+          title="Objetivos e requisitos do projeto"
+          className="fixed right-0 top-[42%] z-30 hidden items-center gap-1.5 rounded-l-xl border border-r-0 border-white/20 bg-[var(--panel-strong)] px-1.5 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/85 shadow-lg transition hover:border-[var(--accent)]/50 hover:bg-[var(--accent)] hover:text-[var(--accent-on)] lg:flex"
+        >
+          <Target className="h-3.5 w-3.5 shrink-0" />
+          <span
+            className="leading-none"
+            style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+          >
+            Objetivos
+          </span>
+        </button>
       ) : null}
     </div>
   );

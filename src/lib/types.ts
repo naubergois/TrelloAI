@@ -187,6 +187,8 @@ export interface Board {
   description: string;
   /** Texto livre para a liderança: situação, prioridades e riscos do board. */
   executiveSummary?: string;
+  /** Objetivos do projeto (painel direito dos boards de nível projeto). */
+  objectives?: string;
   listIds: string[];
   memberIds: string[];
   /** Contatos externos (não entram no time nem no acesso ao board) */

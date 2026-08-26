@@ -146,12 +146,14 @@ interface BoardState {
       backgroundImageUrl?: string | null;
       backgroundTint?: number;
       executiveSummary?: string;
+      objectives?: string;
     },
   ) => string;
   setActiveBoard: (boardId: string) => void;
   renameBoard: (boardId: string, title: string) => void;
   updateBoardDescription: (boardId: string, description: string) => void;
   updateBoardExecutiveSummary: (boardId: string, executiveSummary: string) => void;
+  updateBoardObjectives: (boardId: string, objectives: string) => void;
   addBoardGitRepo: (boardId: string, url: string, label?: string) => string | null;
   removeBoardGitRepo: (boardId: string, repoId: string) => void;
   addBoardWhatsAppGroup: (
@@ -492,6 +494,7 @@ export const useBoardStore = create<BoardState>()(
           title: title.trim() || "Novo board",
           description,
           executiveSummary: sanitizeExecutiveSummary(appearance?.executiveSummary),
+          objectives: sanitizeExecutiveSummary(appearance?.objectives),
           listIds,
           memberIds,
           teamId: team ? team.id : null,
@@ -576,6 +579,22 @@ export const useBoardStore = create<BoardState>()(
               [boardId]: {
                 ...ensureBoardMembers(board),
                 executiveSummary: sanitizeExecutiveSummary(executiveSummary),
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          };
+        }),
+
+      updateBoardObjectives: (boardId, objectives) =>
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+          return {
+            boards: {
+              ...state.boards,
+              [boardId]: {
+                ...ensureBoardMembers(board),
+                objectives: sanitizeExecutiveSummary(objectives),
                 updatedAt: new Date().toISOString(),
               },
             },
