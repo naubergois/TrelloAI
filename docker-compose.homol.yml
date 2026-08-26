@@ -1,3 +1,12 @@
+# docker-compose.homol.yml
+# Deploy Swarm — Homologação CGE
+#
+# Uso:
+#   docker stack deploy -c docker-compose.homol.yml homolog-jangada --with-registry-auth
+#
+# Secrets vêm do AWS Secrets Manager (asesi/jangada/homol).
+# Credenciais AWS injetadas pelo CI via sed antes do deploy.
+
 version: "3.8"
 
 services:
@@ -22,11 +31,29 @@ services:
         limits:
           cpus: "1"
           memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.jangada-homol.rule=Host(`homolog-jangada.cge.local`)"
         - "traefik.http.routers.jangada-homol.entrypoints=web"
         - "traefik.http.services.jangada-homol.loadbalancer.server.port=3000"
+    # Segurança: container roda sem privilégios extras
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.next/cache
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
     networks:
       - proxy
       - homol
