@@ -180,8 +180,9 @@ export function BoardsHome() {
 
   const hideBoard = async (boardId: string) => {
     const nextIds = boardList.filter((b) => b.id !== boardId).map((b) => b.id);
-    const count = await saveVisibleBoards(nextIds);
-    if (count < 0) {
+    try {
+      await saveVisibleBoards(nextIds);
+    } catch {
       toast("Não foi possível ocultar este board.");
       return;
     }

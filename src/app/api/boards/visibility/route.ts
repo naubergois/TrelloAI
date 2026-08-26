@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { assertBodySize, checkRateLimit } from "@/lib/api-security";
 import { setVisibleBoards } from "@/lib/shared-boards";
 
-export async function PUT(request: Request) {
+async function save(request: Request) {
   const session = await auth();
   if (!session?.user?.email) {
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
@@ -27,14 +27,28 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "Informe a lista de boards." }, { status: 400 });
   }
 
-  const result = await setVisibleBoards(
-    session.user.email,
-    body.boardIds,
-    session.user.role === "admin",
-  );
-  return NextResponse.json({
-    ok: true,
-    boardIds: result.boardIds,
-    snapshots: result.snapshots,
-  });
+  try {
+    const result = await setVisibleBoards(
+      session.user.email,
+      body.boardIds,
+      session.user.role === "admin",
+    );
+    return NextResponse.json({
+      ok: true,
+      boardIds: result.boardIds,
+      snapshots: result.snapshots,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Falha ao salvar a escolha.";
+    console.error("[boards/visibility]", message);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function PUT(request: Request) {
+  return save(request);
+}
+
+export async function POST(request: Request) {
+  return save(request);
 }

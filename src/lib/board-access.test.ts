@@ -7,6 +7,8 @@ import {
   filterTeamsForMember,
   memberCanSeeBoard,
   snapshotVisibleToEmail,
+  snapshotVisibleViaSharedTeam,
+  teamIdsHeldByEmail,
 } from "./board-access";
 
 function member(partial: Partial<TeamMember> & Pick<TeamMember, "id" | "email">): TeamMember {
@@ -138,5 +140,36 @@ describe("snapshotVisibleToEmail", () => {
       },
     });
     expect(snapshotVisibleToEmail(invited, "ana@cge.ce.gov.br")).toBe(true);
+  });
+});
+
+describe("teamIdsHeldByEmail", () => {
+  it("reuses a team membership from one board onto the others with the same teamId", () => {
+    const mandacaru = snap({
+      board: board({ id: "mandacaru", teamId: "asesi-team", memberIds: ["charles"] }),
+      teams: {
+        "asesi-team": team({ id: "asesi-team", memberIds: ["charles"] }),
+      },
+      members: {
+        charles: member({
+          id: "charles",
+          email: "charles.marques@cge.ce.gov.br",
+          name: "Charles",
+        }),
+      },
+    });
+    const farol = snap({
+      board: board({ id: "farol", teamId: "asesi-team", memberIds: ["ana"] }),
+      teams: { "asesi-team": team({ id: "asesi-team", memberIds: ["ana"] }) },
+      members: {
+        ana: member({ id: "ana", email: "ana@cge.ce.gov.br", name: "Ana" }),
+      },
+    });
+    const held = teamIdsHeldByEmail([mandacaru, farol], "charles.marques@cge.ce.gov.br");
+    expect([...held]).toEqual(["asesi-team"]);
+    expect(snapshotVisibleViaSharedTeam(farol, "charles.marques@cge.ce.gov.br", held)).toBe(
+      true,
+    );
+    expect(snapshotVisibleToEmail(farol, "charles.marques@cge.ce.gov.br")).toBe(false);
   });
 });

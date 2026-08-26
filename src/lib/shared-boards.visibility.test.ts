@@ -64,4 +64,94 @@ describe("per-user board visibility", () => {
     expect(catalog.find((b) => b.id === "asesi")?.selected).toBe(true);
     expect(catalog.find((b) => b.id === "cge")?.selected).toBe(false);
   });
+
+  it("lists every board of a team even when the person is only on one snapshot", async () => {
+    const charles = "charles.marques@cge.ce.gov.br";
+    const now = "2026-01-01T00:00:00.000Z";
+    const member = {
+      id: "c1",
+      name: "Charles",
+      email: charles,
+      role: "member" as const,
+      color: "sky" as const,
+      createdAt: now,
+    };
+    await saveSharedBoard({
+      board: {
+        id: "mandacaru",
+        title: "Mandacaru",
+        description: "",
+        listIds: [],
+        memberIds: ["c1"],
+        teamId: "asesi-team",
+        level: "project",
+        parentBoardId: "asesi",
+        backgroundId: "trello",
+        designId: "classic",
+        createdAt: now,
+        updatedAt: now,
+      },
+      lists: {},
+      cards: {},
+      members: { c1: member },
+      teams: {
+        "asesi-team": {
+          id: "asesi-team",
+          name: "ASESI",
+          description: "",
+          memberIds: ["c1"],
+          color: "teal",
+          createdAt: now,
+          updatedAt: now,
+        },
+      },
+      meetings: {},
+      managers: {},
+      standups: {},
+      activities: {},
+      requirements: {},
+      calendarEvents: {},
+      updatedAt: now,
+    });
+    await saveSharedBoard({
+      board: {
+        id: "farol",
+        title: "Farol",
+        description: "",
+        listIds: [],
+        memberIds: ["admin"],
+        teamId: "asesi-team",
+        level: "project",
+        parentBoardId: "asesi",
+        backgroundId: "trello",
+        designId: "classic",
+        createdAt: now,
+        updatedAt: now,
+      },
+      lists: {},
+      cards: {},
+      members: {},
+      teams: {
+        "asesi-team": {
+          id: "asesi-team",
+          name: "ASESI",
+          description: "",
+          memberIds: ["admin"],
+          color: "teal",
+          createdAt: now,
+          updatedAt: now,
+        },
+      },
+      meetings: {},
+      managers: {},
+      standups: {},
+      activities: {},
+      requirements: {},
+      calendarEvents: {},
+      updatedAt: now,
+    });
+
+    const catalog = await listBoardCatalog(charles, false);
+    expect(catalog.map((b) => b.id).sort()).toEqual(["asesi", "cge", "farol", "mandacaru"]);
+  });
 });

@@ -15,13 +15,18 @@ export async function loadServerBoards(): Promise<number> {
 
 export async function saveVisibleBoards(boardIds: string[]): Promise<number> {
   const res = await fetch("/api/boards/visibility", {
-    method: "PUT",
+    method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ boardIds }),
   });
-  if (!res.ok) return -1;
-  const data = (await res.json()) as { snapshots?: BoardSnapshot[] };
+  const data = (await res.json().catch(() => ({}))) as {
+    snapshots?: BoardSnapshot[];
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(data.error || "Não foi possível salvar a escolha.");
+  }
   const snapshots = data.snapshots ?? [];
   useBoardStore.getState().adoptServerSnapshots(snapshots);
   return snapshots.length;

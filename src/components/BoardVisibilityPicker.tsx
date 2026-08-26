@@ -81,18 +81,19 @@ export function BoardVisibilityPicker({
   const save = async () => {
     setSaving(true);
     setError(null);
-    const count = await saveVisibleBoards([...selected]);
-    setSaving(false);
-    if (count < 0) {
-      setError("Não foi possível salvar a escolha.");
-      return;
+    try {
+      await saveVisibleBoards([...selected]);
+      setSaving(false);
+      toast(
+        selected.size === 0
+          ? "Nenhum board selecionado. Você pode escolher de novo quando quiser."
+          : `${selected.size} board${selected.size === 1 ? "" : "s"} na sua home.`,
+      );
+      onClose();
+    } catch (err) {
+      setSaving(false);
+      setError(err instanceof Error ? err.message : "Não foi possível salvar a escolha.");
     }
-    toast(
-      selected.size === 0
-        ? "Nenhum board selecionado. Você pode escolher de novo quando quiser."
-        : `${selected.size} board${selected.size === 1 ? "" : "s"} na sua home.`,
-    );
-    onClose();
   };
 
   if (!open) return null;
@@ -114,7 +115,8 @@ export function BoardVisibilityPicker({
                 Boards visíveis
               </p>
               <p className="text-xs text-[var(--muted)]">
-                Marque só os kanbans que você quer ver na home
+                Marque os kanbans da sua equipe que devem aparecer na home. Para criar um
+                novo, feche e use Novo board.
               </p>
             </div>
           </div>
@@ -171,7 +173,7 @@ export function BoardVisibilityPicker({
           ) : visible.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-[var(--muted)]">
               {items.length === 0
-                ? "Não há boards disponíveis para você ainda."
+                ? "Não há boards da sua equipe ainda. Feche e use Novo board, ou peça um convite."
                 : "Nenhum board com esse termo."}
             </p>
           ) : (
