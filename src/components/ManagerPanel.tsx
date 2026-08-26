@@ -36,6 +36,7 @@ import {
   mayaChatFileName,
 } from "@/lib/maya-chat";
 import { buildMayaBoardMemory, formatMayaMemoryPrompt } from "@/lib/maya-board-memory";
+import { mayaChatRequestsBoardChange } from "@/lib/maya-chat-intent";
 
 type Tab = "chat" | "calendar" | "settings";
 
@@ -482,8 +483,10 @@ export function ManagerPanel({
         setResultMsg(data.error || "Falha ao consultar Maya.");
         return;
       }
-      const actions = [data.action, data.extraAction].filter(Boolean) as AiAction[];
-      applyManagerActions(actions, boardId);
+      const actions = mayaChatRequestsBoardChange(prompt)
+        ? ([data.action, data.extraAction].filter(Boolean) as AiAction[])
+        : [];
+      if (actions.length) applyManagerActions(actions, boardId);
       const msg = data.message || "Pronto.";
       appendMayaDayChat(boardId, { role: "manager", content: msg });
       if (data.provider !== "deepseek" && msg.includes("DeepSeek falhou")) {

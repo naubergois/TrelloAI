@@ -2,6 +2,8 @@ import type { AiAction, Card, StandupCheckIn } from "./types";
 import type { AiRequestContext, AiResponse } from "./ai";
 import { deepSeekChatCompletions } from "./deepseek";
 import { mayaHistoryForModel } from "./maya-board-memory";
+import { isMayaChatSmallTalk, mayaChatRequestsBoardChange } from "./maya-chat-intent";
+import { buildMayaGreetingMessage, MAYA_NERD_VOICE } from "./maya-voice";
 
 export interface ManagerContext extends AiRequestContext {
   managerName: string;
@@ -60,6 +62,64 @@ const DEFAULT_QUESTIONS = [
 
 export function defaultManagerQuestions() {
   return [...DEFAULT_QUESTIONS];
+}
+
+function mayaChatGreeting(context: ManagerContext): ManagerAiResponse {
+  return {
+    message: buildMayaGreetingMessage(context),
+    action: { type: "none" },
+    provider: "local",
+  };
+}
+
+const ACTION_JSON_SPEC = `"action":
+    | { "type": "none" }
+    | { "type": "create_cards", "listId": string | null, "cards": [{ "title": string, "description"?: string, "priority"?: "low"|"medium"|"high", "assigneeId"?: string|null, "dueDate"?: string|null }] }
+    | { "type": "update_cards", "updates": [{ "cardId": string, "title"?: string, "description"?: string, "priority"?: "low"|"medium"|"high"|null, "moveToListId"?: string, "assigneeId"?: string|null, "dueDate"?: string|null }] }
+    | { "type": "create_lists", "titles": string[] }
+    | { "type": "assign_cards", "assignments": [{ "cardId": string, "assigneeId": string|null }] }
+    | { "type": "suggest_priorities", "updates": [{ "cardId": string, "priority": "low"|"medium"|"high" }] },
+  "extraAction": mesma forma de action ou omitido`;
+
+function managerSystemPrompt(
+  context: ManagerContext,
+  mode: "daily" | "chat",
+  liveContext: unknown,
+  memoryBlock: string,
+) {
+  const role = `Você é ${context.managerName}, gestor(a) virtual nerd do kanban "${context.boardTitle}".
+Fala português (Brasil). ${MAYA_NERD_VOICE}
+Leia a MEMÓRIA, o kanban ao vivo e o HISTÓRICO DA CONVERSA ANTES de responder. Não misture um projeto com outro. Não invente cards, prazos ou decisões que não estejam na memória ou no kanban ao vivo.
+Retorne SOMENTE JSON válido (sem markdown):
+{
+  "message": string,
+  ${ACTION_JSON_SPEC}
+}`;
+
+  const dailyRules = `Modo DAILY: processe os check-ins e GERENCIE o projeto de verdade (criar, mover, priorizar, atribuir, prazos).
+Regras:
+- Use ids reais do contexto (listas, cards, membros).
+- Sempre comente riscos na message (atrasos, alta prioridade parada, requisitos sem card, gaps de Git).
+- Se git.coverage tiver status "missing", crie cards no backlog no máximo 6, sem duplicar títulos já existentes.
+- Se git.coverage tiver "implemented" e o card ainda estiver no backlog, sugira mover para revisão/andamento.
+- Atribua trabalho com assigneeId quando fizer sentido.
+- Mova cards entre listas conforme progresso (backlog → andamento → revisão → concluído).
+- Crie listas só se o fluxo do projeto precisar.
+- Max 8 creates / 8 updates / 4 listas novas.`;
+
+  const chatRules = `Modo CHAT: o usuário está conversando. Responda AO QUE ELE DISSE, usando o board e o histórico.
+Regras:
+- NÃO altere o board (action e extraAction = { "type": "none" }) a menos que ele peça explicitamente criar, mover, atribuir, atualizar, priorizar, criar listas ou analisar riscos/Git.
+- Cumprimento (oi, olá, bom dia, e aí): 1–2 frases nerd, cite o board/último assunto se houver, e pergunte o próximo comando. NÃO relate status longo, NÃO comente riscos, NÃO mova/atribua/crie, NÃO repita a última action.
+- Pergunta de status/contexto: responda com o que está na memória/kanban/conversa; action "none".
+- Pedido de gestão: use ids reais; max 8 creates / 8 updates / 4 listas novas.
+- Nunca execute trabalho antigo do histórico só porque a conversa recomeçou.`;
+
+  return `${role}
+${mode === "chat" ? chatRules : dailyRules}
+${memoryBlock ? `\nMEMÓRIA E O CONTEXTO DOS BOARDS:\n${memoryBlock}\n` : ""}
+Kanban ao vivo (ids reais para actions):
+${JSON.stringify(liveContext, null, 2)}`;
 }
 
 export function localManagerProcess(context: ManagerContext): ManagerAiResponse {
@@ -205,41 +265,19 @@ export async function deepSeekManagerProcess(
   opts?: { mode?: "daily" | "chat"; userMessage?: string },
 ): Promise<ManagerAiResponse> {
   const mode = opts?.mode || "daily";
+  const userMessage = (opts?.userMessage || "").trim();
+
+  if (mode === "chat" && isMayaChatSmallTalk(userMessage)) {
+    return mayaChatGreeting(context);
+  }
 
   const { memoryBrief, recentChat, ...liveContext } = context;
   const memoryBlock = (memoryBrief || "").trim();
-  const system = `Você é ${context.managerName}, gestor(a) virtual do kanban "${context.boardTitle}".
-Fala português (Brasil). Você GERENCIA o projeto de verdade: cria listas/cards, move, prioriza, atribui responsáveis e define prazos.
-Você TAMBÉM analisa riscos e, quando houver Git no contexto, compara cards/requisitos com os arquivos do repositório (o que já está implementado vs o que falta).
-Leia a MEMÓRIA E O CONTEXTO DOS BOARDS abaixo ANTES de responder. Não misture um projeto com outro. Não invente cards, prazos ou decisões que não estejam na memória ou no kanban ao vivo.
-Retorne SOMENTE JSON válido (sem markdown):
-{
-  "message": string (resumo claro das decisões para a equipe),
-  "action":
-    | { "type": "none" }
-    | { "type": "create_cards", "listId": string | null, "cards": [{ "title": string, "description"?: string, "priority"?: "low"|"medium"|"high", "assigneeId"?: string|null, "dueDate"?: string|null }] }
-    | { "type": "update_cards", "updates": [{ "cardId": string, "title"?: string, "description"?: string, "priority"?: "low"|"medium"|"high"|null, "moveToListId"?: string, "assigneeId"?: string|null, "dueDate"?: string|null }] }
-    | { "type": "create_lists", "titles": string[] }
-    | { "type": "assign_cards", "assignments": [{ "cardId": string, "assigneeId": string|null }] }
-    | { "type": "suggest_priorities", "updates": [{ "cardId": string, "priority": "low"|"medium"|"high" }] },
-  "extraAction": mesma forma de action ou omitido
-}
-Regras:
-- Use ids reais do contexto (listas, cards, membros).
-- Sempre comente riscos na message (atrasos, alta prioridade parada, requisitos sem card, gaps de Git).
-- Se git.coverage tiver status "missing", crie cards no backlog no máximo 6, sem duplicar títulos já existentes.
-- Se git.coverage tiver "implemented" e o card ainda estiver no backlog, sugira mover para revisão/andamento.
-- Atribua trabalho com assigneeId quando fizer sentido.
-- Mova cards entre listas conforme progresso (backlog → andamento → revisão → concluído).
-- Crie listas só se o fluxo do projeto precisar.
-- Max 8 creates / 8 updates / 4 listas novas.
-${memoryBlock ? `\nMEMÓRIA E CONTEXTO DOS BOARDS:\n${memoryBlock}\n` : ""}
-Kanban ao vivo (ids reais para actions):
-${JSON.stringify(liveContext, null, 2)}`;
+  const system = managerSystemPrompt(context, mode, liveContext, memoryBlock);
 
   const userContent =
     mode === "chat"
-      ? opts?.userMessage || "Ajude a organizar o projeto."
+      ? userMessage || "Responda ao usuário sem alterar o board."
       : "Processe a daily: aplique ações concretas no board com base nos check-ins.";
 
   const history =
@@ -258,10 +296,11 @@ ${JSON.stringify(liveContext, null, 2)}`;
     extraAction?: AiAction;
   };
 
+  const allowBoardChange = mode !== "chat" || mayaChatRequestsBoardChange(userMessage);
   return {
     message: parsed.message || (mode === "chat" ? "Pronto." : "Daily processada."),
-    action: parsed.action || { type: "none" },
-    extraAction: parsed.extraAction,
+    action: allowBoardChange ? parsed.action || { type: "none" } : { type: "none" },
+    extraAction: allowBoardChange ? parsed.extraAction : undefined,
     provider: "deepseek",
   };
 }
@@ -279,6 +318,9 @@ export function localManagerChat(
   prompt: string,
   context: ManagerContext,
 ): ManagerAiResponse {
+  if (isMayaChatSmallTalk(prompt)) {
+    return mayaChatGreeting(context);
+  }
   const lower = prompt.toLowerCase();
   if (
     context.memoryBrief &&
@@ -421,9 +463,12 @@ export function localManagerChat(
     }
   }
 
-  // fallback: create task from prompt
-  const title = prompt.replace(/^(crie|criar|adicione|faça)\s+/i, "").trim().slice(0, 100);
-  if (title.length > 3 && todo) {
+  const title = prompt.replace(/^(crie|criar|adicione|adiciona|faça|faca)\s+/i, "").trim().slice(0, 100);
+  if (
+    todo &&
+    title.length > 3 &&
+    /\b(crie|criar|adicione|adiciona|novo card|novos cards|nova tarefa)\b/i.test(lower)
+  ) {
     return {
       message: `Criei o card "${title}" no backlog para a Maya acompanhar.`,
       action: {
@@ -500,9 +545,9 @@ export async function deepSeekStandupTurn(
       : null;
 
   const memoryBlock = (input.boardMemory || "").trim();
-  const system = `Você é ${input.managerName}, gestora virtual do board "${input.boardTitle}".
-Conduza a daily em português do Brasil de forma NATURAL e conversacional (não robótica).
-Leia a memória e o contexto dos boards ANTES de responder. Use o que já foi dito neste board e o estado da carteira; não invente.
+  const system = `Você é ${input.managerName}, gestora nerd do board "${input.boardTitle}".
+Conduza a daily em português do Brasil de forma NATURAL (não robótica). ${MAYA_NERD_VOICE}
+Leia a memória, o contexto dos boards e o histórico da conversa ANTES de responder. Use o que já foi dito neste board; não invente.
 ${memoryBlock ? `\nMEMÓRIA E CONTEXTO DOS BOARDS:\n${memoryBlock}\n` : ""}
 Pergunta atual (${input.questionIndex + 1}/${input.questions.length}): "${currentQ}"
 Membro: ${input.memberName}
