@@ -6,6 +6,7 @@ import {
   filterExistingBoardIds,
   orderedCatalog,
   uniqueBoardIds,
+  withDescendantBoardIds,
 } from "./board-visibility";
 
 describe("board visibility helpers", () => {
@@ -27,6 +28,24 @@ describe("board visibility helpers", () => {
       { id: "asesi" },
     ]);
     expect(applyVisibilityPreference(boards, [], (b) => b.id)).toEqual([]);
+  });
+
+  it("keeps descendants when a parent is selected", () => {
+    const boards = [
+      { id: "cge", parentBoardId: null },
+      { id: "asesi", parentBoardId: "cge" },
+      { id: "farol", parentBoardId: "asesi" },
+      { id: "other", parentBoardId: null },
+    ];
+    expect(withDescendantBoardIds(["cge"], boards).sort()).toEqual([
+      "asesi",
+      "cge",
+      "farol",
+    ]);
+    expect(withDescendantBoardIds(["asesi"], boards).sort()).toEqual([
+      "asesi",
+      "farol",
+    ]);
   });
 
   it("marks selected boards and nests children under parents", () => {

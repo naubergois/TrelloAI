@@ -19,6 +19,7 @@ import {
   applyVisibilityPreference,
   buildBoardCatalog,
   filterExistingBoardIds,
+  withDescendantBoardIds,
   type BoardCatalogItem,
 } from "./board-visibility";
 
@@ -178,23 +179,42 @@ export async function listBoardsForHome(
 ): Promise<BoardSnapshot[]> {
   const accessible = await listBoardsVisibleToUser(email, isAdmin);
   const pref = await getVisibleBoardPreference(email);
-  return applyVisibilityPreference(accessible, pref, (snapshot) => snapshot.board.id);
+  const selected = applyVisibilityPreference(
+    accessible,
+    pref,
+    (snapshot) => snapshot.board.id,
+  );
+  if (pref === null) return accessible;
+  const keep = new Set(
+    withDescendantBoardIds(
+      selected.map((snapshot) => snapshot.board.id),
+      accessible.map((snapshot) => snapshot.board),
+    ),
+  );
+  return accessible.filter((snapshot) => keep.has(snapshot.board.id));
 }
 
-/** Admin sees every board; others see only boards of their team (or personal boards they belong to). */
+/** Admin sees every board; others see team/personal boards plus descendants of those. */
 export async function listBoardsVisibleToUser(
   email: string,
   isAdmin = false,
 ): Promise<BoardSnapshot[]> {
-  if (isAdmin) return listAllSharedBoards();
   const all = await listAllSharedBoards();
+  if (isAdmin) return all;
   const membershipIds = new Set(
     (await listBoardsForEmail(email)).map((snapshot) => snapshot.board.id),
   );
-  return all.filter((snapshot) => {
+  const direct = all.filter((snapshot) => {
     if (snapshotVisibleToEmail(snapshot, email)) return true;
     return membershipIds.has(snapshot.board.id) && !snapshot.board.teamId;
   });
+  const keep = new Set(
+    withDescendantBoardIds(
+      direct.map((snapshot) => snapshot.board.id),
+      all.map((snapshot) => snapshot.board),
+    ),
+  );
+  return all.filter((snapshot) => keep.has(snapshot.board.id));
 }
 
 export async function deleteSharedBoard(boardId: string) {

@@ -119,16 +119,17 @@ export function BoardShell({
     [board, boards, visibleIds],
   );
   const childBoards = useMemo(
-    () => (board ? getChildBoards(board.id, boards).filter((b) => visibleIds.has(b.id)) : []),
-    [board, boards, visibleIds],
+    () => (board ? getChildBoards(board.id, boards) : []),
+    [board, boards],
   );
   const descendantIds = useMemo(
-    () =>
-      board
-        ? getDescendantBoardIds(board.id, boards).filter((id) => visibleIds.has(id))
-        : [],
-    [board, boards, visibleIds],
+    () => (board ? getDescendantBoardIds(board.id, boards) : []),
+    [board, boards],
   );
+  const hasChildBoards = descendantIds.length > 0;
+  const compactChildKanban =
+    hasChildBoards &&
+    (board?.level === "organization" || board?.level === "team");
   const [canvasView, setCanvasView] = useState<"local" | "all">("all");
 
   const boardMembers = useMemo(() => {
@@ -498,9 +499,10 @@ export function BoardShell({
                           {a.title}
                         </Link>
                       ))}
-                      {childBoards.length > 0 ? (
+                      {descendantIds.length > 0 ? (
                         <span className="text-[11px] text-white/55">
-                          · {childBoards.length} projeto(s) abaixo
+                          · {descendantIds.length} board
+                          {descendantIds.length === 1 ? "" : "s"} abaixo
                         </span>
                       ) : null}
                     </div>
@@ -551,11 +553,9 @@ export function BoardShell({
           </div>
 
           <div
-            data-board-page-scroll={
-              canvasView === "all" && descendantIds.length > 0 ? "true" : undefined
-            }
+            data-board-page-scroll={hasChildBoards ? "true" : undefined}
             className={`flex min-h-0 flex-1 flex-col px-2 sm:px-3 ${
-              canvasView === "all" && descendantIds.length > 0
+              hasChildBoards
                 ? "overflow-y-auto overscroll-contain"
                 : "overflow-hidden"
             }`}
@@ -627,21 +627,23 @@ export function BoardShell({
             </div>
             <div
               className={
-                canvasView === "all" && descendantIds.length > 0
+                hasChildBoards
                   ? "flex flex-col pb-8"
                   : "flex min-h-0 flex-1 flex-col overflow-hidden"
               }
             >
               <div
                 className={
-                  canvasView === "all" && descendantIds.length > 0
-                    ? "h-[min(58vh,36rem)] shrink-0 overflow-hidden"
-                    : "min-h-0 flex-1 overflow-hidden"
+                  compactChildKanban
+                    ? "h-[min(28vh,16rem)] shrink-0 overflow-hidden"
+                    : hasChildBoards
+                      ? "h-[min(46vh,28rem)] shrink-0 overflow-hidden"
+                      : "min-h-0 flex-1 overflow-hidden"
                 }
               >
                 <BoardCanvas boardId={board.id} filter={cardFilter} />
               </div>
-              {canvasView === "all" && descendantIds.length > 0 ? (
+              {hasChildBoards ? (
                 <ConsolidatedBoardCanvas
                   boardId={board.id}
                   filter={cardFilter}

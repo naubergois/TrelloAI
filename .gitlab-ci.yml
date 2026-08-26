@@ -33,6 +33,7 @@ build_and_deploy_homol:
     - sed -i "s/\${SM_AWS_SECRET_ACCESS_KEY}/$SM_AWS_SECRET_ACCESS_KEY/g" docker-compose.homol.yml
     - scp "docker-compose.homol.yml" $SSH_USER_HMG@$SSH_HOST_HMG:/tmp
     - ssh $SSH_USER_HMG@$SSH_HOST_HMG "cd /tmp && docker stack deploy -c docker-compose.homol.yml homolog-jangada --with-registry-auth"
+    - ssh $SSH_USER_HMG@$SSH_HOST_HMG "docker service update --with-registry-auth --image $NEXUS_REGISTRY/jangada:homol --force homolog-jangada_jangada"
     - ssh $SSH_USER_HMG@$SSH_HOST_HMG "rm -f /tmp/docker-compose.homol.yml"
     - echo "Deploy homolog-jangada concluído com sucesso"
   only:

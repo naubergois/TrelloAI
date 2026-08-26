@@ -100,6 +100,32 @@ export function applyVisibilityPreference<T>(
   return accessible.filter((item) => want.has(getId(item)));
 }
 
+/** Pinning a parent also keeps its descendants so the parent board can show the carteira. */
+export function withDescendantBoardIds(
+  selectedIds: string[],
+  boards: Array<{ id: string; parentBoardId?: string | null }>,
+): string[] {
+  const childrenByParent = new Map<string, string[]>();
+  for (const board of boards) {
+    const parentId = board.parentBoardId;
+    if (!parentId) continue;
+    const list = childrenByParent.get(parentId) ?? [];
+    list.push(board.id);
+    childrenByParent.set(parentId, list);
+  }
+
+  const out = new Set(selectedIds.filter(Boolean));
+  const walk = (id: string) => {
+    for (const childId of childrenByParent.get(id) ?? []) {
+      if (out.has(childId)) continue;
+      out.add(childId);
+      walk(childId);
+    }
+  };
+  for (const id of [...out]) walk(id);
+  return [...out];
+}
+
 export function catalogDepth(
   item: BoardCatalogItem,
   items: BoardCatalogItem[],
