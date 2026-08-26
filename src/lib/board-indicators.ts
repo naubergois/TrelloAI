@@ -172,6 +172,7 @@ export function extractBoardIndicators(
 
 export function boardIndicatorChips(
   stats: BoardIndicatorStats,
+  opts?: { compact?: boolean },
 ): IndicatorChip[] {
   const chips: IndicatorChip[] = [];
 
@@ -268,7 +269,16 @@ export function boardIndicatorChips(
     });
   }
 
-  return chips;
+  if (!opts?.compact) return chips;
+  const compactKeys = new Set([
+    "progress",
+    "flow",
+    "overdue",
+    "blocked",
+    "risks",
+    "high",
+  ]);
+  return chips.filter((chip) => compactKeys.has(chip.key));
 }
 
 export function stageBarSegments(stats: BoardIndicatorStats) {

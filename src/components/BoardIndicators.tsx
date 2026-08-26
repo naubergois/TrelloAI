@@ -87,7 +87,7 @@ export function BoardIndicators({
   onChipClick?: (chip: IndicatorChip) => void;
   activeFilter?: BoardCardFilter;
 }) {
-  const chips = boardIndicatorChips(stats);
+  const chips = boardIndicatorChips(stats, { compact: variant === "compact" });
   const clickable = Boolean(onChipClick) && variant === "full";
 
   if (stats.cards === 0 && stats.risks === 0 && stats.requirements === 0) {
@@ -137,7 +137,7 @@ export function BoardIndicators({
           ))}
         </div>
       ) : null}
-      {rolledUp ? (
+      {rolledUp && variant === "full" ? (
         <p className="text-[10px] text-white/60">Inclui boards inferiores</p>
       ) : null}
     </div>
