@@ -1,6 +1,17 @@
 # Jangada
 
-Kanban de código aberto da **Assessoria de Sistemas e Informática (ASESI)** da **Controladoria e Ouvidoria Geral do Estado do Ceará (CGE-CE)**.
+<p align="center">
+  <img src="docs/images/jangada-icon.png" alt="Ícone do Jangada" width="96" height="96">
+</p>
+
+<p align="center">
+  Kanban de código aberto da <strong>Assessoria de Sistemas e Informática (ASESI)</strong>
+  da <strong>Controladoria e Ouvidoria Geral do Estado do Ceará (CGE-CE)</strong>.
+</p>
+
+<p align="center">
+  <img src="docs/images/jangada-hero.png" alt="Jangada — Terra da Luz e gestão pública digital" width="100%">
+</p>
 
 O Jangada organiza boards, listas, cards, requisitos e dailies da gestão pública cearense, com a gestora virtual **Maya** e identidade visual do Governo do Ceará (Terra da Luz).
 
@@ -9,7 +20,7 @@ O Jangada organiza boards, listas, cards, requisitos e dailies da gestão públi
 | **Órgão** | Controladoria e Ouvidoria Geral do Estado do Ceará (CGE-CE) |
 | **Unidade** | Assessoria de Sistemas e Informática (ASESI) |
 | **Licença** | [MIT](LICENSE) — software livre / open source |
-| **GitHub** | [naubergois/TrelloAI](https://github.com/naubergois/TrelloAI) |
+| **GitHub** | [naubergois/jangada](https://github.com/naubergois/jangada) |
 | **GitLab ASESI** | [g_asesi/jangada](https://git.cge.ce.gov.br/g_asesi/jangada) |
 
 Este repositório contém **apenas o código-fonte**. Boards, usuários, conversas, anexos e demais dados de execução **não** entram no Git.
@@ -23,6 +34,18 @@ Este repositório contém **apenas o código-fonte**. Boards, usuários, convers
 - Anexos e observações diárias nos cards
 - Reuniões da equipe (Jitsi)
 - Servidor MCP para gravar cards a partir do Cursor ou do Kiro
+
+<p align="center">
+  <img src="docs/images/jangada-board.png" alt="Quadro Kanban do Jangada" width="100%">
+</p>
+
+<p align="center"><em>Quadro Kanban com listas, cards, prazos e responsáveis.</em></p>
+
+<p align="center">
+  <img src="docs/images/jangada-maya.png" alt="Maya, gestora virtual do Jangada" width="100%">
+</p>
+
+<p align="center"><em>Maya analisa riscos, conduz a daily e atualiza o quadro.</em></p>
 
 Fluxo típico:
 
@@ -108,7 +131,7 @@ Reinicie o MCP nas duas IDEs depois do `npm install`. Tools principais: `jangada
 O desenvolvimento interno da ASESI e o deploy (Swarm / Nexus) continuam no **GitLab**. O **GitHub** é o espelho público do código, sem dados de execução.
 
 ```text
-origin   → GitHub  (código aberto)
+origin   → https://github.com/naubergois/jangada  (código aberto)
 gitlab   → GitLab ASESI (CI e homologação/produção)
 ```
 

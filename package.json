@@ -6,7 +6,7 @@
   "description": "Kanban de código aberto da ASESI / Controladoria e Ouvidoria Geral do Estado do Ceará (CGE-CE).",
   "repository": {
     "type": "git",
-    "url": "https://github.com/naubergois/TrelloAI.git"
+    "url": "https://github.com/naubergois/jangada.git"
   },
   "scripts": {
     "dev": "next dev",
