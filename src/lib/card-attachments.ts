@@ -69,6 +69,49 @@ export function guessMimeType(name: string, fallback = "application/octet-stream
   return MIME_BY_EXT[fileExtension(name)] || fallback || "application/octet-stream";
 }
 
+export function isImageAttachment(attachment: {
+  mimeType?: string | null;
+  name?: string | null;
+  kind?: string | null;
+}) {
+  const mime = String(attachment.mimeType || "").toLowerCase();
+  if (mime.startsWith("image/")) return true;
+  return /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(String(attachment.name || ""));
+}
+
+export function isPdfAttachment(attachment: {
+  mimeType?: string | null;
+  name?: string | null;
+}) {
+  const mime = String(attachment.mimeType || "").toLowerCase();
+  if (mime === "application/pdf") return true;
+  return /\.pdf$/i.test(String(attachment.name || ""));
+}
+
+export async function postCardAttachmentFiles(
+  boardId: string,
+  cardId: string,
+  files: Iterable<File>,
+): Promise<{ attachments: CardAttachment[]; error?: string }> {
+  const list = Array.from(files).filter((file) => file.size > 0);
+  if (!list.length) return { attachments: [] };
+  const form = new FormData();
+  for (const file of list) form.append("file", file);
+  const res = await fetch(`/api/boards/${boardId}/cards/${cardId}/attachments`, {
+    method: "POST",
+    credentials: "include",
+    body: form,
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    attachments?: CardAttachment[];
+    error?: string;
+  };
+  if (!res.ok) {
+    return { attachments: [], error: data.error || "Não foi possível enviar o arquivo." };
+  }
+  return { attachments: data.attachments || [] };
+}
+
 export function formatFileSize(bytes: number) {
   if (!Number.isFinite(bytes) || bytes < 0) return "0 B";
   if (bytes < 1024) return `${bytes} B`;

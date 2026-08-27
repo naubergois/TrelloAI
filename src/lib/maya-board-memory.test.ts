@@ -157,6 +157,61 @@ describe("Maya board memory", () => {
     expect(prompt).toMatch(/CGE/);
     expect(prompt).toMatch(/Fecho amanhã/);
     expect(prompt).toMatch(/não invente/i);
+    expect(prompt).toMatch(/use para não misturar projetos/);
+    expect(prompt).not.toMatch(/Resumos executivos dos boards filhos/);
+  });
+
+  it("gives organization Maya the full executive summaries of every child board", () => {
+    const longChildSummary =
+      "Piloto Jangada e carteira de projetos da ASESI. Prioridade: homologar o kanban com a CGE, fechar o Farol e acompanhar riscos dos times. " +
+      "Situação estável no fluxo, com atenção a atrasos no convite.";
+    const orgBoards = {
+      ...boards,
+      asesi: { ...boards.asesi, executiveSummary: longChildSummary },
+    };
+    const memory = buildMayaBoardMemory({
+      boardId: "cge",
+      boards: orgBoards,
+      lists,
+      cards,
+      members: { ana: { name: "Ana Costa" } },
+      managerName: "Maya",
+    });
+    expect(memory?.related.map((b) => b.id)).toEqual(["asesi", "farol"]);
+    const prompt = formatMayaMemoryPrompt(memory!, "2026-08-26");
+    expect(prompt).toMatch(/Resumos executivos dos boards filhos/);
+    expect(prompt).toContain(longChildSummary);
+    expect(prompt).toMatch(/Transparência de gastos/);
+    expect(prompt).not.toMatch(/use para não misturar projetos/);
+  });
+
+  it("keeps every organization child even past the related-board cap", () => {
+    const many: Record<string, Board> = {
+      cge: boards.cge,
+    };
+    for (let i = 0; i < 24; i += 1) {
+      const id = `proj-${i}`;
+      many[id] = board({
+        id,
+        title: `Projeto ${i}`,
+        level: "project",
+        parentBoardId: "cge",
+        executiveSummary: `Resumo completo do projeto ${i}.`,
+      });
+    }
+    const memory = buildMayaBoardMemory({
+      boardId: "cge",
+      boards: many,
+      lists: {},
+      cards: {},
+      members: {},
+      managerName: "Maya",
+    });
+    expect(memory?.related).toHaveLength(24);
+    const prompt = formatMayaMemoryPrompt(memory!, "2026-08-26");
+    expect(prompt).toMatch(/Projeto 0/);
+    expect(prompt).toMatch(/Projeto 23/);
+    expect(prompt).toMatch(/Resumo completo do projeto 23/);
   });
 
   it("includes project objectives and application url", () => {

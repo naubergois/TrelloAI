@@ -69,6 +69,7 @@ import { sanitizeApplicationUrl } from "./application-url";
 import { sanitizeExecutiveSummary } from "./executive-summary";
 import {
   normalizeDailyNotes,
+  normalizeDailyNoteAttachmentIds,
   resolveCardDates,
   sanitizeCalendarDay,
   sanitizeDailyNoteBody,
@@ -280,8 +281,18 @@ interface BoardState {
   archiveCard: (cardId: string) => void;
   restoreCard: (cardId: string, listId?: string) => void;
   addCardComment: (cardId: string, body: string) => void;
-  addCardDailyNote: (cardId: string, date: string, body: string) => string | null;
-  updateCardDailyNote: (cardId: string, noteId: string, body: string) => boolean;
+  addCardDailyNote: (
+    cardId: string,
+    date: string,
+    body: string,
+    attachmentIds?: string[],
+  ) => string | null;
+  updateCardDailyNote: (
+    cardId: string,
+    noteId: string,
+    body: string,
+    attachmentIds?: string[],
+  ) => boolean;
   removeCardDailyNote: (cardId: string, noteId: string) => void;
   addCardAttachment: (cardId: string, attachment: CardAttachment) => void;
   removeCardAttachment: (cardId: string, attachmentId: string) => void;
@@ -1567,10 +1578,11 @@ export const useBoardStore = create<BoardState>()(
         }
       },
 
-      addCardDailyNote: (cardId, date, body) => {
+      addCardDailyNote: (cardId, date, body, attachmentIds) => {
         const day = sanitizeCalendarDay(date);
         const text = sanitizeDailyNoteBody(body);
-        if (!day || !text) return null;
+        const ids = normalizeDailyNoteAttachmentIds(attachmentIds);
+        if (!day || (!text && ids.length === 0)) return null;
         const noteId = nanoid();
         const now = new Date().toISOString();
         let boardId: string | null = null;
@@ -1582,6 +1594,7 @@ export const useBoardStore = create<BoardState>()(
             id: noteId,
             date: day,
             body: text,
+            attachmentIds: ids.length ? ids : undefined,
             authorId: state.currentUserId,
             createdAt: now,
             updatedAt: now,
@@ -1602,21 +1615,26 @@ export const useBoardStore = create<BoardState>()(
             boardId,
             kind: "card_update",
             cardId,
-            note: `obs ${day}: ${text.slice(0, 60)}`,
+            note: `obs ${day}: ${(text || ids.join(", ")).slice(0, 60)}`,
           });
         }
         return noteId;
       },
 
-      updateCardDailyNote: (cardId, noteId, body) => {
+      updateCardDailyNote: (cardId, noteId, body, attachmentIds) => {
         const text = sanitizeDailyNoteBody(body);
-        if (!text) return false;
         let ok = false;
         set((state) => {
           const card = state.cards[cardId];
           if (!card) return state;
           const notes = card.dailyNotes || [];
-          if (!notes.some((note) => note.id === noteId)) return state;
+          const current = notes.find((note) => note.id === noteId);
+          if (!current) return state;
+          const ids =
+            attachmentIds === undefined
+              ? normalizeDailyNoteAttachmentIds(current.attachmentIds)
+              : normalizeDailyNoteAttachmentIds(attachmentIds);
+          if (!text && ids.length === 0) return state;
           const now = new Date().toISOString();
           ok = true;
           return {
@@ -1626,7 +1644,14 @@ export const useBoardStore = create<BoardState>()(
                 ...card,
                 dailyNotes: normalizeDailyNotes(
                   notes.map((note) =>
-                    note.id === noteId ? { ...note, body: text, updatedAt: now } : note,
+                    note.id === noteId
+                      ? {
+                          ...note,
+                          body: text,
+                          attachmentIds: ids.length ? ids : undefined,
+                          updatedAt: now,
+                        }
+                      : note,
                   ),
                 ),
                 updatedAt: now,
@@ -1693,12 +1718,19 @@ export const useBoardStore = create<BoardState>()(
           boardId = state.lists[card.listId]?.boardId ?? null;
           const current = card.attachments || [];
           if (!current.some((item) => item.id === attachmentId)) return state;
+          const notes = card.dailyNotes || [];
           return {
             cards: {
               ...state.cards,
               [cardId]: {
                 ...card,
                 attachments: current.filter((item) => item.id !== attachmentId),
+                dailyNotes: normalizeDailyNotes(
+                  notes.map((note) => ({
+                    ...note,
+                    attachmentIds: (note.attachmentIds || []).filter((id) => id !== attachmentId),
+                  })),
+                ),
                 updatedAt: new Date().toISOString(),
               },
             },

@@ -331,7 +331,7 @@ export function localManagerChat(
       message: [
         `${context.managerName} no board "${context.boardTitle}".`,
         excerpt,
-        context.memoryBrief.split("\n").slice(0, 14).join("\n"),
+        context.memoryBrief.split("\n").slice(0, 80).join("\n"),
       ]
         .filter(Boolean)
         .join("\n\n"),

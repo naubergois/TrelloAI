@@ -5,6 +5,8 @@ import {
   formatFileSize,
   guessMimeType,
   isBlockedFilename,
+  isImageAttachment,
+  isPdfAttachment,
   sanitizeFilename,
   snapshotWithAttachment,
   snapshotWithoutAttachment,
@@ -23,6 +25,11 @@ describe("card attachments", () => {
   it("guesses mime types and formats size", () => {
     expect(guessMimeType("foto.PNG")).toBe("image/png");
     expect(guessMimeType("planilha.xlsx")).toContain("spreadsheet");
+    expect(isImageAttachment({ mimeType: "image/png", name: "foto.png" })).toBe(true);
+    expect(isImageAttachment({ mimeType: "application/pdf", name: "relatorio.pdf" })).toBe(
+      false,
+    );
+    expect(isPdfAttachment({ mimeType: "application/pdf", name: "relatorio.pdf" })).toBe(true);
     expect(formatFileSize(512)).toBe("512 B");
     expect(formatFileSize(2048)).toBe("2.0 KB");
     expect(attachmentPublicUrl("asesi", "card1", "att1")).toBe(

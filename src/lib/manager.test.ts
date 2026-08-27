@@ -69,6 +69,26 @@ describe("Maya local risk/git chat", () => {
     expect(result.message).toMatch(/40%/);
   });
 
+  it("surfaces child executive summaries when answering from organization memory", () => {
+    const result = localManagerChat(
+      "Qual a situação da carteira?",
+      context({
+        boardTitle: "CGE",
+        executiveSummary: "Visão da controladoria.",
+        memoryBrief: [
+          "Board atual: CGE (Organização, id cge).",
+          "Resumos executivos dos boards filhos (contexto da carteira da organização — use ao responder a liderança):",
+          "- ASESI (Time) — 40% concluído · 10 cards",
+          "  Resumo executivo:",
+          "  Piloto Jangada e carteira de projetos.",
+        ].join("\n"),
+      }),
+    );
+    expect(result.action.type).toBe("none");
+    expect(result.message).toMatch(/CGE/);
+    expect(result.message).toMatch(/Piloto Jangada/);
+  });
+
   it("greets without touching the board", () => {
     for (const text of ["oi", "Oi!", "olá Maya", "bom dia"]) {
       const result = localManagerChat(text, context());

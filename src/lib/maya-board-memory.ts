@@ -21,6 +21,8 @@ import type {
 export const MAYA_MEMORY_CHAT_LIMIT = 24;
 export const MAYA_MEMORY_RELATED_LIMIT = 20;
 const TURN_CONTENT_MAX = 480;
+const SELF_SUMMARY_MAX = 1200;
+const CHILD_SUMMARY_FOR_ORG_MAX = 2000;
 
 export type MayaBoardRelation = "self" | "ancestor" | "child";
 
@@ -149,23 +151,35 @@ export function buildMayaBoardMemory(opts: {
     opts.cards,
     opts.requirements,
   );
-  const related: MayaRelatedBoardMemory[] = [];
+  const ancestors: MayaRelatedBoardMemory[] = [];
   for (const ancestor of getBoardAncestors(opts.boardId, opts.boards)) {
-    related.push(
+    ancestors.push(
       toRelated(ancestor, "ancestor", opts.boards, opts.lists, opts.cards, opts.requirements),
     );
   }
+  const children: MayaRelatedBoardMemory[] = [];
   for (const id of getDescendantBoardIds(opts.boardId, opts.boards)) {
     const child = opts.boards[id];
     if (!child) continue;
-    related.push(
+    children.push(
       toRelated(child, "child", opts.boards, opts.lists, opts.cards, opts.requirements),
     );
   }
 
+  const related =
+    board.level === "organization"
+      ? [...ancestors, ...children]
+      : [
+          ...ancestors,
+          ...children.slice(
+            0,
+            Math.max(0, MAYA_MEMORY_RELATED_LIMIT - ancestors.length),
+          ),
+        ];
+
   return {
     self,
-    related: related.slice(0, MAYA_MEMORY_RELATED_LIMIT),
+    related,
     chat: collectMayaChatMemory({
       boardId: opts.boardId,
       managerName: opts.managerName,
@@ -198,17 +212,33 @@ function relatedLine(board: MayaRelatedBoardMemory) {
   return bits.join("\n");
 }
 
+function orgChildSummaryBlock(board: MayaRelatedBoardMemory) {
+  const level = BOARD_LEVEL_LABELS[board.level as keyof typeof BOARD_LEVEL_LABELS] || board.level;
+  const bits = [`- ${board.title} (${level}) — ${statsLine(board.stats)}`];
+  const summary = board.executiveSummary.trim().slice(0, CHILD_SUMMARY_FOR_ORG_MAX);
+  if (summary) {
+    bits.push("  Resumo executivo:");
+    for (const line of summary.split("\n")) bits.push(`  ${line}`);
+  } else {
+    bits.push("  Sem resumo executivo cadastrado.");
+  }
+  return bits.join("\n");
+}
+
 /** Texto injetado no system prompt da Maya antes da pergunta do usuário. */
 export function formatMayaMemoryPrompt(memory: MayaBoardMemory, today = calendarDayKey()): string {
   const level =
     BOARD_LEVEL_LABELS[memory.self.level as keyof typeof BOARD_LEVEL_LABELS] || memory.self.level;
-  const parent = memory.related.find((b) => b.relation === "ancestor");
+  const isOrganization = memory.self.level === "organization";
+  const ancestors = memory.related.filter((b) => b.relation === "ancestor");
+  const children = memory.related.filter((b) => b.relation === "child");
+  const parent = ancestors[0];
   const lines = [
     `Board atual: ${memory.self.title} (${level}, id ${memory.self.id}).`,
     parent ? `Carteira: abaixo de ${parent.title}.` : null,
     memory.self.description ? `Descrição: ${memory.self.description}` : null,
     memory.self.executiveSummary
-      ? `Resumo executivo:\n${memory.self.executiveSummary.trim().slice(0, 1200)}`
+      ? `Resumo executivo:\n${memory.self.executiveSummary.trim().slice(0, SELF_SUMMARY_MAX)}`
       : null,
     memory.self.objectives
       ? `Objetivos:\n${memory.self.objectives.trim().slice(0, 800)}`
@@ -219,7 +249,17 @@ export function formatMayaMemoryPrompt(memory: MayaBoardMemory, today = calendar
     `Indicadores deste board: ${statsLine(memory.self.stats)}.`,
   ].filter(Boolean) as string[];
 
-  if (memory.related.length > 0) {
+  if (isOrganization && children.length > 0) {
+    lines.push(
+      "",
+      "Resumos executivos dos boards filhos (contexto da carteira da organização — use ao responder a liderança):",
+    );
+    for (const child of children) lines.push(orgChildSummaryBlock(child));
+    if (ancestors.length > 0) {
+      lines.push("", "Boards acima:");
+      for (const board of ancestors) lines.push(relatedLine(board));
+    }
+  } else if (memory.related.length > 0) {
     lines.push("", "Contexto dos outros boards da carteira (use para não misturar projetos):");
     for (const board of memory.related) lines.push(relatedLine(board));
   }

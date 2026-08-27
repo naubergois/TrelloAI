@@ -64,4 +64,21 @@ describe("card schedule", () => {
     expect(notesForDay(notes, "2026-08-27")[0].body).toBe("Homolog ok");
     expect(sanitizeDailyNoteBody("  a\r\nb  ")).toBe("a\nb");
   });
+
+  it("keeps observations that only have attached files", () => {
+    const notes = normalizeDailyNotes([
+      {
+        id: "n3",
+        date: "2026-08-26",
+        body: "   ",
+        attachmentIds: ["att_ok", "att_ok", "bad id"],
+        authorId: null,
+        createdAt: "2026-08-26T09:00:00.000Z",
+        updatedAt: "2026-08-26T09:00:00.000Z",
+      },
+    ]);
+    expect(notes).toHaveLength(1);
+    expect(notes[0].body).toBe("");
+    expect(notes[0].attachmentIds).toEqual(["att_ok"]);
+  });
 });

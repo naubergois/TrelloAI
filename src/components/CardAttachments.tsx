@@ -4,7 +4,6 @@ import { useRef, useState } from "react";
 import {
   Download,
   FileText,
-  Image as ImageIcon,
   Loader2,
   Paperclip,
   Trash2,
@@ -12,14 +11,14 @@ import {
 import type { Card, CardAttachment } from "@/lib/types";
 import { useBoardStore } from "@/lib/store";
 import { useToast } from "@/components/Toast";
-import { formatFileSize, MAX_ATTACHMENT_BYTES } from "@/lib/card-attachments";
-
-function isImage(attachment: CardAttachment) {
-  return (
-    attachment.mimeType.startsWith("image/") ||
-    (attachment.kind === "link" && /\.(png|jpe?g|gif|webp)$/i.test(attachment.name))
-  );
-}
+import {
+  formatFileSize,
+  isImageAttachment,
+  isPdfAttachment,
+  MAX_ATTACHMENT_BYTES,
+  postCardAttachmentFiles,
+} from "@/lib/card-attachments";
+import { CardAttachmentMedia } from "@/components/CardAttachmentMedia";
 
 export function CardAttachments({
   card,
@@ -45,25 +44,15 @@ export function CardAttachments({
     }
     setBusy(true);
     try {
-      const form = new FormData();
-      for (const file of list) form.append("file", file);
-      const res = await fetch(`/api/boards/${boardId}/cards/${card.id}/attachments`, {
-        method: "POST",
-        credentials: "include",
-        body: form,
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        attachments?: CardAttachment[];
-        error?: string;
-      };
-      if (!res.ok) {
-        toast(data.error || "Não foi possível enviar o arquivo.");
+      const data = await postCardAttachmentFiles(boardId, card.id, list);
+      if (data.error) {
+        toast(data.error);
         return;
       }
-      for (const attachment of data.attachments || []) {
+      for (const attachment of data.attachments) {
         addCardAttachment(card.id, attachment);
       }
-      const n = data.attachments?.length || 0;
+      const n = data.attachments.length;
       toast(n > 1 ? `${n} arquivos anexados` : "Arquivo anexado");
     } catch {
       toast("Falha ao enviar o arquivo.");
@@ -89,24 +78,22 @@ export function CardAttachments({
   return (
     <div className="rounded-2xl border border-[var(--line)] bg-black/15 p-4 md:col-span-2">
       <p className="mb-2 text-xs font-medium text-[var(--muted)] sm:text-sm">Anexos</p>
+      {attachments.some((item) => isImageAttachment(item) || isPdfAttachment(item)) ? (
+        <div className="mb-3">
+          <CardAttachmentMedia
+            attachments={attachments.filter(
+              (item) => isImageAttachment(item) || isPdfAttachment(item),
+            )}
+          />
+        </div>
+      ) : null}
       <ul className="mb-3 space-y-2">
         {attachments.map((attachment) => (
           <li
             key={attachment.id}
             className="flex items-center gap-2 rounded-xl border border-[var(--line)] bg-black/20 px-3 py-2"
           >
-            {isImage(attachment) && attachment.kind === "file" ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={attachment.url}
-                alt=""
-                className="h-8 w-8 shrink-0 rounded object-cover"
-              />
-            ) : isImage(attachment) ? (
-              <ImageIcon className="h-4 w-4 shrink-0 text-[var(--muted)]" />
-            ) : (
-              <FileText className="h-4 w-4 shrink-0 text-[var(--muted)]" />
-            )}
+            <FileText className="h-4 w-4 shrink-0 text-[var(--muted)]" />
             <div className="min-w-0 flex-1">
               <a
                 href={attachment.url}

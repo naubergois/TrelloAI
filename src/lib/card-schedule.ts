@@ -1,3 +1,4 @@
+import { isSafeAttachmentId } from "./card-attachments";
 import { calendarDayKey, shiftCalendarDay } from "./calendar-report";
 import type { CardDailyNote } from "./types";
 
@@ -78,24 +79,42 @@ export function sanitizeDailyNoteBody(raw: string | null | undefined): string {
     .slice(0, CARD_DAILY_NOTE_MAX);
 }
 
+export function normalizeDailyNoteAttachmentIds(
+  ids: string[] | null | undefined,
+): string[] {
+  if (!Array.isArray(ids)) return [];
+  const seen = new Set<string>();
+  const next: string[] = [];
+  for (const raw of ids) {
+    const id = String(raw || "").trim();
+    if (!isSafeAttachmentId(id) || seen.has(id)) continue;
+    seen.add(id);
+    next.push(id);
+  }
+  return next;
+}
+
 export function normalizeDailyNotes(notes: CardDailyNote[] | null | undefined): CardDailyNote[] {
   if (!Array.isArray(notes)) return [];
-  return notes
-    .map((note) => {
-      const date = sanitizeCalendarDay(note?.date);
-      const body = sanitizeDailyNoteBody(note?.body);
-      if (!date || !body || !note?.id) return null;
-      return {
-        id: String(note.id),
-        date,
-        body,
-        authorId: note.authorId ?? null,
-        createdAt: note.createdAt || new Date().toISOString(),
-        updatedAt: note.updatedAt || note.createdAt || new Date().toISOString(),
-      } satisfies CardDailyNote;
-    })
-    .filter((note): note is CardDailyNote => Boolean(note))
-    .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+  const next: CardDailyNote[] = [];
+  for (const note of notes) {
+    const date = sanitizeCalendarDay(note?.date);
+    const body = sanitizeDailyNoteBody(note?.body);
+    const attachmentIds = normalizeDailyNoteAttachmentIds(note?.attachmentIds);
+    if (!date || !note?.id || (!body && attachmentIds.length === 0)) continue;
+    next.push({
+      id: String(note.id),
+      date,
+      body,
+      ...(attachmentIds.length ? { attachmentIds } : {}),
+      authorId: note.authorId ?? null,
+      createdAt: note.createdAt || new Date().toISOString(),
+      updatedAt: note.updatedAt || note.createdAt || new Date().toISOString(),
+    });
+  }
+  return next.sort(
+    (a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt),
+  );
 }
 
 export function notesForDay(notes: CardDailyNote[] | null | undefined, date: string): CardDailyNote[] {

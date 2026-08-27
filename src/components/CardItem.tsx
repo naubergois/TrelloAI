@@ -38,6 +38,7 @@ import { PhotoFileButton } from "@/components/MemberAvatar";
 import { CardAssigneeCombo } from "@/components/CardAssigneeCombo";
 import { CardAttachments } from "@/components/CardAttachments";
 import { CardDailyNotes } from "@/components/CardDailyNotes";
+import { CardTimeline } from "@/components/CardTimeline";
 import {
   boardAssigneeOptions,
   cardAssigneeIds,
@@ -61,7 +62,6 @@ export function CardItem({
   const updateCard = useBoardStore((s) => s.updateCard);
   const deleteCard = useBoardStore((s) => s.deleteCard);
   const archiveCard = useBoardStore((s) => s.archiveCard);
-  const addCardComment = useBoardStore((s) => s.addCardComment);
   const moveCard = useBoardStore((s) => s.moveCard);
   const addExternalContact = useBoardStore((s) => s.addExternalContact);
   const boards = useBoardStore((s) => s.boards);
@@ -96,7 +96,6 @@ export function CardItem({
     card.checklist ?? [],
   );
   const [newCheckText, setNewCheckText] = useState("");
-  const [newComment, setNewComment] = useState("");
   const [externalName, setExternalName] = useState("");
   const [externalEmail, setExternalEmail] = useState("");
   const [externalImage, setExternalImage] = useState<string | null>(null);
@@ -500,69 +499,17 @@ export function CardItem({
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-[var(--line)] bg-black/15 p-4 md:col-span-2">
-                    <p className="mb-2 text-xs font-medium text-[var(--muted)] sm:text-sm">
-                      Comentários
-                    </p>
-                    <ul className="mb-3 space-y-2">
-                      {card.comments.map((c) => {
-                        const author = c.authorId ? members[c.authorId] : null;
-                        return (
-                          <li
-                            key={c.id}
-                            className="rounded-xl border border-[var(--line)] bg-black/20 px-3 py-2"
-                          >
-                            <p className="text-[10px] text-[var(--muted)]">
-                              {author?.name ?? "Membro"} ·{" "}
-                              {new Date(c.createdAt).toLocaleString("pt-BR")}
-                            </p>
-                            <p className="mt-1 text-sm text-white">{c.body}</p>
-                          </li>
-                        );
-                      })}
-                      {card.comments.length === 0 ? (
-                        <p className="text-xs text-[var(--muted)]">Sem comentários.</p>
-                      ) : null}
-                    </ul>
-                    <div className="flex gap-2">
-                      <input
-                        className="min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--ink)] px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)]"
-                        value={newComment}
-                        onChange={(e) => setNewComment(e.target.value)}
-                        placeholder="Escrever comentário…"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            const t = newComment.trim();
-                            if (!t) return;
-                            addCardComment(card.id, t);
-                            setNewComment("");
-                          }
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const t = newComment.trim();
-                          if (!t) return;
-                          addCardComment(card.id, t);
-                          setNewComment("");
-                        }}
-                        className="rounded-xl border border-[var(--line)] px-3 py-2.5 text-sm text-white hover:bg-white/5"
-                      >
-                        Enviar
-                      </button>
-                    </div>
-                  </div>
-
                   <CardDailyNotes
                     card={card}
                     members={members}
+                    boardId={boardId}
                     startDate={draftStartDate || null}
                     dueDate={draftDueDate || null}
                   />
 
                   <CardAttachments card={card} boardId={boardId} />
+
+                  <CardTimeline card={card} members={members} />
 
                   <div className="rounded-2xl border border-[var(--line)] bg-black/15 p-4 md:col-span-2">
                     <p className="mb-2 text-xs font-medium text-[var(--muted)] sm:text-sm">

@@ -80,6 +80,8 @@ export interface CardDailyNote {
   /** Dia YYYY-MM-DD */
   date: string;
   body: string;
+  /** Anexos do card ligados a esta observação (figuras e documentos). */
+  attachmentIds?: string[];
   authorId: string | null;
   createdAt: string;
   updatedAt: string;
