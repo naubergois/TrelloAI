@@ -36,8 +36,11 @@ yarn-error.log*
 .env*
 !.env.example
 
-# local credential users store
+# local credential users store and runtime data
 /data/
+tmp_*
+*_probe*
+scripts/_probe*
 
 # vercel
 .vercel

@@ -1,7 +1,13 @@
 {
   "name": "jangada",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
+  "license": "MIT",
+  "description": "Kanban de código aberto da ASESI / Controladoria e Ouvidoria Geral do Estado do Ceará (CGE-CE).",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/naubergois/TrelloAI.git"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

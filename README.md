@@ -1,69 +1,74 @@
 # Jangada
 
-Kanban da **ASESI / CGE** com identidade visual do Governo do Ceará (Terra da Luz). Boards, listas, cards, convites, reuniões e a gestora virtual **Maya**.
+Kanban de código aberto da **Assessoria de Sistemas e Informática (ASESI)** da **Controladoria e Ouvidoria Geral do Estado do Ceará (CGE-CE)**.
 
-Repositório GitLab ASESI: [g_asesi/jangada](https://git.cge.ce.gov.br/g_asesi/jangada)
+O Jangada organiza boards, listas, cards, requisitos e dailies da gestão pública cearense, com a gestora virtual **Maya** e identidade visual do Governo do Ceará (Terra da Luz).
 
-## O que a aplicação faz
+| | |
+|---|---|
+| **Órgão** | Controladoria e Ouvidoria Geral do Estado do Ceará (CGE-CE) |
+| **Unidade** | Assessoria de Sistemas e Informática (ASESI) |
+| **Licença** | [MIT](LICENSE) — software livre / open source |
+| **GitHub** | [naubergois/TrelloAI](https://github.com/naubergois/TrelloAI) |
+| **GitLab ASESI** | [g_asesi/jangada](https://git.cge.ce.gov.br/g_asesi/jangada) |
 
-O Jangada é um quadro Kanban colaborativo para a gestão pública cearense. Cada usuário autentica, vê os boards dos quais participa e trabalha com listas e cards (prioridade, prazo, labels, checklist, requisitos). Há um board oficial **ASESI** (id estável `asesi`) criado automaticamente no banco.
+Este repositório contém **apenas o código-fonte**. Boards, usuários, conversas, anexos e demais dados de execução **não** entram no Git.
+
+## O que o Jangada faz
+
+- Quadros Kanban com listas, cards, prazos, responsáveis, checklist e requisitos
+- Hierarquia de boards (organização → unidade → time → projeto)
+- Convites, equipes e papéis (administrador cadastra os demais)
+- Gestora virtual **Maya**: daily, chat, riscos do kanban e análise de repositórios Git
+- Anexos e observações diárias nos cards
+- Reuniões da equipe (Jitsi)
+- Servidor MCP para gravar cards a partir do Cursor ou do Kiro
 
 Fluxo típico:
 
-1. Entrar em `/login` com o admin padrão (`admin` / `Jangada@Admin`) ou uma conta cadastrada por ele.
-2. Na home, abrir um board existente, criar um novo ou aceitar um convite.
-3. Arrastar cards entre listas, editar detalhes e atribuir pessoas da equipe.
-4. Usar a **Maya** para daily, criar/mover cards e sugerir prioridades (DeepSeek ou LiteLLM CGE).
-5. Abrir reunião virtual da equipe (Jitsi) quando precisar.
-
-A persistência oficial é o PostgreSQL da ASESI (`h_asesi`, schema `trelloai`), o mesmo servidor do Farol, em schema isolado. Sem `PG_*` configurado, o app cai para arquivos locais em `data/` (só desenvolvimento).
+1. Entrar em `/login` com a conta de administrador definida no ambiente.
+2. Abrir um board, criar um novo ou aceitar um convite.
+3. Arrastar cards, atribuir pessoas e registrar requisitos.
+4. Conversar com a Maya para daily, prioridades e atualização do quadro.
+5. Abrir reunião virtual quando a equipe precisar.
 
 ## Stack
 
-- Next.js 16 (App Router) + TypeScript + Tailwind CSS 4
-- Auth.js (`next-auth`) — usuário e senha (admin cadastra os demais)
-- Zustand no cliente (estado do board aberto)
-- PostgreSQL (`pg`) — boards, membros, usuários e convites
-- `@dnd-kit` — drag-and-drop
-- Maya: DeepSeek / LiteLLM CGE (`DEEPSEEK_*`); motor local se a chave não estiver definida
-- AWS Secrets Manager (`AWS_SECRET_NAME`) — injeta env vars na inicialização, sem sobrescrever `.env.local`
+- Next.js 16 (App Router), TypeScript e Tailwind CSS 4
+- Auth.js (`next-auth`) — usuário e senha
+- Zustand no cliente
+- PostgreSQL (`pg`) — persistência oficial
+- `@dnd-kit` — arrastar e soltar
+- Maya: DeepSeek ou LiteLLM (com motor local se a chave não estiver definida)
 - Jitsi Meet (salas via iframe)
 
-## Identidade e banco
-
-| Item | Valor |
-|------|--------|
-| Produto | Jangada |
-| Schema PostgreSQL | `trelloai` (nome técnico legado; **não** misturar com `farol`) |
-| Banco | `h_asesi` em `192.168.3.26:5432` |
-| Health | `GET /api/health` → `{ service: "jangada", database: … }` |
-| Homologação | stack Swarm `homolog-jangada`, host `homolog-jangada.cge.local` |
-| Cofre | secret `asesi/jangada/homol` (região `sa-east-1`) |
+Sem variáveis `PG_*`, o app grava em arquivos locais em `data/` (somente desenvolvimento; essa pasta está no `.gitignore`).
 
 ## Como rodar localmente
 
-Na rede CGE (ou VPN) para alcançar o Postgres. Localmente use `.env.local` (não precisa do cofre AWS).
+É preciso **Node.js 20+**.
 
 ```powershell
 npm install
 copy .env.example .env.local
-# preencha AUTH_SECRET, PG_PASSWORD e, se for usar Maya, DEEPSEEK_API_KEY
+```
+
+Em `.env.local` (nunca versionado):
+
+1. Gere `AUTH_SECRET`:
+   ```powershell
+   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+   ```
+2. Defina uma senha forte em `ADMIN_PASSWORD`.
+3. Preencha o PostgreSQL (`PG_HOST`, `PG_DATABASE`, `PG_USER`, `PG_PASSWORD`) **ou** deixe em branco para usar `data/` local.
+4. Opcional: `DEEPSEEK_API_KEY` para a Maya.
+
+```powershell
 npm run db:ensure
 npm run dev
 ```
 
-Abra [http://localhost:3000](http://localhost:3000). Login inicial:
-
-- **Usuário:** `admin`
-- **Senha:** `Jangada@Admin`
-
-O administrador cadastra os demais em `/admin/usuarios`.
-
-`AUTH_SECRET` pode ser gerado com:
-
-```powershell
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-```
+Abra [http://localhost:3000](http://localhost:3000). O administrador cadastra os demais em `/admin/usuarios`.
 
 ## Scripts
 
@@ -71,30 +76,44 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 |---------|-----------|
 | `npm run dev` | Desenvolvimento |
 | `npm run build` | Build de produção |
-| `npm run start` | Servir build |
+| `npm run start` | Servir o build |
 | `npm run test` | Vitest |
 | `npm run typecheck` | TypeScript |
-| `npm run db:ensure` | Cria schema `trelloai` e tabelas no `h_asesi` |
+| `npm run db:ensure` | Cria o schema e as tabelas no Postgres |
 | `npm run mcp` | Servidor MCP stdio (Cursor e Kiro) |
 
-## Homologação
+## Persistência
 
-Secrets (Postgres, Auth, DeepSeek/LiteLLM, admin) vêm do AWS Secrets Manager. O compose só passa as credenciais do cofre:
+A persistência oficial da ASESI é PostgreSQL, schema `trelloai` (nome técnico legado; **não** misturar com outros sistemas). Homologação e produção usam o cofre de secrets e o CI do GitLab (`homol` e `production`).
 
-- `docker-compose.homol.yml` — deploy Swarm (branch `homol`, CI)
-- `.gitlab-ci.yml` — build Nexus + `docker stack deploy` nas branches `homol` e `production`
-- Variáveis de controle: `AWS_SECRET_NAME=asesi/jangada/homol` e `AWS_REGION=sa-east-1`
-- Campos já definidos em `process.env` (ex.: `.env.local`) **não** são sobrescritos pelo cofre
+O código público **não** inclui:
+
+- dumps, backups ou JSON de boards
+- `.env`, senhas, tokens ou IPs internos
+- conversas da Maya, anexos ou dados de usuários
+
+Copie `.env.example` para `.env.local` e preencha com o ambiente de vocês.
 
 ## MCP (Cursor e Kiro)
 
-O mesmo servidor stdio grava no Postgres ASESI (ou em `data/shared-boards.json` sem `PG_*`). Cursor e Kiro apontam para `scripts/jangada-mcp.mjs`:
+O servidor stdio `scripts/jangada-mcp.mjs` grava no mesmo Postgres (ou em `data/` sem `PG_*`).
 
 - Cursor: `.cursor/mcp.json`
 - Kiro: `.kiro/settings/mcp.json`
 
-Reinicie o MCP nas duas IDEs depois do `npm install`. Tools principais: `jangada_listar_boards`, `jangada_ver_board`, `jangada_criar_card`, `jangada_criar_cards`, `jangada_anexar_arquivo`, `jangada_mover_card`, `jangada_adicionar_git`. Board padrão: `asesi`.
+Reinicie o MCP nas duas IDEs depois do `npm install`. Tools principais: `jangada_listar_boards`, `jangada_ver_board`, `jangada_criar_card`, `jangada_criar_cards`, `jangada_anexar_arquivo`, `jangada_mover_card`, `jangada_adicionar_git`.
 
-Opcional no `.env.local`: `MCP_ACTOR_EMAIL` (default `admin@cge.ce.gov.br`) — e-mail associado às alterações.
+## Repositórios
 
-A Maya analisa **riscos** do kanban e do código. Cada board ganha a coluna **Riscos Maya**; uma vez por semana o servidor clona os GitLabs ligados ao board (`GITLAB_TOKEN`) e atualiza os cards. Token opcional: `GITLAB_TOKEN` / `GITHUB_TOKEN`. Job manual: `POST /api/cron/maya-git` (admin ou `CRON_SECRET`).
+O desenvolvimento interno da ASESI e o deploy (Swarm / Nexus) continuam no **GitLab**. O **GitHub** é o espelho público do código, sem dados de execução.
+
+```text
+origin   → GitHub  (código aberto)
+gitlab   → GitLab ASESI (CI e homologação/produção)
+```
+
+## Licença
+
+Copyright © 2026 **Controladoria e Ouvidoria Geral do Estado do Ceará (CGE-CE)** — **Assessoria de Sistemas e Informática (ASESI)**.
+
+Distribuído sob a licença [MIT](LICENSE): você pode usar, copiar, modificar e distribuir o Jangada, inclusive em trabalhos derivados, desde que mantenha o aviso de copyright e da licença.
